@@ -1,0 +1,44 @@
+services:
+  aio-stack:
+    image: ghcr.io/ooflyeyesoo/aiostreams-aio:latest
+    container_name: aio-stack
+    restart: unless-stopped
+    privileged: true
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    ports:
+      - "${PORTAL_PORT:-8088}:8088"   # Built-in Landing Page & Quick Setup Portal
+      - "${PORT_AIOSTREAMS:-3001}:3001"   # AIOStreams Aggregator Portal (External Subdomain)
+      - "${PORT_AIOMETADATA:-4005}:4005"   # AIOMetadata Catalogs & Ratings (External Subdomain)
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8085:8085"   # Nuvio Web Player
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:8086"   # SlickSync Hub
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8082"   # Stremio Web Player
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"   # Debrid Search Provider
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"   # Comet Fast Torrent Scraper
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8001"   # MediaFusion Multi-Source Scraper
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:55771:55771" # Sootio Multi-Scraper
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7005"   # Anime Kitsu Catalog Provider
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"   # Zilean DMM Cache
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"   # Prowlarr Indexer Manager
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8080:8080"   # StremThru Debrid Proxy
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8888:8888"   # MediaFlow Proxy
+    environment:
+      - BASE_URL=${BASE_URL:-https://aio.yourdomain.com}
+      - AIOMETADATA_HOST=${AIOMETADATA_HOST:-https://aiometa.yourdomain.com}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY:-}
+      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY:-}
+      - ADDON_PASSWORD=${ADDON_PASSWORD:-}
+      - MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL:-}
+    volumes:
+      - aio-data:/data
+
+# Automatically creates persistent volume if it does not exist
+volumes:
+  aio-data:
+    driver: local

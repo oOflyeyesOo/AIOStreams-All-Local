@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIO Custom Stack Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #101315;
+      --card: #191d20;
+      --card-hover: #1f2427;
+      --border: #2c3235;
+      --line: #2c3235;
+      --muted: #929b9f;
+      --muted-foreground: #929b9f;
+      --foreground: #edf0ed;
+      --white: #edf0ed;
+      --primary: #e6a56b;
+      --primary-hover: #efb682;
+      --secondary: #242b2e;
+      --secondary-hover: #2f373b;
+      --accent: #9cbb9b;
+    }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background-color: #101315;
+      color: #edf0ed;
+    }
+    .brand-icon {
+      font-size: 20px;
+      letter-spacing: -2px;
+      padding: 6px 10px 8px 7px;
+      background: #242b2b;
+      border: 1px solid #46514a;
+      border-radius: 10px;
+      font-family: 'Manrope', system-ui, sans-serif;
+      color: #edf0ed;
+      font-weight: 700;
+    }
+    .brand-icon span {
+      color: #e6a56b;
+    }
+    .switch-checkbox:checked + .switch-label {
+      background-color: #e6a56b;
+    }
+    .switch-checkbox:checked + .switch-label .switch-dot {
+      transform: translateX(1.25rem);
+    }
+    input[type="checkbox"] {
+      accent-color: #e6a56b;
+    }
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+  </style>
+</head>
+<body class="bg-[#101315] text-[#edf0ed] antialiased min-h-screen p-4 sm:p-6 lg:p-8">
+
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Header Section -->
+    <header class="bg-[#191d20] border border-[#2c3235] rounded-2xl p-6 shadow-lg">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-3">
+            <span class="brand-icon">a<span>i</span>o</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">Custom Stack Builder</h1>
+                <span class="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border border-[#3b4740] bg-[#16201b] text-[#9cbb9b]">Standalone Offline Tool</span>
+              </div>
+              <p class="text-[#929b9f] text-xs sm:text-sm mt-1">
+                Visual generator to craft a tailored, minimal, or custom multi-container Docker Compose stack for AIOStreams. Generates standalone <code class="text-xs bg-[#121719] px-1.5 py-0.5 rounded border border-[#2c3235]">docker-compose.yml</code> and <code class="text-xs bg-[#121719] px-1.5 py-0.5 rounded border border-[#2c3235]">.env</code> files.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#16201b] text-[#9cbb9b] border border-[#3b4740]">
+            ✓ 100% Client-Side
+          </span>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#1e2327] text-[#e6a56b] border border-[#70553d]">
+            ✓ Auto-Seeded Keys
+          </span>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#191d20] text-[#929b9f] border border-[#2c3235]">
+            ✓ Cinemeta Removed
+          </span>
+        </div>
+      </div>
+
+      <!-- Quick Presets -->
+      <div class="mt-6 pt-5 border-t border-[#2c3235]">
+        <label class="text-xs font-semibold uppercase tracking-wider text-[#929b9f] block mb-2">
+          Quick Configuration Presets
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="applyPreset('all')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#e6a56b] text-[#191d20] font-bold hover:bg-[#efb682] transition shadow-sm">
+            ✨ Full Stack (All 19 Services)
+          </button>
+          <button onclick="applyPreset('speed')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
+            ⚡ High-Speed Lean (Comet + Zilean + Prowlarr + StremThru)
+          </button>
+          <button onclick="applyPreset('catalogs')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
+            📚 Catalogs & Subtitles Only (AIOMetadata, Kitsu, SubSense, Debrid Search)
+          </button>
+          <button onclick="applyPreset('minimal')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
+            🎯 Minimal Debrid Core (AIOStreams + Comet + AIOMetadata + StremThru)
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid: Configuration Form & Options -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left Column: Inputs & Services (7 cols) -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- 1. External Required Keys -->
+        <section class="bg-[#191d20] border border-[#2c3235] rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-6 h-6 rounded-full bg-[#e6a56b] text-[#191d20] text-xs flex items-center justify-center font-bold">1</span>
+            <h2 class="text-lg font-bold tracking-tight">Required External Keys & Network</h2>
+          </div>
+          <p class="text-xs text-[#929b9f] mb-4">
+            These credentials cannot be auto-generated because they belong to your personal external accounts and network domain.
+          </p>
+
+          <div class="space-y-4">
+            <!-- BASE_URL -->
+            <div>
+              <label class="block text-xs font-semibold text-[#edf0ed] mb-1">
+                AIOStreams Public Domain / Base URL <span class="text-red-400">*</span>
+              </label>
+              <input type="text" id="input-base-url" value=""
+                onfocus="if(this.value.includes('yourdomain.com')) this.value=''; else this.select()"
+                onclick="if(this.value.includes('yourdomain.com')) this.value=''; else this.select()"
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="https://aio.yourdomain.com">
+              <span class="text-[11px] text-[#929b9f] mt-1 block">
+                Required by Stremio clients to download manifests and stream links through your reverse proxy.
+              </span>
+            </div>
+
+            <!-- TMDB API Key -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  TMDB API v3 Key <span class="text-amber-400">(Required for TMDB / AIOMetadata)</span>
+                </label>
+                <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get TMDB Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-tmdb-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Paste your 32-character TMDB API v3 key">
+            </div>
+
+            <!-- Debrid API Key (Real-Debrid) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  Real-Debrid API Token <span class="text-amber-400">(Primary Debrid)</span>
+                </label>
+                <a href="https://real-debrid.com/apitoken" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Token ↗
+                </a>
+              </div>
+              <input type="text" id="input-rd-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Paste Real-Debrid API token">
+            </div>
+
+            <!-- Debrid API Key (Premiumize - Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  Premiumize API Key <span class="text-[#929b9f]">(Optional / Secondary)</span>
+                </label>
+                <a href="https://www.premiumize.me/account" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-premiumize-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional Premiumize API key">
+            </div>
+
+            <!-- AllDebrid API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  AllDebrid API Key <span class="text-[#929b9f]">(Optional)</span>
+                </label>
+                <a href="https://alldebrid.com/apikeys" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-alldebrid-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional AllDebrid API key">
+            </div>
+
+            <!-- TorBox API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  TorBox API Token <span class="text-[#929b9f]">(Optional)</span>
+                </label>
+                <a href="https://torbox.app/settings" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Token ↗
+                </a>
+              </div>
+              <input type="text" id="input-torbox-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional TorBox API token">
+            </div>
+
+            <!-- Debrid-Link API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  Debrid-Link API Key <span class="text-[#929b9f]">(Optional)</span>
+                </label>
+                <a href="https://debrid-link.com/webapp/register" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-debridlink-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional Debrid-Link API key">
+            </div>
+
+            <!-- TheTVDB v4 API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  TheTVDB v4 API Key <span class="text-[#929b9f]">(Optional, for AIOMetadata)</span>
+                </label>
+                <a href="https://thetvdb.com/dashboard/account/apikeys" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-tvdb-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional TheTVDB v4 API key">
+            </div>
+
+            <!-- Fanart.tv API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  Fanart.tv API Key <span class="text-[#929b9f]">(Optional, logos & backgrounds)</span>
+                </label>
+                <a href="https://fanart.tv/get-an-api-key/" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-fanart-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional Fanart.tv API key">
+            </div>
+
+            <!-- RPDB Rating Posters Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  RPDB Rating Posters Key <span class="text-[#929b9f]">(Optional, IMDb/RT poster badges)</span>
+                </label>
+                <a href="https://ratingposterdb.com/" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-rpdb-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional RPDB API key">
+            </div>
+
+            <!-- MDBList API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  MDBList API Key <span class="text-[#929b9f]">(Optional, custom Trakt catalogs)</span>
+                </label>
+                <a href="https://mdblist.com/preferences/" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-mdblist-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional MDBList API key">
+            </div>
+
+            <!-- Google Gemini API Key (Optional) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-[#edf0ed]">
+                  Google Gemini AI Key <span class="text-[#929b9f]">(Optional, AI plot recaps & translations)</span>
+                </label>
+                <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" class="text-xs text-[#e6a56b] hover:underline flex items-center gap-1">
+                  Get Key ↗
+                </a>
+              </div>
+              <input type="text" id="input-gemini-key" value=""
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed] placeholder-[var(--placeholder,#64748b)]"
+                placeholder="Optional Google Gemini API key">
+            </div>
+
+            <!-- ADDON_PASSWORD -->
+            <div>
+              <label class="block text-xs font-semibold text-[#edf0ed] mb-1">
+                Master Web Admin Password <span class="text-[#929b9f]">(Protects AIOStreams, SlickSync, AIOMetadata, Comet, MediaFusion)</span>
+              </label>
+              <input type="text" id="input-addon-password" value=""
+                onfocus="if(this.value==='admin') this.value=''; else this.select()"
+                onclick="if(this.value==='admin') this.value=''; else this.select()"
+                oninput="updateOutputs()"
+                class="w-full text-sm px-3.5 py-2 rounded-xl bg-[#121719] border border-[#2c3235] focus:outline-none focus:ring-2 focus:ring-[#e6a56b] text-[#edf0ed]"
+                placeholder="admin (Default: admin)">
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Services Selection -->
+        <section class="bg-[#191d20] border border-[#2c3235] rounded-2xl p-6 shadow-sm space-y-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded-full bg-[#e6a56b] text-[#191d20] text-xs flex items-center justify-center font-bold">2</span>
+              <h2 class="text-lg font-bold tracking-tight">Select Services to Deploy</h2>
+            </div>
+            <span id="service-count-badge" class="text-xs px-2.5 py-1 rounded-full bg-[#242b2e] text-[#edf0ed] text-[#edf0ed] font-semibold border border-[#2c3235]">
+              17 of 17 Selected
+            </span>
+          </div>
+
+          <!-- Group: Core Aggregator -->
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-[#e6a56b] mb-2 flex items-center gap-1.5">
+              <span>🌟</span> Core Aggregator & Engine
+            </div>
+            <div class="space-y-2">
+              <div class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/60 flex items-start justify-between gap-3">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm">AIOStreams</span>
+                    <span class="text-[11px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">Port 3000</span>
+                    <span class="text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">Core</span>
+                  </div>
+                  <p class="text-xs text-[#929b9f] mt-1">
+                    Central super-addon aggregating all local scrapers, filtering streams, caching hashes, and proxying playback.
+                  </p>
+                </div>
+                <input type="checkbox" id="svc-aiostreams" checked disabled class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </div>
+            </div>
+          </div>
+
+          <!-- Group: Local Scrapers -->
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
+              <span>⚡</span> Local Scrapers (Zero External API Endpoints)
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <!-- Comet -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Comet</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">:8000</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">High-speed Debrid scraper querying local Prowlarr & Zilean DMM cache.</p>
+                </div>
+                <input type="checkbox" id="svc-comet" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- MediaFusion -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">MediaFusion</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">:8001</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Multi-source scraper: Movies, Series, Live Sports & Live TV channels.</p>
+                </div>
+                <input type="checkbox" id="svc-mediafusion" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+            </div>
+          </div>
+
+          <!-- Group: Caching & Trackers -->
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-purple-400 mb-2 flex items-center gap-1.5">
+              <span>⚡</span> Torrent Caches & Tracker Aggregators
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <!-- Zilean -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Zilean</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">:8181</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Debrid Media Manager (DMM) torrent hash cache for instantaneous stream discovery.</p>
+                </div>
+                <input type="checkbox" id="svc-zilean" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- Prowlarr -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Prowlarr</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">:9696</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Modern torrent indexer manager with automated API key seeding.</p>
+                </div>
+                <input type="checkbox" id="svc-prowlarr" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- FlareSolverr -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">FlareSolverr</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">:8191</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Bypasses Cloudflare anti-bot challenges for Prowlarr queries.</p>
+                </div>
+                <input type="checkbox" id="svc-flaresolverr" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+            </div>
+          </div>
+
+          <!-- Group: Catalogs & Subtitles (Cinemeta Replacements) -->
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1.5">
+              <span>🎬</span> Catalogs & Subtitles (Cinemeta Replacement)
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <!-- Anime Kitsu -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Anime Kitsu</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">:7005</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Dedicated anime catalog built from TheBeastLT's repository.</p>
+                </div>
+                <input type="checkbox" id="svc-kitsu" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- AIOMetadata -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">AIOMetadata</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">:4005</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Curated catalogs for Netflix, Disney+, Apple TV+, HBO Max & Paramount+.</p>
+                </div>
+                <input type="checkbox" id="svc-aiometadata" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- SubSense -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">SubSense</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">:3100</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Multi-source subtitle aggregator (OpenSubtitles, SubSource, SubDL, YIFY).</p>
+                </div>
+                <input type="checkbox" id="svc-subsense" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+
+              <!-- Debrid Cloud Search -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Debrid Cloud Search</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">:3001</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Search & catalog provider for personal Real-Debrid / TorBox / Premiumize libraries.</p>
+                </div>
+                <input type="checkbox" id="svc-debrid-search" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+            </div>
+          </div>
+
+          <!-- Group: Stream Proxies, Web Players & Usenet Engine -->
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-2 flex items-center gap-1.5">
+              <span>🛡️</span> Proxies, Web Players & Usenet Engine
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              <!-- StremThru -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">StremThru</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8080</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">High-speed Debrid store proxy & router.</p>
+                </div>
+                <input type="checkbox" id="svc-stremthru" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- MediaFlow -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">MediaFlow</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8888</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Live stream proxy with HLS & header rewrite.</p>
+                </div>
+                <input type="checkbox" id="svc-mediaflow" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- Nuvio Web Player -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Nuvio</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8085</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Modern Stremio-compatible web client and player.</p>
+                </div>
+                <input type="checkbox" id="svc-nuvio" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- Stremio Web Player -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">Stremio Web</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8082</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Official Stremio Web UI with bundled local streaming engine.</p>
+                </div>
+                <input type="checkbox" id="svc-stremio-web" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- SlickSync -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">SlickSync</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 font-mono">:8086</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">Nuvio & Stremio manager: Collections, Guards & Vault.</p>
+                </div>
+                <input type="checkbox" id="svc-slicksync" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+
+              <!-- InfiniDysk Usenet Engine -->
+              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-sm">InfiniDysk</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">:3005</span>
+                  </div>
+                  <p class="text-[11px] text-[#929b9f] mt-1">High-performance on-demand Usenet streaming & WebDAV.</p>
+                </div>
+                <input type="checkbox" id="svc-infinidysk" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+              </label>
+            </div>
+          </div>
+
+          <!-- Group: Databases Notice -->
+          <div class="p-3.5 rounded-xl border border-[#2c3235] bg-[#121719]/40 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🗄️</span>
+              <div>
+                <span class="font-bold">Supporting Databases (PostgreSQL, Redis)</span>
+                <p class="text-[11px] text-[#929b9f]">
+                  Automatically attached or detached according to selected scrapers and caches.
+                </p>
+              </div>
+            </div>
+            <span id="db-status-badge" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[11px]">
+              Postgres + Redis Active
+            </span>
+          </div>
+
+        </section>
+
+        <!-- 3. Advanced Internal Secrets (Auto-Seeded) -->
+        <section class="bg-[#191d20] border border-[#2c3235] rounded-2xl p-6 shadow-sm">
+          <details class="group">
+            <summary class="flex items-center justify-between cursor-pointer list-none">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-[#242b2e] text-[#edf0ed] text-xs flex items-center justify-center font-bold">3</span>
+                <span class="text-sm font-bold tracking-tight">Advanced: Pre-Configured Internal Secrets</span>
+              </div>
+              <span class="text-xs text-[#e6a56b] group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+
+            <div class="mt-4 pt-4 border-t border-[#2c3235] space-y-4">
+              <p class="text-xs text-[#929b9f]">
+                These secrets are already cross-matched between services. You never have to manually enter them into container UIs. You can click regenerate below to produce fresh random tokens.
+              </p>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label class="block font-semibold mb-1">SECRET_KEY (AIOStreams / SubSense)</label>
+                  <input type="text" id="sec-secret-key" value="e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09"
+                    oninput="updateOutputs()"
+                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
+                </div>
+                <div>
+                  <label class="block font-semibold mb-1">POSTGRES_PASSWORD</label>
+                  <input type="text" id="sec-postgres-pass" value="postgres_supersecret_db_pass_2026"
+                    oninput="updateOutputs()"
+                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
+                </div>
+                <div>
+                  <label class="block font-semibold mb-1">PROWLARR_API_KEY</label>
+                  <input type="text" id="sec-prowlarr-key" value="prowlarr_internal_secret_key_99"
+                    oninput="updateOutputs()"
+                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
+                </div>
+                <div>
+                  <label class="block font-semibold mb-1">STREMTHRU_AUTH (user:pass)</label>
+                  <input type="text" id="sec-stremthru-auth" value="admin:supersecretproxykey"
+                    oninput="updateOutputs()"
+                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
+                </div>
+                <div>
+                  <label class="block font-semibold mb-1">MEDIAFLOW_PASS</label>
+                  <input type="text" id="sec-mediaflow-pass" value="supersecretmediaflowpass"
+                    oninput="updateOutputs()"
+                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <button onclick="regenerateAllSecrets()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] text-[#edf0ed] hover:bg-[var(--border,#334155)] transition flex items-center gap-1.5">
+                  🔄 Regenerate Random Secrets
+                </button>
+              </div>
+            </div>
+          </details>
+        </section>
+
+      </div>
+
+      <!-- Right Column: Live Output & Export (5 cols) -->
+      <div class="lg:col-span-5 space-y-6">
+
+        <div class="sticky top-6 bg-[#191d20] border border-[#2c3235] rounded-2xl p-6 shadow-lg space-y-4">
+          
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold tracking-tight">Generated Output</h2>
+              <p class="text-xs text-[#929b9f]">Tailored directly to your selections</p>
+            </div>
+            <div id="copy-toast" class="hidden text-xs bg-[#9cbb9b] text-[#191d20] font-bold px-3 py-1 rounded-full shadow">
+              Copied! ✓
+            </div>
+          </div>
+
+          <!-- Output Tab Buttons -->
+          <div class="flex items-center gap-1.5 p-1 rounded-xl bg-[#121719] border border-[#2c3235]">
+            <button onclick="switchTab('compose')" id="tab-btn-compose" class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-[#e6a56b] text-[#191d20] font-bold text-white transition">
+              docker-compose.yml
+            </button>
+            <button onclick="switchTab('env')" id="tab-btn-env" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-[#929b9f] hover:text-white transition">
+              .env
+            </button>
+            <button onclick="switchTab('sql')" id="tab-btn-sql" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-[#929b9f] hover:text-white transition">
+              01-init-dbs.sql
+            </button>
+            <button onclick="switchTab('ports')" id="tab-btn-ports" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-[#929b9f] hover:text-white transition">
+              Port Map
+            </button>
+            <button onclick="switchTab('run')" id="tab-btn-run" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-emerald-400 hover:text-white transition" title="1-Container Appliance Command">
+              ⚡ 1-Image (Run)
+            </button>
+          </div>
+
+          <!-- Code View Area -->
+          <div class="relative">
+            <!-- Compose Tab View -->
+            <div id="view-compose" class="space-y-2">
+              <pre id="code-compose" class="w-full h-96 p-3.5 text-xs overflow-auto rounded-xl bg-[#121719] border border-[#2c3235] text-[#edf0ed]"></pre>
+              <div class="flex gap-2">
+                <button onclick="copyToClipboard('compose')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#242b2e] text-[#edf0ed] text-[#edf0ed] hover:bg-[#e6a56b] text-[#191d20] font-bold hover:text-white transition flex items-center justify-center gap-1.5 border border-[#2c3235]">
+                  📋 Copy docker-compose.yml
+                </button>
+                <button onclick="downloadFile('compose')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#e6a56b] text-[#191d20] font-bold hover:bg-[#efb682] transition flex items-center justify-center gap-1.5">
+                  💾 Download Compose
+                </button>
+              </div>
+            </div>
+
+            <!-- Env Tab View -->
+            <div id="view-env" class="space-y-2 hidden">
+              <pre id="code-env" class="w-full h-96 p-3.5 text-xs overflow-auto rounded-xl bg-[#121719] border border-[#2c3235] text-[#edf0ed]"></pre>
+              <div class="flex gap-2">
+                <button onclick="copyToClipboard('env')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#242b2e] text-[#edf0ed] text-[#edf0ed] hover:bg-[#e6a56b] text-[#191d20] font-bold hover:text-white transition flex items-center justify-center gap-1.5 border border-[#2c3235]">
+                  📋 Copy .env
+                </button>
+                <button onclick="downloadFile('env')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#e6a56b] text-[#191d20] font-bold hover:bg-[#efb682] transition flex items-center justify-center gap-1.5">
+                  💾 Download .env
+                </button>
+              </div>
+            </div>
+
+            <!-- SQL Tab View -->
+            <div id="view-sql" class="space-y-2 hidden">
+              <pre id="code-sql" class="w-full h-96 p-3.5 text-xs overflow-auto rounded-xl bg-[#121719] border border-[#2c3235] text-[#edf0ed]"></pre>
+              <div class="flex gap-2">
+                <button onclick="copyToClipboard('sql')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#242b2e] text-[#edf0ed] text-[#edf0ed] hover:bg-[#e6a56b] text-[#191d20] font-bold hover:text-white transition flex items-center justify-center gap-1.5 border border-[#2c3235]">
+                  📋 Copy 01-init-dbs.sql
+                </button>
+                <button onclick="downloadFile('sql')" class="flex-1 py-2 text-xs font-bold rounded-xl bg-[#e6a56b] text-[#191d20] font-bold hover:bg-[#efb682] transition flex items-center justify-center gap-1.5">
+                  💾 Download SQL
+                </button>
+              </div>
+            </div>
+
+            <!-- Ports & Quick Guide Tab View -->
+            <div id="view-ports" class="space-y-3 hidden">
+              <div class="w-full h-96 p-3.5 text-xs overflow-auto rounded-xl bg-[#121719] border border-[#2c3235] space-y-3">
+                <h3 class="font-bold text-sm text-[#edf0ed]">Active Services & Port Mapping</h3>
+                <div id="ports-table" class="space-y-1.5"></div>
+                <div class="pt-3 border-t border-[#2c3235] space-y-2">
+                  <h4 class="font-bold text-xs text-[#e6a56b]">Next Steps to Run:</h4>
+                  <ol class="list-decimal list-inside space-y-1 text-[11px] text-[#929b9f]">
+                    <li>Place <code class="text-white">docker-compose.yml</code> and <code class="text-white">.env</code> in your folder.</li>
+                    <li>If Postgres is active, place <code class="text-white">01-init-dbs.sql</code> inside <code class="text-white">init/postgres/</code>.</li>
+                    <li>Run: <code class="text-white bg-[#161c1e] px-1 py-0.5 rounded font-mono">docker compose up -d</code></li>
+                    <li>Access your AIOStreams portal at: <code class="text-white" id="guide-portal-url">http://localhost:3000</code></li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            <!-- 1-Image Run Tab View -->
+            <div id="view-run" class="space-y-2 hidden">
+              <pre id="code-run" class="w-full h-96 p-3.5 text-xs overflow-auto rounded-xl bg-[#121719] border border-[#2c3235] text-emerald-300 font-mono"></pre>
+              <div class="flex gap-2">
+                <button onclick="copyToClipboard('run')" class="w-full py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow">
+                  📋 Copy 1-Container Run Command
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Standalone Export Actions -->
+          <div class="pt-3 border-t border-[#2c3235] flex flex-col gap-2">
+            <button onclick="downloadAllFiles()" class="w-full py-2.5 text-xs font-bold rounded-xl bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235] flex items-center justify-center gap-2 shadow-sm">
+              📦 Download All Custom Files (.env, Compose, SQL)
+            </button>
+            <span class="text-[11px] text-center text-[#929b9f]">
+              100% Client-Side. No network calls or active server required.
+            </span>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // State management
+    const state = {
+      services: {
+        aiostreams: true,
+        comet: true,
+        mediafusion: true,
+        zilean: true,
+        prowlarr: true,
+        flaresolverr: true,
+        kitsu: true,
+        aiometadata: true,
+        subsense: true,
+        debridSearch: true,
+        stremthru: true,
+        mediaflow: true,
+        nuvio: true,
+        stremioWeb: true,
+        slicksync: true,
+        infinidysk: true
+      },
+      currentTab: 'compose'
+    };
+
+    function handleServiceChange() {
+      // Sync checkbox state
+      state.services.comet = document.getElementById('svc-comet').checked;
+      state.services.mediafusion = document.getElementById('svc-mediafusion').checked;
+      state.services.zilean = document.getElementById('svc-zilean').checked;
+      state.services.prowlarr = document.getElementById('svc-prowlarr').checked;
+      state.services.flaresolverr = document.getElementById('svc-flaresolverr').checked;
+      state.services.kitsu = document.getElementById('svc-kitsu').checked;
+      state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
+      state.services.subsense = document.getElementById('svc-subsense').checked;
+      state.services.debridSearch = document.getElementById('svc-debrid-search') ? document.getElementById('svc-debrid-search').checked : true;
+      state.services.stremthru = document.getElementById('svc-stremthru').checked;
+      state.services.mediaflow = document.getElementById('svc-mediaflow').checked;
+      state.services.nuvio = document.getElementById('svc-nuvio').checked;
+      state.services.stremioWeb = document.getElementById('svc-stremio-web') ? document.getElementById('svc-stremio-web').checked : true;
+      state.services.slicksync = document.getElementById('svc-slicksync').checked;
+      state.services.infinidysk = document.getElementById('svc-infinidysk') ? document.getElementById('svc-infinidysk').checked : true;
+
+      // Smart dependency resolution
+      if (state.services.comet) {
+        // Comet works best with Prowlarr & Zilean
+        if (!state.services.prowlarr) {
+          state.services.prowlarr = true;
+          document.getElementById('svc-prowlarr').checked = true;
+        }
+      }
+
+      updateOutputs();
+    }
+
+    function applyPreset(presetName) {
+      if (presetName === 'all') {
+        Object.keys(state.services).forEach(k => state.services[k] = true);
+      } else if (presetName === 'speed') {
+        state.services = {
+          aiostreams: true,
+          comet: true,
+          mediafusion: false,
+          zilean: true,
+          prowlarr: true,
+          flaresolverr: true,
+          kitsu: false,
+          aiometadata: true,
+          subsense: false,
+          debridSearch: false,
+          stremthru: true,
+          mediaflow: false,
+          nuvio: true,
+          stremioWeb: true,
+          slicksync: true,
+          infinidysk: false
+        };
+      } else if (presetName === 'catalogs') {
+        state.services = {
+          aiostreams: true,
+          comet: false,
+          mediafusion: false,
+          zilean: false,
+          prowlarr: false,
+          flaresolverr: false,
+          kitsu: true,
+          aiometadata: true,
+          subsense: true,
+          debridSearch: true,
+          stremthru: true,
+          mediaflow: false,
+          nuvio: true,
+          stremioWeb: true,
+          slicksync: true,
+          infinidysk: false
+        };
+      } else if (presetName === 'minimal') {
+        state.services = {
+          aiostreams: true,
+          comet: true,
+          mediafusion: false,
+          zilean: true,
+          prowlarr: true,
+          flaresolverr: false,
+          kitsu: false,
+          aiometadata: true,
+          subsense: false,
+          debridSearch: false,
+          stremthru: true,
+          mediaflow: false,
+          nuvio: false,
+          stremioWeb: false,
+          slicksync: false,
+          infinidysk: false
+        };
+      }
+
+      // Update checkboxes in DOM
+      document.getElementById('svc-comet').checked = state.services.comet;
+      document.getElementById('svc-mediafusion').checked = state.services.mediafusion;
+      document.getElementById('svc-zilean').checked = state.services.zilean;
+      document.getElementById('svc-prowlarr').checked = state.services.prowlarr;
+      document.getElementById('svc-flaresolverr').checked = state.services.flaresolverr;
+      document.getElementById('svc-kitsu').checked = state.services.kitsu;
+      document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
+      document.getElementById('svc-subsense').checked = state.services.subsense;
+      if (document.getElementById('svc-debrid-search')) document.getElementById('svc-debrid-search').checked = state.services.debridSearch;
+      document.getElementById('svc-stremthru').checked = state.services.stremthru;
+      document.getElementById('svc-mediaflow').checked = state.services.mediaflow;
+      document.getElementById('svc-nuvio').checked = state.services.nuvio;
+      if (document.getElementById('svc-stremio-web')) document.getElementById('svc-stremio-web').checked = state.services.stremioWeb;
+      document.getElementById('svc-slicksync').checked = state.services.slicksync;
+      if (document.getElementById('svc-infinidysk')) document.getElementById('svc-infinidysk').checked = state.services.infinidysk;
+
+      updateOutputs();
+    }
+
+    function generateRandomHex(length) {
+      const arr = new Uint8Array(length / 2);
+      window.crypto.getRandomValues(arr);
+      return Array.from(arr, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function regenerateAllSecrets() {
+      document.getElementById('sec-secret-key').value = generateRandomHex(64);
+      document.getElementById('sec-postgres-pass').value = 'pg_' + generateRandomHex(24);
+      document.getElementById('sec-prowlarr-key').value = 'prow_' + generateRandomHex(24);
+      document.getElementById('sec-stremthru-auth').value = 'admin:' + generateRandomHex(16);
+      document.getElementById('sec-mediaflow-pass').value = 'mf_' + generateRandomHex(20);
+      updateOutputs();
+    }
+
+    function getInputs() {
+      return {
+        baseUrl: document.getElementById('input-base-url').value.trim() || 'https://aio.yourdomain.com',
+        tmdbKey: document.getElementById('input-tmdb-key').value.trim(),
+        rdKey: document.getElementById('input-rd-key').value.trim(),
+        premiumizeKey: document.getElementById('input-premiumize-key').value.trim(),
+        alldebridKey: document.getElementById('input-alldebrid-key') ? document.getElementById('input-alldebrid-key').value.trim() : '',
+        torboxKey: document.getElementById('input-torbox-key') ? document.getElementById('input-torbox-key').value.trim() : '',
+        debridlinkKey: document.getElementById('input-debridlink-key') ? document.getElementById('input-debridlink-key').value.trim() : '',
+        tvdbKey: document.getElementById('input-tvdb-key') ? document.getElementById('input-tvdb-key').value.trim() : '',
+        fanartKey: document.getElementById('input-fanart-key') ? document.getElementById('input-fanart-key').value.trim() : '',
+        rpdbKey: document.getElementById('input-rpdb-key') ? document.getElementById('input-rpdb-key').value.trim() : '',
+        mdblistKey: document.getElementById('input-mdblist-key') ? document.getElementById('input-mdblist-key').value.trim() : '',
+        geminiKey: document.getElementById('input-gemini-key') ? document.getElementById('input-gemini-key').value.trim() : '',
+        addonPassword: document.getElementById('input-addon-password').value.trim() || 'admin',
+        secretKey: document.getElementById('sec-secret-key').value.trim(),
+        postgresPass: document.getElementById('sec-postgres-pass').value.trim(),
+        prowlarrKey: document.getElementById('sec-prowlarr-key').value.trim(),
+        stremthruAuth: document.getElementById('sec-stremthru-auth').value.trim(),
+        mediaflowPass: document.getElementById('sec-mediaflow-pass').value.trim()
+      };
+    }
+
+    function calculateDatabases() {
+      const s = state.services;
+      return {
+        needsPostgres: s.zilean || s.mediafusion || s.aiometadata,
+        needsRedis: s.mediafusion || s.aiometadata || s.subsense || s.slicksync || s.stremthru || s.mediaflow,
+        needsMongo: false,
+        needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb || s.debridSearch
+      };
+    }
+
+    function generateEnvFile() {
+      const inp = getInputs();
+      return `# ==============================================================================
+#                      ALL-IN-ONE LOCAL STREMIO BACKEND (.env)
+# ==============================================================================
+# The only 3 values you need to provide are BASE_URL, TMDB_API_KEY, and your Debrid token.
+# Everything else is fully pre-configured and pre-matched across all containers!
+
+# 1. Public HTTPS URL of your AIOStreams instance (Required for Stremio client install)
+BASE_URL=${inp.baseUrl}
+
+# ------------------------------------------------------------------------------
+# 2. Debrid Service API Tokens (Provide at least one)
+# ------------------------------------------------------------------------------
+# Real-Debrid API Token (from https://real-debrid.com/apitoken)
+REALDEBRID_API_KEY=${inp.rdKey}
+# Premiumize API Key (from https://www.premiumize.me/account)
+PREMIUMIZE_API_KEY=${inp.premiumizeKey}
+# AllDebrid API Key (from https://alldebrid.com/apikeys)
+ALLDEBRID_API_KEY=${inp.alldebridKey}
+# TorBox API Token (from https://torbox.app/settings)
+TORBOX_API_KEY=${inp.torboxKey}
+# Debrid-Link API Key (from https://debrid-link.com/webapp/register)
+DEBRIDLINK_API_KEY=${inp.debridlinkKey}
+
+# ------------------------------------------------------------------------------
+# 3. Metadata & Poster Artwork Providers
+# ------------------------------------------------------------------------------
+# TMDB v3 API Key (Required for AIOMetadata & metadata scrapers: https://www.themoviedb.org/settings/api)
+TMDB_API_KEY=${inp.tmdbKey}
+# TheTVDB v4 Project/API Key (Optional, enhances AIOMetadata TV/anime series: https://thetvdb.com/dashboard/account/apikeys)
+TVDB_API_KEY=${inp.tvdbKey}
+# Fanart.tv Personal API Key (Optional, enables high-res clear logos/backgrounds: https://fanart.tv/get-an-api-key/)
+FANART_API_KEY=${inp.fanartKey}
+# Rating Poster Database API Key (Optional, adds IMDb/RT/Trakt badges to posters: https://ratingposterdb.com/)
+RPDB_API_KEY=${inp.rpdbKey}
+# MDBList API Key (Optional, enables dynamic Trakt/MDBList catalogs: https://mdblist.com/preferences/)
+MDBLIST_API_KEY=${inp.mdblistKey}
+# Google Gemini API Key (Optional, enables AI episode recaps/plot translations: https://aistudio.google.com/)
+GEMINI_API_KEY=${inp.geminiKey}
+
+# Master password protecting all web configuration pages (AIOStreams, SlickSync, AIOMetadata, Comet, MediaFusion)
+ADDON_PASSWORD=${inp.addonPassword}
+
+# ==============================================================================
+# PRE-CONFIGURED INTERNAL SECRETS (Already matched across all services)
+# ==============================================================================
+# 64-character encryption secret for AIOStreams & SubSense
+SECRET_KEY=${inp.secretKey}
+
+# Shared Postgres Password (auto-seeds 'zilean', 'mediafusion', and 'aiometadata' databases)
+POSTGRES_PASSWORD=${inp.postgresPass}
+
+# Pre-matched Tracker API Keys (Automatically seeded into Prowlarr)
+PROWLARR_API_KEY=${inp.prowlarrKey}
+
+# Pre-matched Local Stream Proxy Credentials
+STREMTHRU_AUTH=${inp.stremthruAuth}
+MEDIAFLOW_PASS=${inp.mediaflowPass}
+POSTERSPLUS_ACCESS_KEY=${inp.addonPassword}
+ADMIN_EMAIL=admin@mediafusion.local
+
+# ==============================================================================
+# COMMUNITY TEMPLATES & STREAM EXPRESSION LANGUAGE (SEL) AUTO-SYNC
+# ==============================================================================
+TEMPLATE_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]
+TEMPLATE_REFRESH_INTERVAL=3600
+WHITELISTED_SYNC_REFRESH_INTERVAL=3600
+FEATURED_TEMPLATE_IDS=tamtaro.complete,Vidhin05.regex-template,Vidhin05.english-template
+SEL_SYNC_ACCESS=all
+WHITELISTED_REGEX_PATTERNS_URLS=["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/German/regexes.json"]
+WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-extended.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ISEs.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/German/expressions.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/legacy-expressions.json"]
+`;
+    }
+
+    function generateSQLFile() {
+      const s = state.services;
+      let sql = `-- Auto-generated Postgres database initialization script\n`;
+      if (s.zilean) {
+        sql += `SELECT 'CREATE DATABASE zilean' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zilean')\\gexec\n`;
+      }
+      if (s.mediafusion) {
+        sql += `SELECT 'CREATE DATABASE mediafusion' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mediafusion')\\gexec\n`;
+      }
+      if (s.aiometadata) {
+        sql += `SELECT 'CREATE DATABASE aiometadata' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aiometadata')\\gexec\n`;
+      }
+      return sql;
+    }
+
+    function generateComposeFile() {
+      const s = state.services;
+      const db = calculateDatabases();
+      let lines = [`services:`];
+
+      // AIOStreams service
+      lines.push(`  # ============================================================================`);
+      lines.push(`  # 1. CORE AGGREGATOR & SUPER-ADDON`);
+      lines.push(`  # ============================================================================`);
+      lines.push(`  aiostreams:`);
+      lines.push(`    image: ghcr.io/viren070/aiostreams:latest`);
+      lines.push(`    container_name: aiostreams`);
+      lines.push(`    restart: unless-stopped`);
+      lines.push(`    ports:`);
+      lines.push(`      - "3000:3000"`);
+      lines.push(`    environment:`);
+      lines.push(`      - PORT=3000`);
+      lines.push(`      - NODE_OPTIONS=--dns-result-order=ipv4first`);
+      lines.push(`      - BASE_URL=\${BASE_URL:-http://localhost:3000}`);
+      lines.push(`      - SECRET_KEY=\${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}`);
+      lines.push(`      - ADDON_PASSWORD=\${ADDON_PASSWORD}`);
+      lines.push(`      - AIOSTREAMS_AUTH=admin:\${ADDON_PASSWORD}`);
+      lines.push(`      - AIOSTREAMS_AUTH_PERMISSIONS=admin=admin|proxy|service|sabnzbd|createConfig`);
+      lines.push(`      - AIOSTREAMS_AUTH_REQUIRED=false`);
+      lines.push(`      - DATABASE_URI=sqlite:///data/db.sqlite`);
+      lines.push(`      - ALLOW_PRIVATE_URLS=true`);
+
+      // Scraper endpoints
+      if (s.comet || s.mediafusion) {
+        lines.push(`\n      # --- Internal Local Scraper Endpoints ---`);
+        if (s.comet) lines.push(`      - COMET_URL=["http://comet:8000"]`);
+        if (s.mediafusion) lines.push(`      - MEDIAFUSION_URL=["http://mediafusion:8000"]`);
+        lines.push(`      - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]`);
+      }
+
+      // Trackers
+      if (s.prowlarr) {
+        lines.push(`\n      # --- Internal Tracker Integrations ---`);
+        lines.push(`      - BUILTIN_PROWLARR_URL=http://prowlarr:9696`);
+        lines.push(`      - BUILTIN_PROWLARR_API_KEY=\${PROWLARR_API_KEY}`);
+      }
+
+      // Proxy router
+      if (s.stremthru || s.mediaflow) {
+        lines.push(`\n      # --- Local Debrid Proxy & Store Router ---`);
+        const proxiedServices = ["realdebrid","premiumize","alldebrid","torbox","debridlink"];
+        if (s.infinidysk) proxiedServices.push("nzbdav");
+        const proxiedJson = JSON.stringify(proxiedServices);
+
+        if (s.stremthru) {
+          lines.push(`      - BUILTIN_STREMTHRU_URL=http://stremthru:8080`);
+          lines.push(`      - STREMTHRU_STORE_URL=http://stremthru:8080/stremio/store/`);
+          lines.push(`      - STREMTHRU_TORZ_URL=http://stremthru:8080/stremio/torz/`);
+          lines.push(`      - ENCRYPT_STREMTHRU_URLS=true`);
+        }
+        if (s.mediaflow) {
+          lines.push(`      - DEFAULT_PROXY_ID=\${DEFAULT_PROXY_ID:-mediaflow}`);
+          lines.push(`      - DEFAULT_PROXY_URL=\${DEFAULT_PROXY_URL:-http://mediaflow:8888}`);
+          lines.push(`      - DEFAULT_PROXY_CREDENTIALS=\${DEFAULT_PROXY_CREDENTIALS:-\${MEDIAFLOW_PASS:-\${ADDON_PASSWORD}}}`);
+          lines.push(`      - DEFAULT_PROXY_PROXIED_SERVICES=\${DEFAULT_PROXY_PROXIED_SERVICES:-${proxiedJson}}`);
+          lines.push(`      - FORCE_PROXY_ENABLED=\${FORCE_PROXY_ENABLED:-false}`);
+          lines.push(`      - ENCRYPT_MEDIAFLOW_URLS=true`);
+        } else if (s.stremthru) {
+          lines.push(`      - DEFAULT_PROXY_ID=stremthru`);
+          lines.push(`      - DEFAULT_PROXY_URL=http://stremthru:8080`);
+          lines.push(`      - DEFAULT_PROXY_CREDENTIALS=\${STREMTHRU_AUTH}`);
+          lines.push(`      - DEFAULT_PROXY_PROXIED_SERVICES=${proxiedJson}`);
+          lines.push(`      - FORCE_PROXY_ENABLED=true`);
+        }
+      }
+
+      // Metadata & Debrid
+      lines.push(`\n      # --- Metadata & Debrid Auto-Configuration ---`);
+      lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
+      lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
+      lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
+      lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
+      lines.push(`      - FANART_API_KEY=\${FANART_API_KEY}`);
+      lines.push(`      - FETCH_TRAKT_ALIASES=true`);
+      lines.push(`      - FORCED_REALDEBRID_API_KEY=\${REALDEBRID_API_KEY}`);
+      lines.push(`      - FORCED_PREMIUMIZE_API_KEY=\${PREMIUMIZE_API_KEY}`);
+      lines.push(`      - FORCED_ALLDEBRID_API_KEY=\${ALLDEBRID_API_KEY}`);
+      lines.push(`      - FORCED_TORBOX_API_KEY=\${TORBOX_API_KEY}`);
+      lines.push(`      - FORCED_DEBRIDLINK_API_KEY=\${DEBRIDLINK_API_KEY}`);
+      lines.push(`\n      # --- Community Templates & SEL Auto-Sync (Tam-Taro & Vidhin05) ---`);
+      lines.push(`      - TEMPLATE_URLS=\${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}`);
+      lines.push(`      - TEMPLATE_REFRESH_INTERVAL=\${TEMPLATE_REFRESH_INTERVAL:-3600}`);
+      lines.push(`      - WHITELISTED_SYNC_REFRESH_INTERVAL=\${WHITELISTED_SYNC_REFRESH_INTERVAL:-3600}`);
+      lines.push(`      - FEATURED_TEMPLATE_IDS=\${FEATURED_TEMPLATE_IDS:-builtin.all-local-selfhosted,tamtaro.complete,Vidhin05.regex-template}`);
+      lines.push(`      - SEL_SYNC_ACCESS=\${SEL_SYNC_ACCESS:-all}`);
+      lines.push(`      - WHITELISTED_REGEX_PATTERNS_URLS=\${WHITELISTED_REGEX_PATTERNS_URLS:-["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/German/regexes.json"]}`);
+      lines.push(`      - WHITELISTED_SEL_URLS=\${WHITELISTED_SEL_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-extended.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ISEs.json","https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/German/expressions.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/legacy-expressions.json"]}`);
+
+      lines.push(`    volumes:`);
+      lines.push(`      - ./data/aiostreams:/data`);
+      lines.push(`      - ./templates/builtin:/app/resources/templates:ro`);
+      lines.push(`    networks:`);
+      lines.push(`      - stremio-net`);
+
+      // depends_on for aiostreams
+      const aiostreamsDeps = [];
+      if (s.comet) aiostreamsDeps.push('comet');
+      if (s.mediafusion) aiostreamsDeps.push('mediafusion');
+      if (s.stremthru) aiostreamsDeps.push('stremthru');
+      if (s.mediaflow) aiostreamsDeps.push('mediaflow');
+      if (s.prowlarr) aiostreamsDeps.push('prowlarr');
+      if (s.infinidysk) aiostreamsDeps.push('infinidysk');
+
+      if (aiostreamsDeps.length > 0) {
+        lines.push(`    depends_on:`);
+        aiostreamsDeps.forEach(d => lines.push(`      - ${d}`));
+      }
+
+      // 2. SCRAPERS
+      if (s.comet || s.mediafusion) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 2. LOCAL SCRAPERS & INDEXERS`);
+        lines.push(`  # ============================================================================`);
+
+        if (s.comet) {
+          lines.push(`  # Comet (High-speed torrent/Debrid scraper querying local Prowlarr & Zilean)`);
+          lines.push(`  comet:`);
+          lines.push(`    image: ghcr.io/g0ldyy/comet:latest`);
+          lines.push(`    container_name: comet`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8000:8000"`);
+          lines.push(`    environment:`);
+          lines.push(`      - FASTAPI_PORT=8000`);
+          lines.push(`      - DATABASE_PATH=/app/data/comet.db`);
+          if (s.prowlarr) {
+            lines.push(`      - INDEXER_MANAGER_TYPE=prowlarr`);
+            lines.push(`      - INDEXER_MANAGER_URL=http://prowlarr:9696`);
+            lines.push(`      - INDEXER_MANAGER_API_KEY=\${PROWLARR_API_KEY}`);
+          }
+          if (s.zilean) {
+            lines.push(`      - ZILEAN_URL=http://zilean:8181`);
+          }
+          lines.push(`      - CONFIGURE_PAGE_PASSWORD=\${ADDON_PASSWORD}`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/comet:/app/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          const cometDeps = [];
+          if (s.prowlarr) cometDeps.push('prowlarr');
+          if (s.zilean) cometDeps.push('zilean');
+          if (cometDeps.length > 0) {
+            lines.push(`    depends_on:`);
+            cometDeps.forEach(d => lines.push(`      - ${d}`));
+          }
+        }
+
+        if (s.mediafusion) {
+          lines.push(`\n  # MediaFusion (Multi-source scraper: Movies, Series, Live TV, Sports)`);
+          lines.push(`  mediafusion:`);
+          lines.push(`    image: mhdzumair/mediafusion:latest`);
+          lines.push(`    container_name: mediafusion`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8001:8000"`);
+          lines.push(`    environment:`);
+          lines.push(`      - HOST=0.0.0.0`);
+          lines.push(`      - PORT=8000`);
+          lines.push(`      - HOST_URL=\${MEDIAFUSION_HOST_URL:-http://localhost:8001}`);
+          lines.push(`      - POSTGRES_URI=postgresql://postgres:\${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion`);
+          lines.push(`      - DATABASE_URL=postgresql://postgres:\${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion`);
+          lines.push(`      - REDIS_URL=redis://shared-redis:6379/0`);
+          lines.push(`      - SECRET_KEY=\${SECRET_KEY}`);
+          lines.push(`      - API_PASSWORD=\${ADDON_PASSWORD}`);
+          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
+          lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
+          lines.push(`      - REALDEBRID_API_KEY=\${REALDEBRID_API_KEY}`);
+          lines.push(`      - PREMIUMIZE_API_KEY=\${PREMIUMIZE_API_KEY}`);
+          lines.push(`      - ALLDEBRID_API_KEY=\${ALLDEBRID_API_KEY}`);
+          lines.push(`      - TORBOX_API_KEY=\${TORBOX_API_KEY}`);
+          lines.push(`      - DEBRIDLINK_API_KEY=\${DEBRIDLINK_API_KEY}`);
+          if (s.prowlarr) {
+            lines.push(`      - PROWLARR_URL=http://prowlarr:9696`);
+            lines.push(`      - PROWLARR_API_KEY=\${PROWLARR_API_KEY}`);
+          }
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/mediafusion:/app/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          lines.push(`    depends_on:`);
+          lines.push(`      init-postgres:`);
+          lines.push(`        condition: service_completed_successfully`);
+          lines.push(`      shared-redis:`);
+          lines.push(`        condition: service_started`);
+          if (s.prowlarr) lines.push(`      - prowlarr`);
+        }
+      }
+
+      // 3. ZILEAN
+      if (s.zilean) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 3. FAST DMM TORRENT HASH CACHE (ZILEAN)`);
+        lines.push(`  # ============================================================================`);
+        lines.push(`  zilean:`);
+        lines.push(`    image: ipromknight/zilean:latest`);
+        lines.push(`    container_name: zilean`);
+        lines.push(`    restart: unless-stopped`);
+        lines.push(`    ports:`);
+        lines.push(`      - "8181:8181"`);
+        lines.push(`    environment:`);
+        lines.push(`      - Zilean__Database__Type=postgres`);
+        lines.push(`      - Zilean__Database__ConnectionString=Host=shared-postgres;Database=zilean;Username=postgres;Password=\${POSTGRES_PASSWORD}`);
+        lines.push(`    networks:`);
+        lines.push(`      - stremio-net`);
+        lines.push(`    depends_on:`);
+        lines.push(`      - shared-postgres`);
+      }
+
+      // 4. TRACKER AGGREGATORS & CLOUDFLARE BYPASS
+      if (db.needsInitConfigs || s.prowlarr || s.flaresolverr) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 4. TRACKER AGGREGATORS & CLOUDFLARE BYPASS`);
+        lines.push(`  # ============================================================================`);
+
+        if (db.needsInitConfigs) {
+          lines.push(`  # One-shot bootstrap container to seed configs, API keys, and directory permissions`);
+          lines.push(`  init-configs:`);
+          lines.push(`    image: alpine:latest`);
+          lines.push(`    container_name: init-configs`);
+          lines.push(`    restart: "no"`);
+          lines.push(`    volumes:`);
+          if (s.prowlarr) lines.push(`      - ./data/prowlarr:/prowlarr`);
+          if (s.slicksync) lines.push(`      - ./data/slicksync:/slicksync`);
+          if (s.aiometadata) lines.push(`      - ./data/aiometadata:/aiometadata`);
+          if (s.infinidysk) lines.push(`      - ./data/infinidysk:/infinidysk`);
+          if (s.stremioWeb) lines.push(`      - ./data/stremio-web:/stremio-web`);
+          if (s.debridSearch) lines.push(`      - ./data/debrid-search:/debrid-search`);
+          
+          let cmdParts = [];
+          let dirs = [];
+          if (s.prowlarr) dirs.push('/prowlarr');
+          if (s.slicksync) dirs.push('/slicksync');
+          if (s.aiometadata) dirs.push('/aiometadata');
+          if (s.infinidysk) dirs.push('/infinidysk');
+          if (s.stremioWeb) dirs.push('/stremio-web');
+          if (s.debridSearch) dirs.push('/debrid-search');
+          if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
+
+          if (s.prowlarr) {
+            cmdParts.push(`if [ ! -f /prowlarr/config.xml ]; then echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>\${PROWLARR_API_KEY}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>' > /prowlarr/config.xml; else sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>\${PROWLARR_API_KEY}</ApiKey>|' /prowlarr/config.xml; sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|' /prowlarr/config.xml; sed -i 's|<AuthenticationRequired>.*</AuthenticationRequired>|<AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|' /prowlarr/config.xml; fi;`);
+          }
+          if (dirs.length > 0) {
+            cmdParts.push(`chmod -R 777 ${dirs.join(' ')} 2>/dev/null || true;`);
+          }
+          if (s.infinidysk) {
+            cmdParts.push(`if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;`);
+          }
+          lines.push(`    command: >`);
+          lines.push(`      sh -c "${cmdParts.join(' ')}"`);
+        }
+
+        if (s.prowlarr) {
+          lines.push(`\n  prowlarr:`);
+          lines.push(`    image: lscr.io/linuxserver/prowlarr:latest`);
+          lines.push(`    container_name: prowlarr`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "9696:9696"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PUID=1000`);
+          lines.push(`      - PGID=1000`);
+          lines.push(`      - TZ=Etc/UTC`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/prowlarr:/config`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          lines.push(`    depends_on:`);
+          lines.push(`      init-configs:`);
+          lines.push(`        condition: service_completed_successfully`);
+        }
+
+        if (s.flaresolverr) {
+          lines.push(`\n  flaresolverr:`);
+          lines.push(`    image: ghcr.io/flaresolverr/flaresolverr:latest`);
+          lines.push(`    container_name: flaresolverr`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8191:8191"`);
+          lines.push(`    environment:`);
+          lines.push(`      - LOG_LEVEL=info`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+      }
+
+      // 5. PROXIES & USENET ENGINES
+      if (s.stremthru || s.mediaflow || s.infinidysk) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 5. STREAM PROXIES, ROUTERS & USENET STREAMING ENGINE`);
+        lines.push(`  # ============================================================================`);
+        if (s.stremthru) {
+          lines.push(`  stremthru:`);
+          lines.push(`    image: muniftanjim/stremthru:latest`);
+          lines.push(`    container_name: stremthru`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    dns:`);
+          lines.push(`      - 1.1.1.1`);
+          lines.push(`      - 8.8.8.8`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8080:8080"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PORT=8080`);
+          lines.push(`      - STREMTHRU_PORT=8080`);
+          lines.push(`      - STREMTHRU_AUTH=\${STREMTHRU_AUTH}`);
+          lines.push(`      - STREMTHRU_PROXY_AUTH=\${STREMTHRU_AUTH}`);
+          lines.push(`      - STREMTHRU_AUTH_ADMIN=admin`);
+          lines.push(`      - STREMTHRU_VAULT_SECRET=\${SECRET_KEY}`);
+          lines.push(`      - STREMTHRU_REDIS_URI=redis://shared-redis:6379/3`);
+          lines.push(`      - STREMTHRU_DATABASE_URI=sqlite:///app/data/stremthru.db`);
+          lines.push(`      - STREMTHRU_STORE_AUTH=*:realdebrid:\${REALDEBRID_API_KEY},*:premiumize:\${PREMIUMIZE_API_KEY},*:alldebrid:\${ALLDEBRID_API_KEY},*:torbox:\${TORBOX_API_KEY},*:debridlink:\${DEBRIDLINK_API_KEY},admin:realdebrid:\${REALDEBRID_API_KEY},admin:premiumize:\${PREMIUMIZE_API_KEY},admin:alldebrid:\${ALLDEBRID_API_KEY},admin:torbox:\${TORBOX_API_KEY},admin:debridlink:\${DEBRIDLINK_API_KEY}`);
+          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
+          lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
+          lines.push(`      - STREMTHRU_TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - STREMTHRU_TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - STREMTHRU_MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
+          lines.push(`      - STREMTHRU_RPDB_API_KEY=\${RPDB_API_KEY}`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/stremthru:/app/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          lines.push(`    depends_on:`);
+          lines.push(`      - shared-redis`);
+        }
+        if (s.mediaflow) {
+          lines.push(`\n  mediaflow:`);
+          lines.push(`    image: mhdzumair/mediaflow-proxy:latest`);
+          lines.push(`    container_name: mediaflow`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8888:8888"`);
+          lines.push(`    environment:`);
+          lines.push(`      - API_PASSWORD=\${MEDIAFLOW_PASS:-\${ADDON_PASSWORD}}`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+        if (s.infinidysk) {
+          lines.push(`\n  # InfiniDysk (High-performance on-demand Usenet streaming engine & WebDAV)`);
+          lines.push(`  infinidysk:`);
+          lines.push(`    image: ghcr.io/infinidysk/infinidysk:latest`);
+          lines.push(`    container_name: infinidysk`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "3005:3000"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PUID=1000`);
+          lines.push(`      - PGID=1000`);
+          lines.push(`      - TZ=Etc/UTC`);
+          lines.push(`      - TRUST_PROXY=1`);
+          lines.push(`      - RESET_ADMIN_PASSWORD=\${RESET_ADMIN_PASSWORD:-false}`);
+          lines.push(`      - FRONTEND_BACKEND_API_KEY=\${SECRET_KEY}`);
+          lines.push(`      - NZBDAV_CONFIG__API__KEY=\${SECRET_KEY}`);
+          lines.push(`      - NZBDAV_CONFIG__WEBDAV__USER=admin`);
+          lines.push(`      - NZBDAV_CONFIG__WEBDAV__PASS=\${ADDON_PASSWORD}`);
+          lines.push(`      - WEBDAV_USER=admin`);
+          lines.push(`      - WEBDAV_PASSWORD=\${ADDON_PASSWORD}`);
+          if (s.prowlarr) {
+            lines.push(`      - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696`);
+            lines.push(`      - NZBDAV_CONFIG__PROWLARR__API_KEY=\${PROWLARR_API_KEY}`);
+          }
+          lines.push(`      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true`);
+          lines.push(`      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15`);
+          lines.push(`    healthcheck:`);
+          lines.push(`      test: ["CMD-SHELL", "curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1"]`);
+          lines.push(`      interval: 30s`);
+          lines.push(`      retries: 3`);
+          lines.push(`      start_period: 40s`);
+          lines.push(`      timeout: 5s`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/infinidysk:/config`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          if (db.needsInitConfigs) {
+            lines.push(`    depends_on:`);
+            lines.push(`      init-configs:`);
+            lines.push(`        condition: service_completed_successfully`);
+          }
+        }
+      }
+
+      // 6. CATALOGS & METADATA
+      if (s.kitsu || s.aiometadata || s.subsense || s.debridSearch) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 6. LOCAL CATALOGS & METADATA`);
+        lines.push(`  # ============================================================================`);
+        if (s.kitsu) {
+          lines.push(`\n  anime-kitsu:`);
+          lines.push(`    build: https://github.com/TheBeastLT/stremio-kitsu-anime.git#master`);
+          lines.push(`    container_name: anime-kitsu`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "7005:7000"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PORT=7000`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+        if (s.aiometadata) {
+          lines.push(`\n  aiometadata:`);
+          lines.push(`    image: ghcr.io/jigsawfr/aiometadata-docker:latest`);
+          lines.push(`    container_name: aiometadata`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "4005:4005"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PORT=4005`);
+          lines.push(`      - HOST_NAME=\${BASE_URL:-http://localhost:4005}`);
+          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - TMDB_API=\${TMDB_API_KEY}`);
+          lines.push(`      - BUILT_IN_TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - BUILT_IN_TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - FANART_API_KEY=\${FANART_API_KEY}`);
+          lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
+          lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
+          lines.push(`      - GEMINI_API_KEY=\${GEMINI_API_KEY}`);
+          lines.push(`      - REDIS_URL=redis://shared-redis:6379/5`);
+          lines.push(`      - DATABASE_URI=postgresql://postgres:\${POSTGRES_PASSWORD}@shared-postgres:5432/aiometadata`);
+          lines.push(`      - ADMIN_KEY=\${SECRET_KEY}`);
+          lines.push(`      - ADDON_PASSWORD=\${ADDON_PASSWORD}`);
+          lines.push(`      - IMAGE_PROXY_SIGNING_SECRET=\${SECRET_KEY}`);
+          lines.push(`      - CACHE_WARMUP_ON_STARTUP=true`);
+          lines.push(`      - NODE_ENV=production`);
+          lines.push(`    healthcheck:`);
+          lines.push(`      test: ["CMD-SHELL", "wget -q --spider http://localhost:4005/health/live || exit 1"]`);
+          lines.push(`      interval: 30s`);
+          lines.push(`      timeout: 10s`);
+          lines.push(`      start_period: 40s`);
+          lines.push(`      retries: 3`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/aiometadata:/app/addon/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          lines.push(`    depends_on:`);
+          lines.push(`      shared-redis:`);
+          lines.push(`        condition: service_started`);
+          lines.push(`      shared-postgres:`);
+          lines.push(`        condition: service_started`);
+          if (db.needsPostgres) {
+            lines.push(`      init-postgres:`);
+            lines.push(`        condition: service_completed_successfully`);
+          }
+          if (db.needsInitConfigs) {
+            lines.push(`      init-configs:`);
+            lines.push(`        condition: service_completed_successfully`);
+          }
+        }
+        if (s.debridSearch) {
+          lines.push(`\n  # Stremio-IntellDebridSearch (Search & catalog provider for personal Debrid library)`);
+          lines.push(`  debrid-search:`);
+          lines.push(`    image: nepiraw/stremio-intelldebridsearch:latest`);
+          lines.push(`    container_name: stremio-debrid-search`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "3001:3001"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PORT=3001`);
+          lines.push(`      - ADDON_URL=\${BASE_URL:-http://localhost:3001}`);
+          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
+          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
+          lines.push(`      - REALDEBRID_API_KEY=\${REALDEBRID_API_KEY}`);
+          lines.push(`      - ALLDEBRID_API_KEY=\${ALLDEBRID_API_KEY}`);
+          lines.push(`      - TORBOX_API_KEY=\${TORBOX_API_KEY}`);
+          lines.push(`      - PREMIUMIZE_API_KEY=\${PREMIUMIZE_API_KEY}`);
+          lines.push(`      - DEBRIDLINK_API_KEY=\${DEBRIDLINK_API_KEY}`);
+          lines.push(`      - ENABLE_CATALOG_POSTERS=true`);
+          lines.push(`      - CATALOG_ENRICHMENT_CACHE_ENABLED=true`);
+          lines.push(`      - CATALOG_ENRICHMENT_CACHE_DB_PATH=/app/data/catalog-cache.sqlite`);
+          lines.push(`      - VARIANT_SYSTEM_ENABLED=true`);
+          lines.push(`      - ENABLE_RELEASE_GROUP=true`);
+          lines.push(`      - WARP_ENABLED=true`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/debrid-search:/app/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          if (db.needsInitConfigs) {
+            lines.push(`    depends_on:`);
+            lines.push(`      init-configs:`);
+            lines.push(`        condition: service_completed_successfully`);
+          }
+        }
+        if (s.subsense) {
+          lines.push(`\n  subsense:`);
+          lines.push(`    image: nepiraw/stremio-subsense:latest`);
+          lines.push(`    container_name: stremio-subsense`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "\${PORT_SUBSENSE:-3100}:3100"`);
+          lines.push(`    environment:`);
+          lines.push(`      - PORT=3100`);
+          lines.push(`      - HOST=0.0.0.0`);
+          lines.push(`      - SUBSENSE_ENCRYPTION_KEY=\${SECRET_KEY}`);
+          lines.push(`      - REDIS_URL=redis://shared-redis:6379/1`);
+          lines.push(`      - WARP_ENABLED=true`);
+          lines.push(`      - LOG_LEVEL=info`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/subsense:/app/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          lines.push(`    depends_on:`);
+          lines.push(`      - shared-redis`);
+        }
+
+      }
+
+      // 7. WEB PLAYERS & STREAM CLIENTS
+      if (s.nuvio || s.stremioWeb) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 7. WEB PLAYERS & STREAM CLIENTS (NUVIO & STREMIO WEB)`);
+        lines.push(`  # ============================================================================`);
+        if (s.nuvio) {
+          lines.push(`  nuvio:`);
+          lines.push(`    image: orochibraru/nuvio-web:latest`);
+          lines.push(`    container_name: nuvio-web`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8085:3000"`);
+          lines.push(`    environment:`);
+          lines.push(`      - ORIGIN=\${NUVIO_ORIGIN:-\${BASE_URL:-http://localhost:8085}}`);
+          lines.push(`      - PROTOCOL_HEADER=x-forwarded-proto`);
+          lines.push(`      - HOST_HEADER=x-forwarded-host`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+        if (s.stremioWeb) {
+          lines.push(`\n  # Stremio Web Player & Server (Official Web UI with streaming engine)`);
+          lines.push(`  stremio-web:`);
+          lines.push(`    image: tsaridas/stremio-docker:latest`);
+          lines.push(`    container_name: stremio-web`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    ports:`);
+          lines.push(`      - "8082:8080"`);
+          lines.push(`    environment:`);
+          lines.push(`      - AUTO_SERVER_URL=true`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/stremio-web:/root/.stremio-server`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+          if (db.needsInitConfigs) {
+            lines.push(`    depends_on:`);
+            lines.push(`      init-configs:`);
+            lines.push(`        condition: service_completed_successfully`);
+          }
+        }
+      }
+
+      // 8. NUVIO & STREMIO SYNC HUB (SLICKSYNC)
+      if (s.slicksync) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 8. NUVIO & STREMIO SYNC HUB (SLICKSYNC)`);
+        lines.push(`  # ============================================================================`);
+        lines.push(`  slicksync:`);
+        lines.push(`    image: ghcr.io/slicknsliding/slicksync:private`);
+        lines.push(`    container_name: slicksync`);
+        lines.push(`    restart: unless-stopped`);
+        lines.push(`    ports:`);
+        lines.push(`      - "8086:3000"`);
+        lines.push(`    environment:`);
+        lines.push(`      - INSTANCE=private`);
+        lines.push(`      - INSTANCE_TYPE=private`);
+        lines.push(`      - NEXT_PUBLIC_INSTANCE_TYPE=private`);
+        lines.push(`      - DATABASE_URL=file:///app/data/sqlite.db`);
+        lines.push(`      - JWT_SECRET=\${SECRET_KEY}`);
+        lines.push(`      - ENCRYPTION_KEY=\${SECRET_KEY}`);
+        lines.push(`      - SLICKSYNC_PRIVATE_USERNAME=admin`);
+        lines.push(`      - SLICKSYNC_PRIVATE_PASSWORD=\${ADDON_PASSWORD}`);
+        lines.push(`      - REDIS_URL=redis://shared-redis:6379/2`);
+        lines.push(`      - AIOSTREAMS_URL=http://aiostreams:3000`);
+        lines.push(`      - AIOSTREAMS_AUTH_USERNAME=admin`);
+        lines.push(`      - AIOSTREAMS_AUTH_PASSWORD=\${ADDON_PASSWORD}`);
+        lines.push(`      - STREMIO_URL=http://aiostreams:3000`);
+        lines.push(`      - NODE_OPTIONS=--dns-result-order=ipv4first`);
+        lines.push(`    volumes:`);
+        lines.push(`      - ./data/slicksync:/app/data`);
+        lines.push(`    networks:`);
+        lines.push(`      - stremio-net`);
+        lines.push(`    depends_on:`);
+        lines.push(`      shared-redis:`);
+        lines.push(`        condition: service_started`);
+        lines.push(`      aiostreams:`);
+        lines.push(`        condition: service_started`);
+        if (db.needsInitConfigs) {
+          lines.push(`      init-configs:`);
+          lines.push(`        condition: service_completed_successfully`);
+        }
+      }
+
+      // 9. DATABASES
+      if (db.needsRedis || db.needsPostgres) {
+        lines.push(`\n  # ============================================================================`);
+        lines.push(`  # 9. SUPPORTING SHARED DATABASES`);
+        lines.push(`  # ============================================================================`);
+        if (db.needsRedis) {
+          lines.push(`\n  shared-redis:`);
+          lines.push(`    image: redis:alpine`);
+          lines.push(`    container_name: shared-redis`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/redis:/data`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+        if (db.needsPostgres) {
+          lines.push(`\n  shared-postgres:`);
+          lines.push(`    image: postgres:16-alpine`);
+          lines.push(`    container_name: shared-postgres`);
+          lines.push(`    restart: unless-stopped`);
+          lines.push(`    shm_size: 512mb`);
+          lines.push(`    environment:`);
+          lines.push(`      - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD}`);
+          lines.push(`    volumes:`);
+          lines.push(`      - ./data/postgres:/var/lib/postgresql/data`);
+          lines.push(`      - ./init/postgres/01-init-dbs.sql:/docker-entrypoint-initdb.d/01-init-dbs.sql:ro`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+
+          lines.push(`\n  # One-shot database initializer ensuring all application databases exist on existing volumes`);
+          lines.push(`  init-postgres:`);
+          lines.push(`    image: postgres:16-alpine`);
+          lines.push(`    container_name: init-postgres`);
+          lines.push(`    restart: "no"`);
+          lines.push(`    depends_on:`);
+          lines.push(`      - shared-postgres`);
+          lines.push(`    environment:`);
+          lines.push(`      - PGPASSWORD=\${POSTGRES_PASSWORD}`);
+          let pgCmds = [`until pg_isready -h shared-postgres -U postgres; do sleep 1; done;`];
+          if (s.zilean) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'zilean'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE zilean;';`);
+          if (s.mediafusion) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'mediafusion'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE mediafusion;';`);
+          if (s.aiometadata) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'aiometadata'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE aiometadata;';`);
+          lines.push(`    command: >`);
+          lines.push(`      sh -c "${pgCmds.join(' ')}"`);
+          lines.push(`    networks:`);
+          lines.push(`      - stremio-net`);
+        }
+      }
+
+      // Networks
+      lines.push(`\nnetworks:`);
+      lines.push(`  stremio-net:`);
+      lines.push(`    driver: bridge\n`);
+
+      return lines.join('\n');
+    }
+
+    function updateOutputs() {
+      const s = state.services;
+      const count = Object.values(s).filter(Boolean).length;
+      document.getElementById('service-count-badge').textContent = `${count} of 19 Selected`;
+
+      const db = calculateDatabases();
+      const dbList = [];
+      if (db.needsPostgres) dbList.push('Postgres');
+      if (db.needsRedis) dbList.push('Redis');
+      document.getElementById('db-status-badge').textContent = dbList.length > 0 ? `${dbList.join(' + ')} Active` : 'No DBs needed';
+
+      const composeText = generateComposeFile();
+      const envText = generateEnvFile();
+      const sqlText = generateSQLFile();
+
+      document.getElementById('code-compose').textContent = composeText;
+      document.getElementById('code-env').textContent = envText;
+      document.getElementById('code-sql').textContent = sqlText;
+
+      const inp = getInputs();
+      const runText = `# ==============================================================================
+# All-In-One Single Container Appliance (Zero Docker Hub Login, Zero Rate Limits)
+# Runs the entire self-hosted stack inside a single container instance
+# ==============================================================================
+docker run -d \\
+  --name aio-stack \\
+  --privileged \\
+  --restart unless-stopped \\
+  -p 8088:8088 \\
+  -p 3001:3001 \\
+  -p 8085:8085 \\
+  -p 8086:8086 \\
+  -p 8082:8082 \\
+  -p 3005:3005 \\
+  -p 4005:4005 \\
+  -p 9039:9039 \\
+  -p 3100:3100 \\
+  -p 3011:3001 \\
+  -p 8000:8000 \\
+  -p 8001:8001 \\
+  -p 55771:55771 \\
+  -p 7005:7005 \\
+  -p 8181:8181 \\
+  -p 9696:9696 \\
+  -p 8080:8080 \\
+  -p 8888:8888 \\
+  -v aio-data:/data \\
+  -e BASE_URL="${inp.baseUrl}" \\
+  -e TMDB_API_KEY="${inp.tmdbKey}" \\
+  -e REALDEBRID_API_KEY="${inp.rdKey}" \\
+  -e PREMIUMIZE_API_KEY="${inp.premiumizeKey}" \\
+  -e ADDON_PASSWORD="${inp.addonPassword}" \\
+  ghcr.io/ooflyeyesoo/aiostreams-aio:latest`;
+      document.getElementById('code-run').textContent = runText;
+
+      const baseUrl = document.getElementById('input-base-url').value.trim() || 'http://localhost:3001';
+      document.getElementById('guide-portal-url').textContent = baseUrl;
+
+      // Update Port map
+      const portMap = [
+        { name: 'AIOStreams', port: '3000', enabled: true },
+        { name: 'Comet', port: '8000', enabled: s.comet },
+        { name: 'MediaFusion', port: '8001', enabled: s.mediafusion },
+        { name: 'Zilean (DMM Cache)', port: '8181', enabled: s.zilean },
+        { name: 'Prowlarr', port: '9696', enabled: s.prowlarr },
+        { name: 'FlareSolverr', port: '8191', enabled: s.flaresolverr },
+        { name: 'StremThru Proxy', port: '8080', enabled: s.stremthru },
+        { name: 'MediaFlow Proxy', port: '8888', enabled: s.mediaflow },
+        { name: 'Anime Kitsu', port: '7005', enabled: s.kitsu },
+        { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
+        { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
+        { name: 'Debrid Search', port: '3001', enabled: s.debridSearch },
+        { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk },
+        { name: 'Stremio Web Player', port: '8082', enabled: s.stremioWeb },
+        { name: 'Nuvio Web Player', port: '8085', enabled: s.nuvio },
+        { name: 'SlickSync (Nuvio & Stremio Hub)', port: '8086', enabled: s.slicksync }
+      ];
+
+      const portsTable = document.getElementById('ports-table');
+      portsTable.innerHTML = '';
+      portMap.filter(p => p.enabled).forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 px-2 rounded bg-[#161c1e]/40 border border-[#2c3235]/50';
+        row.innerHTML = `<span class="font-medium text-[#c2cbcd]">${p.name}</span><span class="font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded text-[11px]">${p.port}</span>`;
+        portsTable.appendChild(row);
+      });
+    }
+
+    function switchTab(tab) {
+      state.currentTab = tab;
+      const tabs = ['compose', 'env', 'sql', 'ports', 'run'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const view = document.getElementById(`view-${t}`);
+        if (t === tab) {
+          btn.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg bg-[#e6a56b] text-[#191d20] font-bold text-white transition';
+          view.classList.remove('hidden');
+        } else {
+          btn.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg text-[#929b9f] hover:text-white transition';
+          view.classList.add('hidden');
+        }
+      });
+    }
+
+    function copyToClipboard(type) {
+      let text = '';
+      if (type === 'compose') text = document.getElementById('code-compose').textContent;
+      else if (type === 'env') text = document.getElementById('code-env').textContent;
+      else if (type === 'sql') text = document.getElementById('code-sql').textContent;
+      else if (type === 'run') text = document.getElementById('code-run').textContent;
+
+      navigator.clipboard.writeText(text).then(() => {
+        const toast = document.getElementById('copy-toast');
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 2000);
+      });
+    }
+
+    function downloadFile(type) {
+      let content = '';
+      let filename = '';
+      if (type === 'compose') {
+        content = document.getElementById('code-compose').textContent;
+        filename = 'docker-compose.yml';
+      } else if (type === 'env') {
+        content = document.getElementById('code-env').textContent;
+        filename = '.env';
+      } else if (type === 'sql') {
+        content = document.getElementById('code-sql').textContent;
+        filename = '01-init-dbs.sql';
+      }
+
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadAllFiles() {
+      downloadFile('compose');
+      setTimeout(() => downloadFile('env'), 300);
+      const db = calculateDatabases();
+      if (db.needsPostgres) {
+        setTimeout(() => downloadFile('sql'), 600);
+      }
+    }
+
+    // Auto-clear stock placeholder values and auto-select text on click/focus
+    const stockDefaults = [
+      'https://aio.yourdomain.com',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'admin',
+      'e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09',
+      'postgres_supersecret_db_pass_2026',
+      'prowlarr_internal_secret_key_99',
+      'admin:supersecretproxykey',
+      'supersecretmediaflowpass'
+    ];
+
+    document.addEventListener('focusin', (e) => {
+      const el = e.target;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && el.type !== 'checkbox' && el.type !== 'radio') {
+        const val = el.value.trim();
+        if (stockDefaults.includes(val) || val.includes('yourdomain.com')) {
+          el.value = '';
+          if (typeof updateOutputs === 'function') updateOutputs();
+        } else {
+          el.select();
+        }
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      const el = e.target;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && el.type !== 'checkbox' && el.type !== 'radio') {
+        const val = el.value.trim();
+        if (stockDefaults.includes(val) || val.includes('yourdomain.com')) {
+          el.value = '';
+          if (typeof updateOutputs === 'function') updateOutputs();
+        } else {
+          el.select();
+        }
+      }
+    });
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateOutputs();
+    });
+  </script>
+</body>
+</html>

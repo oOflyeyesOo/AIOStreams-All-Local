@@ -1,0 +1,63 @@
+name: Build Docker manager images
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: manager-images-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate packaged deployment
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          python3 scripts/generate_manager_compose.py --check
+          docker compose --env-file .env.example -f compose.manager.yml config --quiet
+          docker compose -p aio-tests -f compose.test.yml run --rm tests
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: portal, target: portal, file: docker/packaged/Dockerfile}
+          - {name: controller, target: controller, file: docker/packaged/Dockerfile}
+          - {name: aiostreams, target: aiostreams, file: docker/packaged/Dockerfile}
+          - {name: sootio, target: sootio, file: docker/packaged/Dockerfile}
+          - {name: stremio-web, target: stremio-web, file: docker/packaged/Dockerfile}
+          - {name: bootstrap, target: bootstrap, file: docker/packaged/Dockerfile}
+          - {name: postgres-init, target: postgres-init, file: docker/packaged/Dockerfile}
+          - {name: kitsu, target: '', file: docker/anime-kitsu/Dockerfile}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Image namespace
+        id: image
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aio-local" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.prefix }}-${{ matrix.name }}:latest
+            ${{ steps.image.outputs.prefix }}-${{ matrix.name }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=manager-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=manager-${{ matrix.name }}

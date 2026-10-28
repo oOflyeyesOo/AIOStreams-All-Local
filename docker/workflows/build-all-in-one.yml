@@ -1,0 +1,46 @@
+name: Build & Publish All-In-One Appliance Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Downcase Repository Owner for Docker Tag
+        id: repo-owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build and Push All-In-One Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/all-in-one/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:latest
+            ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=AIOStreams All-In-One Appliance
+            org.opencontainers.image.description=100% Self-Hosted Stremio Backend Stack in a Single Container
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}

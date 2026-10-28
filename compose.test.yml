@@ -1,0 +1,56 @@
+services:
+  browser-tests:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app:ro
+    command: node --test tests/browser-bootstrap.test.cjs
+
+  providers:
+    image: python:3.11-alpine
+    working_dir: /app
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./tests/check_providers.py:/app/check_providers.py:ro
+    command: python3 check_providers.py
+
+  tests:
+    image: python:3.11-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    command: python3 -m unittest discover -s tests -v
+
+  shared-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: integration-test-only
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+
+  database-test:
+    image: postgres:16-alpine
+    depends_on:
+      shared-postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: integration-test-only
+    volumes:
+      - ./init/postgres/init-databases.sh:/init-databases.sh:ro
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        sh /init-databases.sh
+        sh /init-databases.sh
+        count=$$(psql -h shared-postgres -U postgres -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname IN ('zilean','mediafusion','aiometadata','sootio')")
+        test "$$count" = 4
+        echo 'Database creation and repeat startup passed.'

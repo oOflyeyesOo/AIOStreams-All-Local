@@ -1,0 +1,29 @@
+name: Compose regression tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check generated manager configuration
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          python3 scripts/generate_manager_compose.py --check
+      - name: Validate Compose definitions
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example -f docker-compose.aio.yml config --quiet
+          docker compose --env-file .env.example -f compose.manager.yml config --quiet
+      - name: Portal and failure regression tests
+        run: docker compose -p aio-tests -f compose.test.yml run --rm tests
+      - name: PostgreSQL first and repeat initialization
+        run: docker compose -p aio-tests -f compose.test.yml run --rm database-test
+      - name: Web player first-visit settings
+        run: docker compose -p aio-tests -f compose.test.yml run --rm browser-tests
+      - name: Clean up test project
+        if: always()
+        run: docker compose -p aio-tests -f compose.test.yml down --volumes

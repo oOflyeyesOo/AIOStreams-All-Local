@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIO Local · One stack. One manifest.</title>
+<link rel="stylesheet" href="/assets/app.css"><script src="/assets/app.js" defer></script>
+</head>
+<body>
+<main>
+<header class="topbar"><a class="brand" href="/" aria-label="AIO Local home"><span class="brand-icon">a<span>i</span>o</span><span>AIO<span class="muted"> / LOCAL</span></span></a><span class="host-badge"><span class="status-dot"></span> LOCAL INSTANCE</span></header>
+<section class="hero" id="setup">
+<div class="eyebrow"><span class="tiny-line"></span> LESS CONFIGURATION. MORE WATCHING.</div>
+<h1>Your entire stack.<br><span>One manifest.</span></h1>
+<p>Bring your keys. We'll connect your scrapers, catalogs, subtitles<br class="desktop"> and players — and give you one link to take with you.</p>
+<div class="steps"><span class="step active" id="step-1"><b>01</b> Add your keys</span><span class="step-line"></span><span class="step" id="step-2"><b>02</b> Connect everything</span><span class="step-line"></span><span class="step" id="step-3"><b>03</b> Press play</span></div>
+</section>
+<div class="workspace-grid">
+<section class="panel setup-panel">
+<div class="panel-heading"><div><span class="eyebrow">THE ONLY SETUP YOU NEED</span><h2>Make it yours.</h2></div><span class="number-tag">01 / 03</span></div>
+<form id="setup-form">
+<label class="field-label" for="base-url">AIOStreams address (Port 3001) <span>REQUIRED</span></label>
+<input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help">Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.</p>
+<label class="field-label" for="aiometadata-host" style="margin-top:14px">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
+<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help">Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.</p>
+<div class="section-divider"><span>Streaming provider</span><span class="optional">CHOOSE AT LEAST ONE</span></div>
+<div id="provider-fields" class="field-grid"></div>
+<div class="section-divider"><span>Metadata & artwork</span><span class="optional">RECOMMENDED</span></div>
+<div id="metadata-fields" class="field-grid"></div>
+<details class="more-options"><summary>Subtitles, lists & extra services <span>+</span></summary><div id="extra-fields" class="field-grid"></div></details>
+<div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
+<button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
+<p class="under-button">Your services, configured together. Setup details stay available below.</p>
+</form>
+</section>
+<div class="right-column">
+<section class="manifest-panel" id="manifest"><div class="eyebrow"><span class="status-dot"></span> YOUR TAKEAWAYS</div><h2>Your Addons.<br>Everywhere you watch.</h2><p>Your personalized manifests for AIOStreams (streams) and AIOMetadata (catalogs & posters).</p><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div><button id="copy-manifest" class="light-button" disabled>Copy AIOStreams manifest <span>⧉</span></button><a id="install-stremio" class="subtle-link disabled" href="#">Open AIOStreams in Stremio ↗</a><div class="manifest-preview" style="margin-top:18px"><div class="code-label"><span>aiometadata · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="aiometa-manifest-url">Your AIOMetadata manifest will appear here<br>after setup.</code></div><button id="copy-aiometa-manifest" class="light-button" disabled>Copy AIOMetadata manifest <span>⧉</span></button><a id="install-aiometa-stremio" class="subtle-link disabled" href="#">Open AIOMetadata in Stremio ↗</a><a class="subtle-link" href="/api/export-manifest" download style="margin-top:14px">Download AIO manifest JSON ↓</a><div class="player-list"><span>STREMIO</span><span>NUVIO</span><span>COMPATIBLE PLAYERS</span></div></section>
+<section class="progress-panel panel" id="progress-panel" aria-live="polite"><div class="progress-icon">⌘</div><div><h3 id="progress-title">Everything in one place.</h3><p id="progress-description">Add your keys, then let the stack do the wiring.</p></div><details id="setup-details" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
+<section class="hint-panel"><span>✧</span><div><h3>Already have a player?</h3><p>Paste the manifest URL into its addon installer. Your keys and local integrations travel through the same configuration.</p></div></section>
+</div>
+</div>
+<section id="integrations" class="integrations-section"><div class="integrations-heading"><div><div class="eyebrow">BUILT TO WORK TOGETHER</div><h2>The whole stack. Connected.</h2></div><button id="refresh-services" class="text-button">Refresh status ↻</button></div><p class="section-description">Bundled services are wired automatically. Availability below checks whether each service accepts a connection; setup verifies the manifests.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>
+<section class="hint-panel"><span>↗</span><div><h3>Prefer to hide Cinemeta?</h3><p><a href="https://hidden-cinemeta.vercel.app/" target="_blank" rel="noopener noreferrer">Open Hidden Cinemeta ↗</a> — an optional external tool. Nothing extra runs on your server.</p></div></section>
+<footer><span class="brand-small">AIO / LOCAL</span><span>Built around your server. Designed around your time.</span><a id="player-link" href="#">Launch web player ↗</a></footer>
+</main>
+<div id="toast" role="status" hidden></div>
+</body></html>

@@ -1,0 +1,68 @@
+name: Mirror Stack Images to GitHub Container Registry (GHCR)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly mirror update
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror-images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - source: "ghcr.io/viren070/aiostreams:latest"
+            target: "aiostreams:latest"
+          - source: "ghcr.io/g0ldyy/comet:latest"
+            target: "comet:latest"
+          - source: "mhdzumair/mediafusion:latest"
+            target: "mediafusion:latest"
+          - source: "ipromknight/zilean:latest"
+            target: "zilean:latest"
+          - source: "lscr.io/linuxserver/prowlarr:latest"
+            target: "prowlarr:latest"
+          - source: "ghcr.io/flaresolverr/flaresolverr:latest"
+            target: "flaresolverr:latest"
+          - source: "muniftanjim/stremthru:latest"
+            target: "stremthru:latest"
+          - source: "mhdzumair/mediaflow-proxy:latest"
+            target: "mediaflow:latest"
+          - source: "ghcr.io/infinidysk/infinidysk:latest"
+            target: "infinidysk:latest"
+          - source: "nepiraw/stremio-intelldebridsearch:latest"
+            target: "debrid-search:latest"
+          - source: "ghcr.io/jigsawfr/aiometadata-docker:latest"
+            target: "aiometadata:latest"
+          - source: "nepiraw/stremio-subsense:latest"
+            target: "subsense:latest"
+          - source: "orochibraru/nuvio-web:latest"
+            target: "nuvio:latest"
+          - source: "ghcr.io/slicknsliding/slicksync:private"
+            target: "slicksync:latest"
+          - source: "ghcr.io/umbraprojects/postersplus:latest"
+            target: "postersplus:latest"
+          - source: "redis:alpine"
+            target: "redis:alpine"
+          - source: "postgres:16-alpine"
+            target: "postgres:16-alpine"
+    steps:
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Downcase Repository Owner
+        id: repo-owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Pull, Retag, and Push to GHCR
+        run: |
+          docker pull ${{ matrix.source }}
+          docker tag ${{ matrix.source }} ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/${{ matrix.target }}
+          docker push ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/${{ matrix.target }}
