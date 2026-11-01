@@ -24,10 +24,15 @@ class BootstrapTests(unittest.TestCase):
 
     def test_metadata_save_supplies_addon_password_and_uses_install_path(self):
         response = {"success": True, "userUUID": "test-id", "installUrl": "http://localhost:4005/stremio/test-id/manifest.json"}
-        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": ""}), patch.object(bootstrap, "make_request", return_value=response) as request, patch.object(bootstrap, "update_env_file"):
+        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": "", "SIMKL_CLIENT_ID": "my-simkl-client-id", "ANILIST_TOKEN": "my-anilist-token"}), patch.object(bootstrap, "make_request", return_value=response) as request, patch.object(bootstrap, "update_env_file"):
             result = bootstrap.setup_aiometadata_tamtaro()
             self.assertEqual(result, bootstrap.AIOMETADATA_URL + "/stremio/test-id/manifest.json")
             self.assertEqual(request.call_args.kwargs["data"]["addonPassword"], bootstrap.ADDON_PASSWORD)
+            saved_config = request.call_args.kwargs["data"]["config"]
+            self.assertEqual(saved_config["apiKeys"].get("simklTokenId"), "my-simkl-client-id")
+            self.assertEqual(saved_config["apiKeys"].get("anilistTokenId"), "my-anilist-token")
+            self.assertEqual(saved_config.get("simklTokenId"), "my-simkl-client-id")
+            self.assertEqual(saved_config.get("anilistTokenId"), "my-anilist-token")
 
     def test_metadata_rejection_is_not_reported_as_saved(self):
         with patch.object(bootstrap, "make_request", return_value={"error": 401}):

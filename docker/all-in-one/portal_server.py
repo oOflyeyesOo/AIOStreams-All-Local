@@ -425,7 +425,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
             "configuredKeys": sorted(key for key, value in env_vars.items()
-                                     if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET", key))
+                                     if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key))
         }
 
         resp = {

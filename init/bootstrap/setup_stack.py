@@ -196,6 +196,8 @@ MDBLIST_API_KEY = os.environ.get("MDBLIST_API_KEY", "")
 RPDB_API_KEY = os.environ.get("RPDB_API_KEY", "")
 FANART_API_KEY = os.environ.get("FANART_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+SIMKL_CLIENT_ID = os.environ.get("SIMKL_CLIENT_ID", "")
+ANILIST_TOKEN = os.environ.get("ANILIST_TOKEN", "")
 
 DATA_STREMIO_WEB = resolve_path("data/stremio-web", "/data/stremio-web")
 DATA_AIOSTREAMS = resolve_path("data/aiostreams", "/data/aiostreams")
@@ -471,7 +473,7 @@ def wait_for_aiometadata(max_attempts=30, interval=2):
     return False
 
 def setup_aiometadata_tamtaro():
-    global TMDB_API_KEY, TVDB_API_KEY, MDBLIST_API_KEY, RPDB_API_KEY, FANART_API_KEY, GEMINI_API_KEY
+    global TMDB_API_KEY, TVDB_API_KEY, MDBLIST_API_KEY, RPDB_API_KEY, FANART_API_KEY, GEMINI_API_KEY, SIMKL_CLIENT_ID, ANILIST_TOKEN
     print("[AIOMetadata Setup] Configuring Tamtaro AIOMetadata profile with Posters+ integration...", flush=True)
     config = {}
     if os.path.exists(AIOMETADATA_CONFIG_PATH):
@@ -493,35 +495,48 @@ def setup_aiometadata_tamtaro():
             }
         }
 
+    # Refresh environment variables
+    load_env_file()
+    tmdb_key = os.environ.get("TMDB_API_KEY") or TMDB_API_KEY
+    tvdb_key = os.environ.get("TVDB_API_KEY") or TVDB_API_KEY
+    mdblist_key = os.environ.get("MDBLIST_API_KEY") or MDBLIST_API_KEY
+    rpdb_key = os.environ.get("RPDB_API_KEY") or RPDB_API_KEY
+    fanart_key = os.environ.get("FANART_API_KEY") or FANART_API_KEY
+    gemini_key = os.environ.get("GEMINI_API_KEY") or GEMINI_API_KEY
+    simkl_key = os.environ.get("SIMKL_CLIENT_ID") or SIMKL_CLIENT_ID
+    anilist_key = os.environ.get("ANILIST_TOKEN") or ANILIST_TOKEN
+
     # Community presets include dozens of MDBList catalogs. Enable these only
     # when a key is supplied, instead of adding slow, unusable catalog requests.
     for catalog in config.get("catalogs", []):
-        if not MDBLIST_API_KEY and "mdblist" in str(catalog.get("source", catalog.get("id", ""))).lower():
+        src_id = str(catalog.get("source", catalog.get("id", ""))).lower()
+        if not mdblist_key and "mdblist" in src_id:
+            catalog["enabled"] = False
+        if not simkl_key and "simkl" in src_id and "personal" in src_id:
             catalog["enabled"] = False
 
     # Inject user API keys
-    if not (TMDB_API_KEY and TVDB_API_KEY):
-        load_env_file()
-        TMDB_API_KEY = os.environ.get("TMDB_API_KEY", TMDB_API_KEY)
-        TVDB_API_KEY = os.environ.get("TVDB_API_KEY", TVDB_API_KEY)
-        MDBLIST_API_KEY = os.environ.get("MDBLIST_API_KEY", MDBLIST_API_KEY)
-        RPDB_API_KEY = os.environ.get("RPDB_API_KEY", RPDB_API_KEY)
-        FANART_API_KEY = os.environ.get("FANART_API_KEY", FANART_API_KEY)
-        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY)
-
     api_keys = config.setdefault("apiKeys", {})
-    if TMDB_API_KEY:
-        api_keys["tmdb"] = TMDB_API_KEY
-    if TVDB_API_KEY:
-        api_keys["tvdb"] = TVDB_API_KEY
-    if MDBLIST_API_KEY:
-        api_keys["mdblist"] = MDBLIST_API_KEY
-    if RPDB_API_KEY:
-        api_keys["rpdb"] = RPDB_API_KEY
-    if FANART_API_KEY:
-        api_keys["fanart"] = FANART_API_KEY
-    if GEMINI_API_KEY:
-        api_keys["gemini"] = GEMINI_API_KEY
+    if tmdb_key:
+        api_keys["tmdb"] = tmdb_key
+    if tvdb_key:
+        api_keys["tvdb"] = tvdb_key
+    if mdblist_key:
+        api_keys["mdblist"] = mdblist_key
+    if rpdb_key:
+        api_keys["rpdb"] = rpdb_key
+    if fanart_key:
+        api_keys["fanart"] = fanart_key
+    if gemini_key:
+        api_keys["gemini"] = gemini_key
+    if simkl_key:
+        api_keys["simkl"] = simkl_key
+        api_keys["simklTokenId"] = simkl_key
+        config["simklTokenId"] = simkl_key
+    if anilist_key:
+        api_keys["anilist"] = anilist_key
+        api_keys["anilistTokenId"] = anilist_key
+        config["anilistTokenId"] = anilist_key
 
     # Configure Posters+ Rating Poster Provider
     config["usePosterProxy"] = True

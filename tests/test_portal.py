@@ -144,17 +144,23 @@ class PortalTests(unittest.TestCase):
             probe.assert_not_called()
 
     def test_saved_credentials_are_never_returned_to_browser(self):
-        portal.save_env_updates({"TEST_SECRET": "private-test-value", "PREMIUMIZE_API_KEY": "private-provider-key"})
+        portal.save_env_updates({"TEST_SECRET": "private-test-value", "PREMIUMIZE_API_KEY": "private-provider-key", "SIMKL_CLIENT_ID": "simkl-id-value", "ANILIST_TOKEN": "anilist-token-value"})
         for path in ("/api/env", "/api/status"):
             with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
                 status, body, _ = self.request(path, auth=True)
             self.assertEqual(status, 200)
             self.assertNotIn(b"private-test-value", body)
             self.assertNotIn(b"private-provider-key", body)
+            self.assertNotIn(b"simkl-id-value", body)
+            self.assertNotIn(b"anilist-token-value", body)
             result = json.loads(body)
             state = result if path == "/api/env" else result["env"]
             self.assertIn("PREMIUMIZE_API_KEY", state["configuredKeys"])
+            self.assertIn("SIMKL_CLIENT_ID", state["configuredKeys"])
+            self.assertIn("ANILIST_TOKEN", state["configuredKeys"])
             self.assertNotIn("PREMIUMIZE_API_KEY", state)
+            self.assertNotIn("SIMKL_CLIENT_ID", state)
+            self.assertNotIn("ANILIST_TOKEN", state)
 
     def test_cross_origin_write_blocked(self):
         self.assertEqual(self.request("/api/save", "POST", {}, True,

@@ -3,6 +3,11 @@ services:
     image: ghcr.io/ooflyeyesoo/aiostreams-aio:latest
     container_name: aio-stack
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     privileged: true
     dns:
       - 1.1.1.1
@@ -47,6 +52,8 @@ services:
       - SUBSOURCE_API_KEY=${SUBSOURCE_API_KEY:-}
       - WYZIE_API_KEY=${WYZIE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
       - MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL:-}
     volumes:

@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ============================================================================
   # 0. BUILT-IN WEB PORTAL & SETUP HUB (PORT 8088)
@@ -6,6 +12,7 @@ services:
     image: python:3.11-alpine
     container_name: aio-portal
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8088:8088"
     volumes:
@@ -17,6 +24,8 @@ services:
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - BASE_URL=${BASE_URL:-}
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
+      - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - ANILIST_TOKEN=${ANILIST_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/healthz')\" || exit 1"]
       interval: 10s
@@ -33,6 +42,7 @@ services:
     image: ghcr.io/viren070/aiostreams:latest
     container_name: aiostreams
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -116,6 +126,7 @@ services:
     container_name: comet
     profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -154,6 +165,7 @@ services:
     container_name: mediafusion
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -210,6 +222,7 @@ services:
     container_name: sootio
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -266,6 +279,7 @@ services:
     container_name: zilean
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
     cpus: ${ZILEAN_CPU_LIMIT:-2.0}
     mem_limit: ${ZILEAN_MEM_LIMIT:-2048m}
@@ -306,6 +320,7 @@ services:
     image: alpine:latest
     container_name: init-configs
     restart: "no"
+    logging: *default-logging
     volumes:
       - ./data/prowlarr:/prowlarr
       - ./data/slicksync:/slicksync
@@ -342,6 +357,7 @@ services:
     container_name: prowlarr
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -370,6 +386,7 @@ services:
     image: python:3.11-alpine
     container_name: stack-bootstrap
     restart: "no"
+    logging: *default-logging
     depends_on:
       - aiostreams
     volumes:
@@ -413,6 +430,8 @@ services:
       - RPDB_API_KEY=${RPDB_API_KEY}
       - FANART_API_KEY=${FANART_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - ANILIST_TOKEN=${ANILIST_TOKEN:-}
     command: python3 -u /init/setup_stack.py
     networks:
       - stremio-net
@@ -422,6 +441,7 @@ services:
     container_name: flaresolverr
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8191:8191"
     healthcheck:
@@ -443,6 +463,7 @@ services:
     container_name: stremthru
     profiles: ["proxies", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -484,6 +505,7 @@ services:
     container_name: mediaflow
     profiles: ["proxies", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -520,6 +542,7 @@ services:
     container_name: infinidysk
     profiles: ["proxies", "usenet", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
     environment:
@@ -562,6 +585,7 @@ services:
     container_name: anime-kitsu
     profiles: ["web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7000"
     healthcheck:
@@ -582,6 +606,7 @@ services:
     container_name: aiometadata
     profiles: ["core", "web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "4005:4005"
     environment:
@@ -596,6 +621,8 @@ services:
       - RPDB_API_KEY=${RPDB_API_KEY}
       - MDBLIST_API_KEY=${MDBLIST_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - REDIS_URL=redis://shared-redis:6379/5
       - DATABASE_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/aiometadata
       - ADMIN_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
@@ -629,6 +656,7 @@ services:
     container_name: postersplus
     profiles: ["core", "web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:8000"
     environment:
@@ -653,6 +681,7 @@ services:
     container_name: stremio-debrid-search
     profiles: ["scrapers", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"
     healthcheck:
@@ -691,6 +720,7 @@ services:
     container_name: stremio-subsense
     profiles: ["core", "web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -718,6 +748,7 @@ services:
     container_name: hidden-cinemeta
     profiles: ["web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:3000"
     networks:
@@ -731,6 +762,7 @@ services:
     container_name: nuvio-web
     profiles: ["web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8085:3000"   # Nuvio Web UI & Embedded Player
     environment:
@@ -751,6 +783,7 @@ services:
     container_name: stremio-web
     profiles: ["web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8080"   # Stremio Web UI & Streaming Engine
     environment:
@@ -772,6 +805,7 @@ services:
     container_name: slicksync
     profiles: ["web", "all"]
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:3000"   # SlickSync Web UI & Management Dashboard
     environment:
@@ -806,6 +840,7 @@ services:
     image: redis:alpine
     container_name: shared-redis
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - ./data/redis:/data
     healthcheck:
@@ -821,6 +856,7 @@ services:
     image: postgres:16-alpine
     container_name: init-postgres
     restart: "no"
+    logging: *default-logging
     depends_on:
       shared-postgres:
         condition: service_healthy
@@ -850,6 +886,7 @@ services:
     image: postgres:16-alpine
     container_name: shared-postgres
     restart: unless-stopped
+    logging: *default-logging
     shm_size: 512mb
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
