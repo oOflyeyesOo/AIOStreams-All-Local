@@ -307,6 +307,39 @@ run_benchmarks() {
     docker exec aio-portal python3 /app/tests/benchmark_pathways.py
 }
 
+backup_stack() {
+    write_header "Creating AIO Local Stack Backup"
+    python3 tools/backup.py --backup
+}
+
+restore_stack() {
+    write_header "Restoring AIO Local Stack from Backup"
+    if [ -n "$1" ]; then
+        python3 tools/backup.py --restore "$1"
+    else
+        python3 tools/backup.py --list
+        read -p "Enter path to backup archive: " arch_path
+        if [ -n "$arch_path" ]; then
+            python3 tools/backup.py --restore "$arch_path"
+        fi
+    fi
+}
+
+update_stack() {
+    write_header "Updating AIO Local Services & Container Images"
+    echo -e "${CYAN}[i] Pulling newest upstream container images...${NC}"
+    docker compose pull
+    echo -e "${CYAN}[i] Rebuilding local custom images...${NC}"
+    docker compose build --pull
+    echo -e "${CYAN}[i] Re-launching stack with updated images...${NC}"
+    docker compose up -d
+    echo -e "${CYAN}[i] Pruning dangling images...${NC}"
+    docker image prune -f
+    echo -e "${CYAN}[i] Verifying stack health post-update...${NC}"
+    docker exec aio-portal python3 /app/tests/check_stack.py
+    echo -e "${GREEN}[✓] Stack update completed successfully!${NC}"
+}
+
 case "$1" in
     wizard)    cli_wizard ;;
     check)     check_prerequisites ;;
@@ -315,6 +348,9 @@ case "$1" in
     status)    show_status ;;
     test)      run_tests ;;
     benchmark) run_benchmarks ;;
+    backup)    backup_stack ;;
+    restore)   restore_stack "$2" ;;
+    update)    update_stack ;;
     links)     show_links ;;
     build)     build_appliance ;;
     *)
@@ -327,22 +363,28 @@ case "$1" in
             echo -e " 3) Start Stack (docker compose up -d)"
             echo -e " 4) View Stack Status (docker compose ps)"
             echo -e " 5) Stop Stack (docker compose down)"
-            echo -e " 6) Run Automated 23-Service E2E Verification Suite"
-            echo -e " 7) Run Pathway & Speed Benchmark Suite"
-            echo -e " 8) View Stremio Manifest & Service URLs"
-            echo -e " 9) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+            echo -e " 6) Update Stack & Pull Latest Images (docker compose pull)"
+            echo -e " 7) Create Full Stack Backup (.tar.gz archive)"
+            echo -e " 8) Restore Stack from Backup Archive"
+            echo -e " 9) Run Automated 23-Service E2E Verification Suite"
+            echo -e " 10) Run Pathway & Speed Benchmark Suite"
+            echo -e " 11) View Stremio Manifest & Service URLs"
+            echo -e " 12) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
             echo -e " 0) Exit"
-            read -p "Select option [1-9, 0]: " opt
+            read -p "Select option [1-12, 0]: " opt
             case "$opt" in
                 1) cli_wizard ;;
                 2) check_prerequisites ;;
                 3) start_stack ;;
                 4) show_status ;;
                 5) stop_stack ;;
-                6) run_tests ;;
-                7) run_benchmarks ;;
-                8) show_links ;;
-                9) build_appliance ;;
+                6) update_stack ;;
+                7) backup_stack ;;
+                8) restore_stack ;;
+                9) run_tests ;;
+                10) run_benchmarks ;;
+                11) show_links ;;
+                12) build_appliance ;;
                 0) exit 0 ;;
                 *) echo "Invalid option." ;;
             esac

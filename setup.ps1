@@ -16,6 +16,10 @@ param (
     [switch]$Start,
     [switch]$Stop,
     [switch]$Status,
+    [switch]$Update,
+    [switch]$Backup,
+    [switch]$Restore,
+    [string]$Archive = "",
     [switch]$Test,
     [switch]$Benchmark,
     [switch]$BuildAppliance,
@@ -408,6 +412,40 @@ function Build-AllInOneImage {
     }
 }
 
+function Invoke-Backup {
+    Write-Header "Creating AIO Local Stack Backup"
+    python tools/backup.py --backup
+}
+
+function Invoke-Restore {
+    param([string]$ArchivePath = "")
+    Write-Header "Restoring AIO Local Stack from Backup"
+    if ($ArchivePath) {
+        python tools/backup.py --restore $ArchivePath
+    } else {
+        python tools/backup.py --list
+        $chosen = Read-Host "Enter path to backup archive (.tar.gz)"
+        if ($chosen) {
+            python tools/backup.py --restore $chosen
+        }
+    }
+}
+
+function Invoke-Update {
+    Write-Header "Updating AIO Local Services & Container Images"
+    Write-Info "Pulling newest upstream container images..."
+    docker compose pull
+    Write-Info "Rebuilding local custom images..."
+    docker compose build --pull
+    Write-Info "Re-launching stack with updated images..."
+    docker compose up -d
+    Write-Info "Pruning dangling images..."
+    docker image prune -f
+    Write-Info "Verifying stack health post-update..."
+    docker exec aio-portal python3 /app/tests/check_stack.py
+    Write-Success "Stack update completed successfully!"
+}
+
 # Main Menu
 function Show-Menu {
     Clear-Host
@@ -418,13 +456,16 @@ function Show-Menu {
     Write-Host " 4) Start Stack (docker compose up -d)"
     Write-Host " 5) View Stack Status & Health (docker compose ps)"
     Write-Host " 6) Stop Stack (docker compose down)"
-    Write-Host " 7) Run Automated 23-Service E2E Verification Suite" -ForegroundColor Yellow
-    Write-Host " 8) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
-    Write-Host " 9) View Stremio Manifest & Service URLs"
-    Write-Host " 10) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+    Write-Host " 7) Update Stack & Pull Latest Images (docker compose pull)"
+    Write-Host " 8) Create Full Stack Backup (.tar.gz archive)"
+    Write-Host " 9) Restore Stack from Backup Archive"
+    Write-Host " 10) Run Automated 23-Service E2E Verification Suite" -ForegroundColor Yellow
+    Write-Host " 11) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
+    Write-Host " 12) View Stremio Manifest & Service URLs"
+    Write-Host " 13) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
     Write-Host " 0) Exit"
     Write-Host ""
-    $choice = Read-Host "Select an option [1-10, 0]"
+    $choice = Read-Host "Select an option [1-13, 0]"
 
     switch ($choice) {
         "1" { Open-SetupPortal -ListenPort $Port; pause }
@@ -433,10 +474,13 @@ function Show-Menu {
         "4" { Start-Stack; pause }
         "5" { Show-StackStatus; pause }
         "6" { Stop-Stack; pause }
-        "7" { Invoke-Tests; pause }
-        "8" { Invoke-Benchmarks; pause }
-        "9" { Show-StremioLinks; pause }
-        "10" { Build-AllInOneImage; pause }
+        "7" { Invoke-Update; pause }
+        "8" { Invoke-Backup; pause }
+        "9" { Invoke-Restore; pause }
+        "10" { Invoke-Tests; pause }
+        "11" { Invoke-Benchmarks; pause }
+        "12" { Show-StremioLinks; pause }
+        "13" { Build-AllInOneImage; pause }
         "0" { exit }
         default { Write-Warn "Invalid choice." }
     }
@@ -455,6 +499,12 @@ if ($Portal -or $Serve) {
     Stop-Stack
 } elseif ($Status) {
     Show-StackStatus
+} elseif ($Update) {
+    Invoke-Update
+} elseif ($Backup) {
+    Invoke-Backup
+} elseif ($Restore) {
+    Invoke-Restore -ArchivePath $Archive
 } elseif ($Test) {
     Invoke-Tests
 } elseif ($Benchmark) {

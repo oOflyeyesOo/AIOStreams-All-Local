@@ -15,6 +15,9 @@ import urllib.request
 import subprocess
 import hmac
 import pathlib
+from pathlib import Path
+import shutil
+import time
 import re
 import tempfile
 import threading
@@ -339,6 +342,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/templates":
             self.handle_api_templates()
             return
+        elif path == "/api/backup":
+            self.handle_api_backup()
+            return
 
         return super().do_GET()
 
@@ -608,6 +614,34 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps({"templates": result}).encode("utf-8"))
+
+    def handle_api_backup(self):
+        try:
+            backup_dir = Path(WEB_ROOT) / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            now = time.time()
+            recent_backups = [
+                f for f in backup_dir.glob("aio-backup-*.tar.gz")
+                if (now - f.stat().st_mtime) < 300 and f.stat().st_size > 0
+            ]
+            if recent_backups:
+                archive = max(recent_backups, key=lambda f: f.stat().st_mtime)
+            else:
+                sys.path.insert(0, str(WEB_ROOT))
+                import tools.backup as stack_backup
+                archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT))
+
+            size = archive.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "application/gzip")
+            self.send_header("Content-Disposition", f'attachment; filename="{archive.name}"')
+            self.send_header("Content-Length", str(size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with open(archive, "rb") as f:
+                shutil.copyfileobj(f, self.wfile)
+        except Exception as e:
+            self.send_error(500, f"Backup creation failed: {e}")
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
