@@ -100,7 +100,7 @@ async function loadSettings() {
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
   const detectedServer = new URL(location.origin);
-  detectedServer.port = '3001';
+  detectedServer.port = '3000';
   const defaultBase = detectedServer.origin;
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;

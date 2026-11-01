@@ -9,12 +9,15 @@
 
 [CmdletBinding()]
 param (
+    [switch]$Portal,
     [switch]$Serve,
     [switch]$Wizard,
     [switch]$Check,
     [switch]$Start,
     [switch]$Stop,
     [switch]$Status,
+    [switch]$Test,
+    [switch]$Benchmark,
     [switch]$BuildAppliance,
     [string]$Profile = "",
     [int]$Port = 8088
@@ -111,6 +114,7 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" },
         @{ Port = 4005; Service = "AIOMetadata" },
         @{ Port = 3100; Service = "SubSense Subtitles" },
+        @{ Port = 7015; Service = "Hidden Cinemeta" },
         @{ Port = 8085; Service = "Nuvio Web Player" },
         @{ Port = 8086; Service = "SlickSync (Nuvio & Stremio Hub)" },
         @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
@@ -147,336 +151,48 @@ function Test-SystemPrerequisites {
     }
 }
 
-# Start local bridge HTTP server to enable 1-click deployment from configurator.html
-function Start-ConfigServer {
+# Open Setup Portal in Browser
+function Open-SetupPortal {
     param([int]$ListenPort = 8088)
 
     Ensure-Directories
+    $portalUrl = "http://localhost:$ListenPort"
 
-    $prefix = "http://localhost:$ListenPort/"
-    $listener = New-Object System.Net.HttpListener
-    $listener.Prefixes.Add($prefix)
-
+    $portalRunning = $false
     try {
-        $listener.Start()
-    } catch {
-        Write-Err "Could not bind to $prefix. Is another instance already running?"
-        return
-    }
-
-    Write-Header "AIOStreams Web Setup Portal Bridge Running"
-    Write-Success "Bridge server listening at: $prefix"
-    Write-Info "Open the Setup Portal in your browser (http://localhost:8088) to connect your stack!"
-    Write-Info "Press Ctrl+C in this terminal window to stop the server.`n"
-
-    # Auto-open browser
-    Start-Process $prefix
-
-    try {
-        while ($listener.IsListening) {
-            $context = $listener.GetContext()
-            $request = $context.Request
-            $response = $context.Response
-
-            # Enable CORS for local file:/// and localhost
-            $response.Headers.Add("Access-Control-Allow-Origin", "*")
-            $response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            $response.Headers.Add("Access-Control-Allow-Headers", "Content-Type")
-
-            if ($request.HttpMethod -eq "OPTIONS") {
-                $response.StatusCode = 200
-                $response.Close()
-                continue
-            }
-
-            $rawUrl = $request.RawUrl
-
-            if ($request.HttpMethod -eq "GET" -and ($rawUrl -eq "/" -or $rawUrl -eq "/index.html" -or $rawUrl -eq "/dashboard")) {
-                # Serve index.html or dashboard.html landing page
-                $htmlPath = Join-Path $ScriptDir "index.html"
-                if (-not (Test-Path $htmlPath)) {
-                    $htmlPath = Join-Path $ScriptDir "dashboard.html"
-                }
-                if (Test-Path $htmlPath) {
-                    $content = [System.IO.File]::ReadAllBytes($htmlPath)
-                    $response.ContentType = "text/html; charset=utf-8"
-                    $response.OutputStream.Write($content, 0, $content.Length)
-                } else {
-                    $response.StatusCode = 404
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "GET" -and ($rawUrl -eq "/configurator" -or $rawUrl -eq "/configurator.html")) {
-                # Redirect legacy configurator requests to setup portal root
-                $response.StatusCode = 302
-                $response.Headers.Add("Location", "/")
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "GET" -and $rawUrl -like "/templates/*") {
-                # Serve local template JSON files directly
-                $cleanPath = $rawUrl.Split('?')[0].TrimStart('/').Replace('/', '\')
-                $filePath = Join-Path $ScriptDir $cleanPath
-                if ((Test-Path $filePath) -and (-not (Get-Item $filePath).PSIsContainer)) {
-                    $content = [System.IO.File]::ReadAllBytes($filePath)
-                    $response.ContentType = "application/json; charset=utf-8"
-                    $response.OutputStream.Write($content, 0, $content.Length)
-                } else {
-                    $response.StatusCode = 404
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "GET" -and $rawUrl -eq "/api/templates") {
-                # List all available templates by category
-                try {
-                    $templateRoot = Join-Path $ScriptDir "templates"
-                    $categories = @{}
-                    if (Test-Path $templateRoot) {
-                        Get-ChildItem -Path $templateRoot -Directory | ForEach-Object {
-                            $catName = $_.Name
-                            $catFiles = @()
-                            Get-ChildItem -Path $_.FullName -Filter *.json | ForEach-Object {
-                                $catFiles += @{
-                                    name = $_.Name
-                                    path = "templates/$catName/$($_.Name)"
-                                    size = $_.Length
-                                }
-                            }
-                            $categories[$catName] = $catFiles
-                        }
-                    }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($categories | ConvertTo-Json -Depth 4))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                } catch {
-                    $response.StatusCode = 500
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "GET" -and ($rawUrl -eq "/api/env" -or $rawUrl -eq "/api/status")) {
-                # Return current environment variables and stack status from .env
-                try {
-                    $envMap = @{}
-                    $targetEnv = if (Test-Path (Join-Path $ScriptDir ".env")) { Join-Path $ScriptDir ".env" } else { Join-Path $ScriptDir ".env.example" }
-                    if (Test-Path $targetEnv) {
-                        Get-Content $targetEnv | ForEach-Object {
-                            $trimmed = $_.Trim()
-                            if ($trimmed -and -not $trimmed.StartsWith("#") -and $trimmed -match '^([A-Za-z0-9_]+)=(.*)$') {
-                                $envMap[$matches[1]] = $matches[2].Trim().Trim('"').Trim("'")
-                            }
-                        }
-                    }
-                    $statusObj = [ordered]@{
-                        appliance = $true
-                        status = "online"
-                        docker_ready = $true
-                        version = "1.1.0"
-                        env = $envMap
-                    }
-                    # Include flat keys at root as well so both flat & nested consumers resolve perfectly
-                    foreach ($k in $envMap.Keys) {
-                        $statusObj[$k] = $envMap[$k]
-                    }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($statusObj | ConvertTo-Json -Depth 4))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                } catch {
-                    $response.StatusCode = 500
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "POST" -and ($rawUrl -eq "/api/env" -or $rawUrl -eq "/api/save-env" -or $rawUrl -eq "/api/quick-setup" -or $rawUrl -eq "/api/settings")) {
-                # Update all configuration variables in .env
-                try {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream, [System.Text.Encoding]::UTF8)
-                    $body = $reader.ReadToEnd()
-                    $json = $body | ConvertFrom-Json
-
-                    $envFile = Join-Path $ScriptDir ".env"
-                    if (-not (Test-Path $envFile)) {
-                        if (Test-Path (Join-Path $ScriptDir ".env.example")) {
-                            Copy-Item (Join-Path $ScriptDir ".env.example") $envFile
-                        }
-                    }
-
-                    if (Test-Path $envFile) {
-                        $lines = Get-Content $envFile
-                        $updatedKeys = @{}
-                        foreach ($prop in $json.PSObject.Properties) {
-                            if ($null -ne $prop.Value) {
-                                $updatedKeys[$prop.Name] = "$($prop.Value)".Trim()
-                            }
-                        }
-
-                        $foundKeys = @{}
-                        $newLines = @()
-                        foreach ($line in $lines) {
-                            $matched = $false
-                            $lineTrim = $line.Trim()
-                            foreach ($k in $updatedKeys.Keys) {
-                                if ($lineTrim -match "^[#\s]*$k=") {
-                                    $newLines += "$k=$($updatedKeys[$k])"
-                                    $foundKeys[$k] = $true
-                                    $matched = $true
-                                    break
-                                }
-                            }
-                            if (-not $matched) {
-                                $newLines += $line
-                            }
-                        }
-
-                        foreach ($k in $updatedKeys.Keys) {
-                            if (-not $foundKeys.ContainsKey($k)) {
-                                $newLines += "$k=$($updatedKeys[$k])"
-                            }
-                        }
-
-                        [System.IO.File]::WriteAllLines($envFile, $newLines, [System.Text.Encoding]::UTF8)
-
-                        # Set process environment variables
-                        foreach ($k in $updatedKeys.Keys) {
-                            [System.Environment]::SetEnvironmentVariable($k, $updatedKeys[$k])
-                        }
-                    }
-
-                    # Trigger bootstrap setup script in background if python is available to re-sync templates immediately
-                    $setupScript = Join-Path $ScriptDir "init/bootstrap/setup_stack.py"
-                    if (Test-Path $setupScript) {
-                        try {
-                            $py = (Get-Command python -ErrorAction SilentlyContinue).Source
-                            if (-not $py) {
-                                if (Test-Path "C:\Program Files\LibreOffice\program\python.exe") {
-                                    $py = "C:\Program Files\LibreOffice\program\python.exe"
-                                }
-                            }
-                            if ($py) {
-                                Start-Process -FilePath $py -ArgumentList "-u `"$setupScript`"" -WorkingDirectory $ScriptDir -WindowStyle Hidden
-                            }
-                        } catch {}
-                    }
-
-                    $respObj = @{ success = $true; message = "Settings updated in .env" }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Success "Updated settings in .env."
-                } catch {
-                    $errObj = @{ success = $false; error = $_.Exception.Message }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($errObj | ConvertTo-Json))
-                    $response.StatusCode = 500
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "POST" -and $rawUrl -eq "/api/restart") {
-                try {
-                    Write-Info "Restarting Docker stack..."
-                    $restartOutput = docker compose restart 2>&1 | Out-String
-                    $respObj = @{ success = $true; output = $restartOutput }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Success "Docker stack restarted."
-                } catch {
-                    $errObj = @{ success = $false; error = $_.Exception.Message }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($errObj | ConvertTo-Json))
-                    $response.StatusCode = 500
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "POST" -and $rawUrl -eq "/api/save") {
-                # Save configuration files directly to workspace
-                try {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream, [System.Text.Encoding]::UTF8)
-                    $body = $reader.ReadToEnd()
-                    $json = $body | ConvertFrom-Json
-
-                    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-
-                    # Backup existing files if present
-                    if (Test-Path (Join-Path $ScriptDir "docker-compose.yml")) {
-                        Copy-Item (Join-Path $ScriptDir "docker-compose.yml") (Join-Path $ScriptDir "docker-compose.yml.$timestamp.bak")
-                    }
-                    if (Test-Path (Join-Path $ScriptDir ".env")) {
-                        Copy-Item (Join-Path $ScriptDir ".env") (Join-Path $ScriptDir ".env.$timestamp.bak")
-                    }
-
-                    # Write new files
-                    if ($json.compose) {
-                        [System.IO.File]::WriteAllText((Join-Path $ScriptDir "docker-compose.yml"), $json.compose, [System.Text.Encoding]::UTF8)
-                    }
-                    if ($json.env) {
-                        [System.IO.File]::WriteAllText((Join-Path $ScriptDir ".env"), $json.env, [System.Text.Encoding]::UTF8)
-                    }
-                    if ($json.sql) {
-                        $sqlDir = Join-Path $ScriptDir "init/postgres"
-                        if (-not (Test-Path $sqlDir)) { New-Item -ItemType Directory -Path $sqlDir -Force | Out-Null }
-                        [System.IO.File]::WriteAllText((Join-Path $sqlDir "01-init-dbs.sql"), $json.sql, [System.Text.Encoding]::UTF8)
-                    }
-
-                    Ensure-Directories
-
-                    $respObj = @{
-                        success = $true
-                        message = "Files written directly to workspace: docker-compose.yml, .env, init/postgres/01-init-dbs.sql"
-                    }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Success "Received and saved new configuration directly to workspace."
-                } catch {
-                    $errObj = @{ success = $false; error = $_.Exception.Message }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($errObj | ConvertTo-Json))
-                    $response.StatusCode = 500
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Err "Error saving files: $($_.Exception.Message)"
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "POST" -and $rawUrl -eq "/api/deploy") {
-                # Trigger Docker compose up -d
-                try {
-                    Write-Info "Executing: docker compose up -d..."
-                    $deployOutput = docker compose up -d 2>&1 | Out-String
-                    $respObj = @{
-                        success = $true
-                        output = $deployOutput
-                    }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Success "Stack deployed successfully!"
-                } catch {
-                    $errObj = @{ success = $false; error = $_.Exception.Message }
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes(($errObj | ConvertTo-Json))
-                    $response.StatusCode = 500
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                    Write-Err "Deployment error: $($_.Exception.Message)"
-                }
-                $response.Close()
-            }
-            elseif ($request.HttpMethod -eq "GET" -and $rawUrl -eq "/api/status") {
-                try {
-                    $statusOutput = docker compose ps --format json 2>&1 | Out-String
-                    $respBytes = [System.Text.Encoding]::UTF8.GetBytes($statusOutput)
-                    $response.ContentType = "application/json"
-                    $response.OutputStream.Write($respBytes, 0, $respBytes.Length)
-                } catch {
-                    $response.StatusCode = 500
-                }
-                $response.Close()
-            }
-            else {
-                $response.StatusCode = 404
-                $response.Close()
-            }
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $connect = $tcp.BeginConnect("127.0.0.1", $ListenPort, $null, $null)
+        $wait = $connect.AsyncWaitHandle.WaitOne(1000, $false)
+        if ($wait) {
+            $tcp.EndConnect($connect)
+            $portalRunning = $true
         }
-    } finally {
-        $listener.Stop()
-        $listener.Close()
-        Write-Info "Configurator server stopped."
+        $tcp.Close()
+    } catch {
+        $portalRunning = $false
     }
+
+    if (-not $portalRunning) {
+        Write-Info "AIO Setup Portal is not currently active. Starting the Docker stack..."
+        Start-Stack
+    }
+
+    Write-Header "AIO Local Setup Portal"
+    Write-Success "Opening Setup Portal: $portalUrl"
+    Write-Info "Sign in with username 'admin' and your ADDON_PASSWORD (default: admin)."
+    Start-Process $portalUrl
+}
+
+# Run Automated 23-Service E2E Verification Suite
+function Invoke-Tests {
+    Write-Header "Running Automated End-to-End Test Suite"
+    docker exec aio-portal python3 /app/tests/check_all_services_e2e.py
+}
+
+# Run Automated Pathway & Speed Benchmarks
+function Invoke-Benchmarks {
+    Write-Header "Running Automated Pathway & Speed Benchmarks"
+    docker exec aio-portal python3 /app/tests/benchmark_pathways.py
 }
 
 # Interactive CLI Wizard
@@ -665,9 +381,11 @@ function Show-StremioLinks {
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"
     Write-Host "  • StremThru Proxy UI:    http://localhost:8080"
     Write-Host "  • MediaFlow Proxy:       http://localhost:8888"
+    Write-Host "  • Hidden Cinemeta:       http://localhost:7015"
 
-    Write-Host "`nOptional external Cinemeta tool:" -ForegroundColor Yellow
-    Write-Host "  1. Visit Hidden Cinemeta (external): https://hidden-cinemeta.vercel.app/"
+    Write-Host "`nCinemeta Removal (Hidden Cinemeta Local Utility):" -ForegroundColor Yellow
+    Write-Host "  1. Visit Local Hidden Cinemeta: http://localhost:7015"
+    Write-Host "     (Hosted Fallback: https://hidden-cinemeta.vercel.app/ | Source: https://github.com/Skarian/hidden-cinemeta)"
     Write-Host "  2. Input your Stremio AuthKey to hide Cinemeta's cloud catalogs."
     Write-Host "  3. AIOMetadata (:4005) serves as your primary local rich metadata & catalog provider."
     Write-Host ""
@@ -693,36 +411,40 @@ function Build-AllInOneImage {
 # Main Menu
 function Show-Menu {
     Clear-Host
-    Write-Header "AIOStreams Self-Hosted All-In-One Control Center"
-    Write-Host " 1) Start Web Setup Portal & Direct-Deploy Server (http://localhost:8088)" -ForegroundColor Green
+    Write-Header "AIO Local Self-Hosted Control Center"
+    Write-Host " 1) Open Setup Portal in Browser (http://localhost:8088)" -ForegroundColor Green
     Write-Host " 2) Interactive CLI Setup Wizard (Configure in terminal)"
     Write-Host " 3) Run Pre-Flight Diagnostics & Port Collision Check"
     Write-Host " 4) Start Stack (docker compose up -d)"
     Write-Host " 5) View Stack Status & Health (docker compose ps)"
     Write-Host " 6) Stop Stack (docker compose down)"
-    Write-Host " 7) View Stremio Manifest & Service URLs"
-    Write-Host " 8) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+    Write-Host " 7) Run Automated 23-Service E2E Verification Suite" -ForegroundColor Yellow
+    Write-Host " 8) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
+    Write-Host " 9) View Stremio Manifest & Service URLs"
+    Write-Host " 10) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
     Write-Host " 0) Exit"
     Write-Host ""
-    $choice = Read-Host "Select an option [1-8, 0]"
+    $choice = Read-Host "Select an option [1-10, 0]"
 
     switch ($choice) {
-        "1" { Start-ConfigServer -ListenPort $Port }
+        "1" { Open-SetupPortal -ListenPort $Port; pause }
         "2" { Invoke-CLIWizard }
         "3" { Test-SystemPrerequisites; pause }
         "4" { Start-Stack; pause }
         "5" { Show-StackStatus; pause }
         "6" { Stop-Stack; pause }
-        "7" { Show-StremioLinks; pause }
-        "8" { Build-AllInOneImage; pause }
+        "7" { Invoke-Tests; pause }
+        "8" { Invoke-Benchmarks; pause }
+        "9" { Show-StremioLinks; pause }
+        "10" { Build-AllInOneImage; pause }
         "0" { exit }
         default { Write-Warn "Invalid choice." }
     }
 }
 
 # CLI Argument routing
-if ($Serve) {
-    Start-ConfigServer -ListenPort $Port
+if ($Portal -or $Serve) {
+    Open-SetupPortal -ListenPort $Port
 } elseif ($Wizard) {
     Invoke-CLIWizard
 } elseif ($Check) {
@@ -733,6 +455,10 @@ if ($Serve) {
     Stop-Stack
 } elseif ($Status) {
     Show-StackStatus
+} elseif ($Test) {
+    Invoke-Tests
+} elseif ($Benchmark) {
+    Invoke-Benchmarks
 } elseif ($BuildAppliance) {
     Build-AllInOneImage
 } else {

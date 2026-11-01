@@ -15,6 +15,7 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:8086"   # SlickSync Hub
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8082"   # Stremio Web Player
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:7015"   # Hidden Cinemeta Catalog Stripper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
       - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"   # Debrid Search Provider
@@ -31,8 +32,21 @@ services:
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-https://aiometa.yourdomain.com}
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - FANART_API_KEY=${FANART_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
       - REALDEBRID_API_KEY=${REALDEBRID_API_KEY:-}
       - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY:-}
+      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY:-}
+      - TORBOX_API_KEY=${TORBOX_API_KEY:-}
+      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY:-}
+      - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY:-}
+      - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY:-}
+      - SEEDR_API_KEY=${SEEDR_API_KEY:-}
+      - SUBDL_API_KEY=${SUBDL_API_KEY:-}
+      - SUBSOURCE_API_KEY=${SUBSOURCE_API_KEY:-}
+      - WYZIE_API_KEY=${WYZIE_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
       - MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL:-}
     volumes:

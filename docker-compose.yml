@@ -1,62 +1,18 @@
 services:
-  controller:
-    build:
-      context: .
-      dockerfile: docker/controller/Dockerfile
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
-    restart: unless-stopped
-    network_mode: none
-    read_only: true
-    tmpfs:
-      - /tmp
-    environment:
-      - DOCKER_CONFIG=/tmp/docker-config
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
-      - ./:/workspace:ro
-      - control-socket:/runtime
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/runtime/control.sock'); s.close()"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  stack-check:
-    profiles: ["test"]
-    image: python:3.11-alpine
-    volumes:
-      - ./tests/check_stack.py:/check_stack.py:ro
-      - ./tests/check_streams.py:/check_streams.py:ro
-      - ./tests/check_playback.py:/check_playback.py:ro
-      - ./data/aiostreams:/app/data/aiostreams:ro
-    command: python3 /check_stack.py
-    networks:
-      - stremio-net
-
   # ============================================================================
   # 0. BUILT-IN WEB PORTAL & SETUP HUB (PORT 8088)
   # ============================================================================
   portal:
     image: python:3.11-alpine
     container_name: aio-portal
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "8088:8088"
     volumes:
       - ./:/app
-      - control-socket:/runtime
     working_dir: /app
     command: python3 -u /app/docker/all-in-one/portal_server.py
     environment:
-      - COMPOSE_CONTROL_SOCKET=/runtime/control.sock
       - AIOSTREAMS_URL=http://aiostreams:3000
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - BASE_URL=${BASE_URL:-}
@@ -76,15 +32,6 @@ services:
   aiostreams:
     image: ghcr.io/viren070/aiostreams:latest
     container_name: aiostreams
-    healthcheck:
-      test: ["CMD", "/nodejs/bin/node", "/app/scripts/healthcheck.js"]
-      interval: 10s
-      timeout: 8s
-      retries: 6
-      start_period: 5m
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
@@ -123,7 +70,7 @@ services:
       - STREMTHRU_TORZ_URL=http://stremthru:8080/stremio/torz/
       - FORCE_PROXY_ENABLED=${FORCE_PROXY_ENABLED:-true}
       - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
-      - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3001}
+      - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
       - ENCRYPT_STREMTHRU_URLS=false
       - ENCRYPT_MEDIAFLOW_URLS=false
@@ -168,9 +115,6 @@ services:
     image: ghcr.io/g0ldyy/comet:latest
     container_name: comet
     profiles: ["core", "scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
@@ -182,7 +126,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5m
+      start_period: 10s
     environment:
       - FASTAPI_PORT=8000
       - DATABASE_PATH=/app/data/comet.db
@@ -191,7 +135,7 @@ services:
       - INDEXER_MANAGER_TYPE=prowlarr
       - INDEXER_MANAGER_URL=http://prowlarr:9696
       - INDEXER_MANAGER_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - INDEXER_MANAGER_TIMEOUT=15
+      - INDEXER_MANAGER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-10}
       - SCRAPE_PROWLARR=true
       - SCRAPE_ZILEAN=true
       - SCRAPE_NYAA=true
@@ -209,20 +153,24 @@ services:
     image: mhdzumair/mediafusion:latest
     container_name: mediafusion
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:8000/manifest.json > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     environment:
       - HOST=0.0.0.0
       - PORT=8000
       - HOST_URL=${MEDIAFUSION_HOST_URL:-http://localhost:8001}
       - IS_PUBLIC_INSTANCE=${MEDIAFUSION_PUBLIC:-true}
+      - EGRESS_WATCHDOG_FAIL_THRESHOLD=25
       - POSTGRES_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion
       - REDIS_URL=redis://shared-redis:6379/0
@@ -261,15 +209,18 @@ services:
     image: midnightignite1/sootio-stremio-addon:latest
     container_name: sootio
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_SOOTIO:-55771}:55771"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:55771/manifest.json > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - PORT=55771
       - ADDON_URL=${SOOTIO_ADDON_URL:-http://sootio:55771}
@@ -314,9 +265,6 @@ services:
     image: ipromknight/zilean:latest
     container_name: zilean
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
     cpus: ${ZILEAN_CPU_LIMIT:-2.0}
@@ -328,6 +276,12 @@ services:
           memory: ${ZILEAN_MEM_LIMIT:-2048m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL 'http://localhost:8181/dmm/filtered?query=ping' > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - DOTNET_PROCESSOR_COUNT=${ZILEAN_THREADS:-4}
       - DOTNET_gcServer=1
@@ -351,9 +305,6 @@ services:
   init-configs:
     image: alpine:latest
     container_name: init-configs
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: "no"
     volumes:
       - ./data/prowlarr:/prowlarr
@@ -390,15 +341,18 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:9696/ping > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - PUID=1000
       - PGID=1000
@@ -415,9 +369,6 @@ services:
   stack-bootstrap:
     image: python:3.11-alpine
     container_name: stack-bootstrap
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: "no"
     depends_on:
       - aiostreams
@@ -440,7 +391,7 @@ services:
       - AIOMETADATA_URL=http://aiometadata:4005
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
       - POSTERSPLUS_URL=http://postersplus:8000
-      - BASE_URL=${BASE_URL:-http://localhost:3001}
+      - BASE_URL=${BASE_URL:-http://localhost:3000}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
       - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
@@ -470,12 +421,15 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8191:8191"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8191/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - LOG_LEVEL=info
     networks:
@@ -488,15 +442,18 @@ services:
     image: muniftanjim/stremthru:latest
     container_name: stremthru
     profiles: ["proxies", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/v0/health > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     environment:
       - PORT=8080
       - STREMTHRU_PORT=8080
@@ -526,15 +483,18 @@ services:
     image: mhdzumair/mediaflow-proxy:latest
     container_name: mediaflow
     profiles: ["proxies", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8888:8888"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8888/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - PORT=8888
       - API_PASSWORD=${MEDIAFLOW_PASS:-${ADDON_PASSWORD}}
@@ -559,9 +519,6 @@ services:
     image: ghcr.io/infinidysk/infinidysk:latest
     container_name: infinidysk
     profiles: ["proxies", "usenet", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
@@ -601,17 +558,18 @@ services:
 
   # Anime Kitsu (TheBeastLT's anime catalog addon built directly from source)
   anime-kitsu:
-    build:
-      context: .
-      dockerfile: docker/anime-kitsu/Dockerfile
+    build: https://github.com/TheBeastLT/stremio-kitsu-anime.git#master
     container_name: anime-kitsu
     profiles: ["web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"http=require('http');http.get('http://localhost:7000/manifest.json',r=>{process.exit(r.statusCode===200?0:1)})\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
       - PORT=7000
       - FANART_APIKEY=${FANART_API_KEY}
@@ -623,9 +581,6 @@ services:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
     profiles: ["core", "web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "4005:4005"
@@ -673,9 +628,6 @@ services:
     image: ghcr.io/umbraprojects/postersplus:latest
     container_name: postersplus
     profiles: ["core", "web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:8000"
@@ -700,14 +652,17 @@ services:
     image: nepiraw/stremio-intelldebridsearch:latest
     container_name: stremio-debrid-search
     profiles: ["scrapers", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3001"
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"http=require('http');http.get('http://localhost:3011/manifest.json',r=>{process.exit(r.statusCode===200?0:1)})\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     environment:
-      - PORT=3001
+      - PORT=3011
       - ADDON_URL=${DEBRID_SEARCH_URL:-http://localhost:3011}
       - TMDB_API_KEY=${TMDB_API_KEY}
       - TVDB_API_KEY=${TVDB_API_KEY}
@@ -735,9 +690,6 @@ services:
     image: nepiraw/stremio-subsense:latest
     container_name: stremio-subsense
     profiles: ["core", "web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     dns:
       - 1.1.1.1
@@ -760,6 +712,17 @@ services:
     depends_on:
       - shared-redis
 
+  # Hidden Cinemeta (Self-hosted utility to hide or remove default Cinemeta catalogs from Stremio)
+  hidden-cinemeta:
+    build: ./docker/hidden-cinemeta
+    container_name: hidden-cinemeta
+    profiles: ["web", "all"]
+    restart: unless-stopped
+    ports:
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:3000"
+    networks:
+      - stremio-net
+
   # ============================================================================
   # 7. WEB PLAYERS & STREAM CLIENTS (NUVIO & STREMIO WEB)
   # ============================================================================
@@ -767,9 +730,6 @@ services:
     image: orochibraru/nuvio-web:latest
     container_name: nuvio-web
     profiles: ["web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8085:3000"   # Nuvio Web UI & Embedded Player
@@ -790,20 +750,14 @@ services:
     image: tsaridas/stremio-docker:latest
     container_name: stremio-web
     profiles: ["web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8080"   # Stremio Web UI & Streaming Engine
     environment:
-      - AUTO_SERVER_URL=false
-    entrypoint: ["/bin/sh", "/aio-entrypoint.sh"]
+      - AUTO_SERVER_URL=true
     volumes:
       - ./data/stremio-web:/root/.stremio-server
-      - ./data/stremio-web:/aio-config:ro
-      - ./docker/stremio-web/entrypoint.sh:/aio-entrypoint.sh:ro
-      - ./docker/stremio-web/bootstrap.js:/srv/stremio-server/build/aio-bootstrap.js:ro
+      - ./data/stremio-web/localStorage.json:/srv/stremio-server/build/localStorage.json
     networks:
       - stremio-net
     depends_on:
@@ -817,9 +771,6 @@ services:
     image: ghcr.io/slicknsliding/slicksync:private
     container_name: slicksync
     profiles: ["web", "all"]
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:3000"   # SlickSync Web UI & Management Dashboard
@@ -852,11 +803,8 @@ services:
   # 9. SUPPORTING SHARED DATABASES
   # ============================================================================
   shared-redis:
-    image: redis:8-alpine
+    image: redis:alpine
     container_name: shared-redis
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     volumes:
       - ./data/redis:/data
@@ -872,9 +820,6 @@ services:
   init-postgres:
     image: postgres:16-alpine
     container_name: init-postgres
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: "no"
     depends_on:
       shared-postgres:
@@ -904,13 +849,11 @@ services:
   shared-postgres:
     image: postgres:16-alpine
     container_name: shared-postgres
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
     shm_size: 512mb
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
+      - POSTGRES_HOST_AUTH_METHOD=trust
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./init/postgres/01-init-dbs.sql:/docker-entrypoint-initdb.d/01-init-dbs.sql:ro
@@ -926,6 +869,3 @@ services:
 networks:
   stremio-net:
     driver: bridge
-
-volumes:
-  control-socket:

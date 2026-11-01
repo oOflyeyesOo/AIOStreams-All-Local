@@ -29,13 +29,13 @@ ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
 SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
-DEBRID_SEARCH_URL = os.environ.get("DEBRID_SEARCH_URL", "http://debrid-search:3001").rstrip("/")
+DEBRID_SEARCH_URL = os.environ.get("DEBRID_SEARCH_URL", "http://debrid-search:3011").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "http://mediaflow:8888").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 
-PREMIUMIZE_API_KEY = os.environ.get("PREMIUMIZE_API_KEY", "")
+PREMIUMIZE_API_KEY = os.environ.get("PREMIUMIZE_API_KEY", "kghuqjijjxzpwi4r")
 REALDEBRID_API_KEY = os.environ.get("REALDEBRID_API_KEY", "")
 
 BENCHMARK_RESULTS: List[Dict[str, Any]] = []

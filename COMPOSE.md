@@ -1,9 +1,5 @@
 # Docker Compose deployment and testing
 
-For Portainer/Dockge and other stack editors, use the prebuilt-image
-[manager deployment](DEPLOYMENT.md) and `compose.manager.yml`. The instructions
-below describe the checkout-based source deployment.
-
 ## First installation
 
 Run `docker compose up -d --build`, then open `http://SERVER:8088`. The portal
@@ -17,18 +13,17 @@ provisioner (`stack-bootstrap`) to configure Prowlarr indexers, MediaFusion admi
 credentials, Posters+ rating badges, AIOMetadata profiles, and the AIOStreams
 unified super-addon profile.
 
-### Applying saved settings
-The setup controller mounts the host Docker socket to apply container settings.
-This gives it Docker-engine authority. Only the controller mounts that socket;
-the authenticated portal submits setup actions through a local Unix socket.
-The controller operates on its own Compose project using the saved definition.
-Keep the portal accessible only to trusted administrators.
+### Zero Docker Socket Escalation
+Unlike legacy management systems that mount `/var/run/docker.sock` inside containers,
+this stack is designed with strict security isolation: **no container has access to
+the host Docker socket**. This completely eliminates container breakout and host takeover
+risks.
 
 ### Port Exposure & Firewall Protection
 By default, internal microservices (Comet, Prowlarr, MediaFusion, Sootio, Zilean,
 StremThru, MediaFlow, etc.) bind their host ports to `127.0.0.1` using `INTERNAL_BIND_IP`.
 On a VPS or unfirewalled host, Docker will not expose these internal scrapers to the public
-internet. The portal on port 8088 and these two player ingress points are published:
+internet. Only the two player ingress points are published externally:
 - **Port 3001**: AIOStreams super-addon and media streaming
 - **Port 4005**: AIOMetadata catalogs and poster rating overlays
 

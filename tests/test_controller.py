@@ -1,7 +1,6 @@
 import importlib.util
 from pathlib import Path
 import unittest
-import tempfile
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('controller', Path(__file__).resolve().parents[1] / 'docker/controller/controller.py')
@@ -52,39 +51,5 @@ class ControllerTests(unittest.TestCase):
             arguments = call.args[0]
             if 'up' in arguments:
                 self.assertIn('--no-deps', arguments)
-                service_offset = arguments.index('--wait-timeout') + 2
-                self.assertNotIn('controller', arguments[service_offset:])
+                self.assertNotIn('controller', arguments[arguments.index('180') + 1:])
         self.assertEqual(controller.JOB['status'], 'complete')
-
-    def test_manager_apply_preserves_manager_owned_portal(self):
-        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
-               'Mounts': [{'Destination': '/workspace', 'Source': '/var/lib/docker/volumes/aio-test_aio-config/_data'}]}
-        config = {'services': {'controller': {'restart': 'unless-stopped'},
-                              'portal': {'restart': 'unless-stopped'},
-                              'aiostreams': {'restart': 'unless-stopped'},
-                              'stack-bootstrap': {'restart': 'no'}}}
-        with patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), patch.object(controller, 'COMPOSE_FILE', 'compose.manager.yml'), patch.object(controller, 'command_json', side_effect=[[own], config]) as render, patch.object(controller, 'log_command') as command:
-            controller.apply()
-        self.assertIn('/workspace/compose.manager.yml', render.call_args_list[1].args[0])
-        up = command.call_args_list[0].args[0]
-        self.assertIn('aiostreams', up)
-        self.assertNotIn('portal', up)
-        self.assertNotIn('controller', up)
-        self.assertEqual(controller.JOB['status'], 'complete')
-
-    def test_apply_includes_selected_profile_services_only(self):
-        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
-               'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
-        config = {'services': {'comet': {'profiles': ['core', 'all']},
-                               'sootio': {'profiles': ['scrapers', 'all']},
-                               'stack-check': {'profiles': ['test']}}}
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / '.env').write_text('COMPOSE_PROFILES=core\n')
-            with patch.object(controller, 'ROOT', root), patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), patch.object(controller, 'command_json', side_effect=[[own], config]), patch.object(controller, 'log_command') as command:
-                controller.apply()
-            up = command.call_args_list[0].args[0]
-            self.assertIn('comet', up)
-            self.assertNotIn('sootio', up)
-            self.assertNotIn('stack-check', up)
-            self.assertEqual(controller.JOB['status'], 'complete')

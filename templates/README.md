@@ -132,14 +132,9 @@ Tam-Taro's setup is the community gold standard for AIOStreams. This repository 
 
 ### 2. Pairing with AIOMetadata (Port 4005)
 Tam-Taro's template intentionally **omits catalogs** so that users can pair AIOStreams with **AIOMetadata** for rich, customizable streaming provider rows and ratings badges (IMDb, Rotten Tomatoes, Trakt):
-1. In [`dashboard.html`](../dashboard.html), navigate to the **AIOMetadata (:4005)** card.
-2. Click **"Tam-Taro Presets 📑"** and choose:
-   - `Tam-Taro AIOMetadata Profile (With Anime)`: Netflix, Disney+, Apple TV+, Max, Prime Video + Anime catalogs.
-   - `Tam-Taro AIOMetadata Profile (Western Only)`: Western streaming providers with ratings.
-3. Click **"📋 Copy Config"** to copy the full configuration JSON to your clipboard.
-4. Click **"Configure UI ↗"** to open AIOMetadata at `http://localhost:4005`.
-5. In AIOMetadata, click **Import** &rarr; paste the JSON &rarr; click **Save & Install**.
-6. Install AIOMetadata in Stremio/Nuvio: your catalogs will now display beautiful provider categories and ratings, while AIOStreams resolves the streams!
+1. **Automated Setup (Recommended)**: Open the central Setup Portal at `http://localhost:8088`. Entering your metadata keys automatically provisions the Tam-Taro AIOMetadata profile wired directly to Posters+ badges.
+2. **Manual Configuration**: Navigate to AIOMetadata at `http://localhost:4005`, go to **Import**, and paste any configuration JSON from `templates/aiometadata-configs/`.
+3. Install both manifest URLs in Stremio/Nuvio: your catalogs will display provider categories and rating overlays, while AIOStreams resolves the streams!
 
 ---
 

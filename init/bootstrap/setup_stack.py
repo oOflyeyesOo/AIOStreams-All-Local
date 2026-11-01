@@ -790,7 +790,7 @@ def build_default_config(aiometadata_manifest=None):
             "enabled": True,
             "options": {
                 "name": "Debrid Search (Local)",
-                "manifestUrl": "http://debrid-search:3001/manifest.json",
+                "manifestUrl": "http://debrid-search:3011/manifest.json",
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
@@ -932,7 +932,7 @@ def build_default_config(aiometadata_manifest=None):
                     print(f"[AIOStreams Setup] ℹ️ SubSense not reachable in current profile; omitting from active presets.", flush=True)
             elif pid == "debrid-search-local":
                 opts["resources"] = ["catalog", "stream"]
-                murl = opts.get("manifestUrl", "http://debrid-search:3001/manifest.json")
+                murl = opts.get("manifestUrl", "http://debrid-search:3011/manifest.json")
                 if is_url_reachable(murl, timeout=1.0):
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Debrid Search (Local) is online and active.", flush=True)
