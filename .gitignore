@@ -6,6 +6,8 @@
 # Runtime data directories (persistent container data)
 data/
 data/*
+backups/
+backups/*
 
 # Logs and temporary files
 *.log

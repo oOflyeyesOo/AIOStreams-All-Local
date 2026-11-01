@@ -451,7 +451,10 @@ services:
       retries: 5
       start_period: 15s
     environment:
-      - LOG_LEVEL=info
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      - CAPTCHA_SOLVER=none
+      - TZ=Etc/UTC
+    mem_limit: ${FLARESOLVERR_MEM_LIMIT:-1024m}
     networks:
       - stremio-net
 
@@ -574,6 +577,17 @@ services:
     depends_on:
       init-configs:
         condition: service_completed_successfully
+
+  # Cloudflare Tunnel (Optional Zero-Trust HTTPS ingress without opening router ports)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aio-tunnel
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    logging: *default-logging
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks:
+      - stremio-net
 
   # ============================================================================
   # 6. LOCAL CATALOGS & METADATA

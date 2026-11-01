@@ -218,6 +218,18 @@ class PortalTests(unittest.TestCase):
         self.assertEqual((self.root / ".env").read_bytes(), before)
         self.assertEqual(list(self.root.glob(".env-*")), [])
 
+    def test_backup_endpoint_requires_auth_and_serves_archive(self):
+        self.assertEqual(self.request("/api/backup", auth=False)[0], 401)
+        backup_dir = self.root / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        fake_archive = backup_dir / "aio-backup-20261101-000000.tar.gz"
+        fake_archive.write_bytes(b"\x1f\x8b\x08mock_gzip_data")
+        status, body, headers = self.request("/api/backup", auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/gzip")
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertEqual(body, b"\x1f\x8b\x08mock_gzip_data")
+
 
 if __name__ == "__main__":
     unittest.main()
