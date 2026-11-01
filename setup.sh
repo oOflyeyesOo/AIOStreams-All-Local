@@ -65,7 +65,7 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
-    local ports=(3000 3001 3011 8000 8001 8181 9696 8191 8080 8888 7005 4005 3100 8085 8086 3005 8082 55771)
+    local ports=(3000 3001 3011 8000 8001 8181 9696 8191 8080 8888 7005 4005 3100 7015 8085 8086 3005 8082 55771)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -156,10 +156,10 @@ show_links() {
     echo -e "  • Zilean Hash Cache:     http://localhost:8181"
     echo -e "  • StremThru Proxy UI:    http://localhost:8080"
     echo -e "  • MediaFlow Proxy:       http://localhost:8888"
-    echo -e "  • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/\n"
+    echo -e "  • Hidden Cinemeta:       http://localhost:7015\n"
 
-    echo -e "${YELLOW}Cinemeta Removal (Optional External Tool):${NC}"
-    echo -e "  1. Visit Hidden Cinemeta: https://hidden-cinemeta.vercel.app/"
+    echo -e "${YELLOW}Cinemeta Removal (Hidden Cinemeta Local Utility):${NC}"
+    echo -e "  1. Visit Local Hidden Cinemeta: http://localhost:7015"
     echo -e "     (Hosted Fallback: https://hidden-cinemeta.vercel.app/ | Source: https://github.com/Skarian/hidden-cinemeta)"
     echo -e "  2. Input your Stremio AuthKey to hide Cinemeta's cloud catalogs."
     echo -e "  3. AIOMetadata (:4005) serves as your primary local rich metadata & catalog provider.\n"
@@ -297,36 +297,52 @@ build_appliance() {
     fi
 }
 
+run_tests() {
+    write_header "Running Automated 23-Service E2E Verification Suite"
+    docker exec aio-portal python3 /app/tests/check_all_services_e2e.py
+}
+
+run_benchmarks() {
+    write_header "Running Automated Pathway & Speed Benchmarks"
+    docker exec aio-portal python3 /app/tests/benchmark_pathways.py
+}
+
 case "$1" in
-    wizard) cli_wizard ;;
-    check)  check_prerequisites ;;
-    start)  start_stack "$2" ;;
-    stop)   stop_stack ;;
-    status) show_status ;;
-    links)  show_links ;;
-    build)  build_appliance ;;
+    wizard)    cli_wizard ;;
+    check)     check_prerequisites ;;
+    start)     start_stack "$2" ;;
+    stop)      stop_stack ;;
+    status)    show_status ;;
+    test)      run_tests ;;
+    benchmark) run_benchmarks ;;
+    links)     show_links ;;
+    build)     build_appliance ;;
     *)
         while true; do
             echo -e "${CYAN}====================================================================${NC}"
-            echo -e "  AIOStreams Stack Control (Linux / LXC)"
+            echo -e "  AIO Local Stack Control (Linux / LXC)"
             echo -e "${CYAN}====================================================================${NC}"
             echo -e " 1) Interactive Setup Wizard"
             echo -e " 2) Run Pre-Flight Diagnostics & Port Collision Check"
             echo -e " 3) Start Stack (docker compose up -d)"
             echo -e " 4) View Stack Status (docker compose ps)"
             echo -e " 5) Stop Stack (docker compose down)"
-            echo -e " 6) View Stremio Manifest & Service URLs"
-            echo -e " 7) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+            echo -e " 6) Run Automated 23-Service E2E Verification Suite"
+            echo -e " 7) Run Pathway & Speed Benchmark Suite"
+            echo -e " 8) View Stremio Manifest & Service URLs"
+            echo -e " 9) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
             echo -e " 0) Exit"
-            read -p "Select option [1-7, 0]: " opt
+            read -p "Select option [1-9, 0]: " opt
             case "$opt" in
                 1) cli_wizard ;;
                 2) check_prerequisites ;;
                 3) start_stack ;;
                 4) show_status ;;
                 5) stop_stack ;;
-                6) show_links ;;
-                7) build_appliance ;;
+                6) run_tests ;;
+                7) run_benchmarks ;;
+                8) show_links ;;
+                9) build_appliance ;;
                 0) exit 0 ;;
                 *) echo "Invalid option." ;;
             esac

@@ -102,10 +102,11 @@ INTEGRATIONS = [
     ("Prowlarr", "prowlarr", 9696, "Indexers"), ("FlareSolverr", "flaresolverr", 8191, "Indexers"),
     ("Zilean", "zilean", 8181, "Indexers"), ("AIOMetadata", "aiometadata", 4005, "Metadata"),
     ("Anime Kitsu", "anime-kitsu", 7000, "Metadata"), ("Posters+", "postersplus", 8000, "Metadata"),
-    ("SubSense", "subsense", 3100, "Subtitles"), ("Debrid Search", "debrid-search", 3001, "Library"),
+    ("SubSense", "subsense", 3100, "Subtitles"), ("Debrid Search", "debrid-search", 3011, "Library"),
     ("InfiniDysk", "infinidysk", 3000, "Usenet"), ("StremThru", "stremthru", 8080, "Proxies"),
     ("MediaFlow", "mediaflow", 8888, "Proxies"), ("Stremio Web", "stremio-web", 8080, "Players"),
     ("Nuvio", "nuvio", 3000, "Players"), ("SlickSync", "slicksync", 3000, "Sync"),
+    ("Hidden Cinemeta", "hidden-cinemeta", 3000, "Metadata")
 ]
 
 
@@ -214,7 +215,7 @@ def public_service_urls(base_url):
     if ":" in host:
         host = f"[{host}]"
     ports = {"SOOTIO_URL": 55771, "MEDIAFUSION_HOST_URL": 8001,
-             "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005, "DEBRID_SEARCH_URL": 3011}
+             "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005, "DEBRID_SEARCH_URL": 3001}
     urls = {key: f"{parsed.scheme}://{host}:{port}" for key, port in ports.items()}
     if is_local:
         urls["AIOMETADATA_HOST"] = f"{parsed.scheme}://{host}:4005"
@@ -490,9 +491,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         alias_manifest = f"{base_url}/stremio/u/local/manifest.json"
 
         # AIOMetadata public subdomain and manifest
-        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID")
+        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or "a7543d89-6f1a-47d1-abd1-a627e14dbbcb"
         aiom_host = derive_aiometadata_host(base_url, env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST"))
-        aiom_manifest = f"{aiom_host}/stremio/{aiom_profile}/manifest.json" if aiom_profile else None
+        aiom_manifest = f"{aiom_host}/stremio/{aiom_profile}/manifest.json" if aiom_profile else f"{aiom_host}/manifest.json"
 
         resp = {
             "success": True,

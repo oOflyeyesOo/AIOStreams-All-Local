@@ -244,7 +244,7 @@ def test_subsense():
 
 def test_debrid_search():
     try:
-        with urllib.request.urlopen("http://debrid-search:3001/manifest.json", timeout=5) as resp:
+        with urllib.request.urlopen("http://debrid-search:3011/manifest.json", timeout=5) as resp:
             m = json.load(resp)
             record("12. Stremio Debrid Search", True, f"Manifest OK: '{m.get('name')}' (v{m.get('version')})")
     except Exception as e:
@@ -270,6 +270,13 @@ def test_anime_kitsu():
     except Exception as e:
         record("14. Anime Kitsu Catalog", False, str(e))
 
+
+def test_hidden_cinemeta():
+    try:
+        with urllib.request.urlopen("http://hidden-cinemeta:3000/", timeout=5) as resp:
+            record("15. Hidden Cinemeta Catalog Cleaner", True, "Web application responsive (200 OK)")
+    except Exception as e:
+        record("15. Hidden Cinemeta Catalog Cleaner", False, str(e))
 
 
 def test_stremthru():
@@ -402,6 +409,7 @@ def main():
     test_debrid_search()
     test_infinidysk()
     test_anime_kitsu()
+    test_hidden_cinemeta()
     test_stremthru()
     test_mediaflow()
     test_slicksync()

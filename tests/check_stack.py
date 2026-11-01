@@ -18,8 +18,9 @@ HTTP_CHECKS = {
 }
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379,
               "stremthru": 8080, "mediaflow": 8888, "flaresolverr": 8191,
-              "subsense": 3100, "debrid-search": 3001, "postersplus": 8000,
-              "sootio": 55771, "slicksync": 3000, "nuvio": 3000, "zilean": 8181}
+              "subsense": 3100, "debrid-search": 3011, "postersplus": 8000,
+              "sootio": 55771, "slicksync": 3000, "nuvio": 3000, "zilean": 8181,
+              "hidden-cinemeta": 3000}
 
 
 def check(name):

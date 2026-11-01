@@ -243,7 +243,7 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • Stremio Web Player:    http://localhost:8082"
     echo " • Nuvio Web Player:      http://localhost:8085"
     echo " • SlickSync Hub:         http://localhost:8086"
-    echo " • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/"
+    echo " • Hidden Cinemeta:       http://localhost:7015"
     echo " • Debrid Cloud Search:   http://localhost:3011"
     echo " • AIOMetadata:           http://localhost:4005"
     echo " • Posters+:              http://localhost:9039"
