@@ -345,6 +345,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/backup":
             self.handle_api_backup()
             return
+        elif path == "/api/resources":
+            self.handle_api_resources()
+            return
+        elif path == "/api/clean-cache":
+            self.handle_api_clean_cache()
+            return
 
         return super().do_GET()
 
@@ -372,6 +378,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         elif path == "/api/restart":
             self.handle_api_restart()
+            return
+        elif path == "/api/clean-cache":
+            self.handle_api_clean_cache()
             return
 
         self.send_response(404)
@@ -642,6 +651,24 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 shutil.copyfileobj(f, self.wfile)
         except Exception as e:
             self.send_error(500, f"Backup creation failed: {e}")
+
+    def handle_api_resources(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.resources as stack_res
+            stats = stack_res.get_stack_resources(filter_aio=True)
+            self.json_response(stats)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_clean_cache(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.clean_cache as stack_cleaner
+            res = stack_cleaner.clean_stack_cache(Path(WEB_ROOT))
+            self.json_response(res)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True

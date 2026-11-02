@@ -23,6 +23,9 @@ param (
     [switch]$Test,
     [switch]$Benchmark,
     [switch]$BuildAppliance,
+    [switch]$CleanCache,
+    [switch]$Resources,
+    [switch]$Stats,
     [string]$Profile = "",
     [int]$Port = 8088
 )
@@ -446,6 +449,30 @@ function Invoke-Update {
     Write-Success "Stack update completed successfully!"
 }
 
+function Invoke-CleanCache {
+    param([switch]$DryRun, [switch]$All)
+    Write-Header "AIO Local Storage & Ephemeral Cache Cleanup"
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        $cmdArgs = @("tools/clean_cache.py")
+        if ($DryRun) { $cmdArgs += "--dry-run" }
+        if ($All) { $cmdArgs += "--all" }
+        & python @cmdArgs
+    } else {
+        docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.11-slim python tools/clean_cache.py
+    }
+}
+
+function Show-StackResources {
+    Write-Header "AIO Local Live Container Resource Monitor"
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        & python tools/resources.py
+    } else {
+        docker stats --no-stream
+    }
+}
+
 # Main Menu
 function Show-Menu {
     Clear-Host
@@ -463,9 +490,11 @@ function Show-Menu {
     Write-Host " 11) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
     Write-Host " 12) View Stremio Manifest & Service URLs"
     Write-Host " 13) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+    Write-Host " 14) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)" -ForegroundColor Cyan
+    Write-Host " 15) Live Container Resource Monitor (Real-time RAM & CPU stats)" -ForegroundColor Cyan
     Write-Host " 0) Exit"
     Write-Host ""
-    $choice = Read-Host "Select an option [1-13, 0]"
+    $choice = Read-Host "Select an option [1-15, 0]"
 
     switch ($choice) {
         "1" { Open-SetupPortal -ListenPort $Port; pause }
@@ -481,6 +510,8 @@ function Show-Menu {
         "11" { Invoke-Benchmarks; pause }
         "12" { Show-StremioLinks; pause }
         "13" { Build-AllInOneImage; pause }
+        "14" { Invoke-CleanCache; pause }
+        "15" { Show-StackResources; pause }
         "0" { exit }
         default { Write-Warn "Invalid choice." }
     }
@@ -511,6 +542,10 @@ if ($Portal -or $Serve) {
     Invoke-Benchmarks
 } elseif ($BuildAppliance) {
     Build-AllInOneImage
+} elseif ($CleanCache) {
+    Invoke-CleanCache
+} elseif ($Resources -or $Stats) {
+    Show-StackResources
 } else {
     Show-Menu
 }

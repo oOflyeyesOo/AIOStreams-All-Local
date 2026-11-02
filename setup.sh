@@ -340,19 +340,40 @@ update_stack() {
     echo -e "${GREEN}[✓] Stack update completed successfully!${NC}"
 }
 
+clean_cache() {
+    write_header "AIO Local Storage & Ephemeral Cache Cleanup"
+    if command -v python3 &>/dev/null; then
+        python3 tools/clean_cache.py "$@"
+    else
+        docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.11-slim python tools/clean_cache.py "$@"
+    fi
+}
+
+show_resources() {
+    write_header "AIO Local Live Container Resource Monitor"
+    if command -v python3 &>/dev/null; then
+        python3 tools/resources.py "$@"
+    else
+        docker stats --no-stream
+    fi
+}
+
 case "$1" in
-    wizard)    cli_wizard ;;
-    check)     check_prerequisites ;;
-    start)     start_stack "$2" ;;
-    stop)      stop_stack ;;
-    status)    show_status ;;
-    test)      run_tests ;;
-    benchmark) run_benchmarks ;;
-    backup)    backup_stack ;;
-    restore)   restore_stack "$2" ;;
-    update)    update_stack ;;
-    links)     show_links ;;
-    build)     build_appliance ;;
+    wizard)      cli_wizard ;;
+    check)       check_prerequisites ;;
+    start)       start_stack "$2" ;;
+    stop)        stop_stack ;;
+    status)      show_status ;;
+    test)        run_tests ;;
+    benchmark)   run_benchmarks ;;
+    backup)      backup_stack ;;
+    restore)     restore_stack "$2" ;;
+    update)      update_stack ;;
+    clean-cache) clean_cache "$2" ;;
+    resources)   show_resources "$2" ;;
+    stats)       show_resources "$2" ;;
+    links)       show_links ;;
+    build)       build_appliance ;;
     *)
         while true; do
             echo -e "${CYAN}====================================================================${NC}"
@@ -370,8 +391,10 @@ case "$1" in
             echo -e " 10) Run Pathway & Speed Benchmark Suite"
             echo -e " 11) View Stremio Manifest & Service URLs"
             echo -e " 12) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+            echo -e " 13) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)"
+            echo -e " 14) Live Container Resource Monitor (Real-time RAM & CPU stats)"
             echo -e " 0) Exit"
-            read -p "Select option [1-12, 0]: " opt
+            read -p "Select option [1-14, 0]: " opt
             case "$opt" in
                 1) cli_wizard ;;
                 2) check_prerequisites ;;
@@ -385,6 +408,8 @@ case "$1" in
                 10) run_benchmarks ;;
                 11) show_links ;;
                 12) build_appliance ;;
+                13) clean_cache ;;
+                14) show_resources ;;
                 0) exit 0 ;;
                 *) echo "Invalid option." ;;
             esac
