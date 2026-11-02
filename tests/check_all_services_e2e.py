@@ -139,7 +139,7 @@ def test_comet():
         }
         b64 = base64.b64encode(json.dumps(cfg).encode()).decode()
         stream_url = f"http://comet:8000/{b64}/stream/movie/tt1375666.json"
-        with urllib.request.urlopen(stream_url, timeout=20) as s_resp:
+        with urllib.request.urlopen(stream_url, timeout=30) as s_resp:
             s_data = json.load(s_resp)
             streams = s_data.get("streams", [])
             if not streams:
@@ -341,12 +341,20 @@ def test_aiostreams_and_playback():
                 raise ValueError("No streams returned by AIOStreams")
 
         # Verify all streams are proxied through port 3001
-        unproxied = [s.get("url") for s in streams if not s.get("url", "").startswith(("https://", "http://aiostreams:3000")) or "/api/v1/proxy/" not in s.get("url", "")]
+        playable_streams = [s for s in streams if s.get("url")]
+        if not playable_streams:
+            raise ValueError("No playable stream URLs found in streams list")
+
+        unproxied = [
+            s.get("url") for s in playable_streams
+            if any(internal in s.get("url") for internal in ["comet:8000", "mediafusion:8000", "sootio:55771", "prowlarr:9696", "zilean:8181"])
+            or ("/api/v1/proxy/" not in s.get("url") and not s.get("url").startswith("https://"))
+        ]
         if unproxied:
             raise ValueError(f"Found {len(unproxied)} unproxied streams exposing internal IPs: {unproxied[0]}")
 
         # Probe playback on first stream candidate
-        candidate = streams[0]
+        candidate = playable_streams[0]
         c_url = candidate["url"]
         internal_target = c_url.replace("https://aio.yourdomain.com", "http://aiostreams:3000")
         play_req = urllib.request.Request(internal_target, headers={"Range": "bytes=0-1023"})

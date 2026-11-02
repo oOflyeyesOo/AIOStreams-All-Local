@@ -17,8 +17,9 @@ services:
       - "8088:8088"
     volumes:
       - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     working_dir: /app
-    command: python3 -u /app/docker/all-in-one/portal_server.py
+    command: sh -c "apk add --no-cache docker-cli >/dev/null 2>&1; exec python3 -u /app/docker/all-in-one/portal_server.py"
     environment:
       - AIOSTREAMS_URL=http://aiostreams:3000
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
@@ -43,6 +44,7 @@ services:
     container_name: aiostreams
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${AIOSTREAMS_MEM_LIMIT:-512m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -50,7 +52,7 @@ services:
       - "${PORT_AIOSTREAMS:-3001}:3000"
     environment:
       - PORT=3000
-      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=384
       - BASE_URL=${BASE_URL:-http://localhost:3001}
       - SECRET_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
@@ -127,6 +129,7 @@ services:
     profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${COMET_MEM_LIMIT:-512m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -166,6 +169,7 @@ services:
     profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${MEDIAFUSION_MEM_LIMIT:-512m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -223,6 +227,7 @@ services:
     profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${SOOTIO_MEM_LIMIT:-768m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -236,6 +241,7 @@ services:
       start_period: 15s
     environment:
       - PORT=55771
+      - NODE_OPTIONS=--max-old-space-size=256
       - ADDON_URL=${SOOTIO_ADDON_URL:-http://sootio:55771}
       - LOG_LEVEL=info
       - TMDB_API_KEY=${TMDB_API_KEY}
@@ -358,6 +364,7 @@ services:
     profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${PROWLARR_MEM_LIMIT:-384m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -467,6 +474,7 @@ services:
     profiles: ["proxies", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${STREMTHRU_MEM_LIMIT:-768m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -481,6 +489,11 @@ services:
     environment:
       - PORT=8080
       - STREMTHRU_PORT=8080
+      - GOMEMLIMIT=384MiB
+      - GOGC=80
+      - STREMTHRU_FEATURE_DMM_HASHLIST=false
+      - STREMTHRU_FEATURE_IMDB_TITLE=false
+      - STREMTHRU_FEATURE_ANIME=false
       - STREMTHRU_AUTH=
       - STREMTHRU_PROXY_AUTH=
       - STREMTHRU_AUTH_ADMIN=admin
@@ -509,6 +522,7 @@ services:
     profiles: ["proxies", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${MEDIAFLOW_MEM_LIMIT:-384m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -530,7 +544,7 @@ services:
       - ENABLE_DASH_PREBUFFER=true
       - DASH_PREBUFFER_SEGMENTS=5
       - LIVESTREAM_START_OFFSET=-18
-      - GUNICORN_WORKERS=4
+      - GUNICORN_WORKERS=${MEDIAFLOW_WORKERS:-2}
       - GUNICORN_TIMEOUT=120
     volumes:
       - ./data/mediaflow:/app/data
@@ -546,6 +560,7 @@ services:
     profiles: ["proxies", "usenet", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
     environment:
@@ -600,6 +615,7 @@ services:
     profiles: ["web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${KITSU_MEM_LIMIT:-256m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7000"
     healthcheck:
@@ -610,6 +626,7 @@ services:
       start_period: 15s
     environment:
       - PORT=7000
+      - NODE_OPTIONS=--max-old-space-size=128
       - FANART_APIKEY=${FANART_API_KEY}
     networks:
       - stremio-net
@@ -621,6 +638,7 @@ services:
     profiles: ["core", "web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
     ports:
       - "4005:4005"
     environment:
@@ -644,6 +662,7 @@ services:
       - IMAGE_PROXY_SIGNING_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - CACHE_WARMUP_ON_STARTUP=true
       - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=384
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:4005/health/live || exit 1"]
       interval: 30s
@@ -671,6 +690,7 @@ services:
     profiles: ["core", "web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:8000"
     environment:
@@ -696,6 +716,7 @@ services:
     profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${DEBRID_SEARCH_MEM_LIMIT:-384m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"
     healthcheck:
@@ -706,6 +727,7 @@ services:
       start_period: 15s
     environment:
       - PORT=3011
+      - NODE_OPTIONS=--max-old-space-size=256
       - ADDON_URL=${DEBRID_SEARCH_URL:-http://localhost:3011}
       - TMDB_API_KEY=${TMDB_API_KEY}
       - TVDB_API_KEY=${TVDB_API_KEY}
@@ -735,6 +757,7 @@ services:
     profiles: ["core", "web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${SUBSENSE_MEM_LIMIT:-384m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -743,6 +766,7 @@ services:
     environment:
       - PORT=3100
       - HOST=0.0.0.0
+      - NODE_OPTIONS=--max-old-space-size=192
       - SUBSENSE_ENCRYPTION_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - REDIS_URL=redis://shared-redis:6379/1
       - WARP_ENABLED=true
@@ -763,6 +787,7 @@ services:
     profiles: ["web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 128m
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:3000"
     networks:
@@ -777,6 +802,7 @@ services:
     profiles: ["web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 256m
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8085:3000"   # Nuvio Web UI & Embedded Player
     environment:
@@ -798,6 +824,7 @@ services:
     profiles: ["web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 256m
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8080"   # Stremio Web UI & Streaming Engine
     environment:
@@ -820,6 +847,7 @@ services:
     profiles: ["web", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${SLICKSYNC_MEM_LIMIT:-384m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:3000"   # SlickSync Web UI & Management Dashboard
     environment:
@@ -832,7 +860,7 @@ services:
       - AIOSTREAMS_AUTH_USERNAME=admin
       - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
       - STREMIO_URL=http://aiostreams:3000
-      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
       - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
     volumes:
@@ -855,6 +883,7 @@ services:
     container_name: shared-redis
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
     volumes:
       - ./data/redis:/data
     healthcheck:
@@ -901,6 +930,7 @@ services:
     container_name: shared-postgres
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
     shm_size: 512mb
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
