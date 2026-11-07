@@ -13,3 +13,5 @@ foreach($failure in 1..4) {
  if(-not $caught -or $script:reportedSuccess -or $script:count -ne $failure){throw "Failure stage $failure not handled"}
 }
 Write-Output 'PASS: PowerShell update stops at each failed stage and never reports success'
+
+$global:LASTEXITCODE = 0
