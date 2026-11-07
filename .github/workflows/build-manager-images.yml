@@ -111,6 +111,13 @@ jobs:
           name: aio-release-${{ github.sha }}
           path: release-bundle/
           retention-days: 90
+      - name: Capture failed startup diagnostics
+        if: failure()
+        run: |
+          cid=$(docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -aq aiostreams)
+          if [ -n "$cid" ]; then
+            python3 tests/summarize_startup.py "$cid"
+          fi
       - name: Remove disposable release project
         if: always()
         run: docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml down --volumes --remove-orphans
