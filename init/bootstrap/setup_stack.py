@@ -24,6 +24,8 @@ import urllib.parse
 import tempfile
 
 def load_env_file():
+    if os.environ.get("AIO_SKIP_ENV_FILE") == "true":
+        return
     for candidate in [
         os.path.join(os.getcwd(), ".env"),
         "/app/.env",

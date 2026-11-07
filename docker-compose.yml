@@ -5,61 +5,6 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  stack-bootstrap:
-    image: python:3.11-alpine
-    container_name: stack-bootstrap
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
-    restart: "no"
-    depends_on:
-      - aiostreams
-    volumes:
-      - ./init/bootstrap:/init:ro
-      - ./data/stremio-web:/data/stremio-web
-      - ./data/aiostreams:/data/aiostreams
-      - ./:/app
-      - ./templates/builtin:/templates/builtin:ro
-      - ./templates/aiometadata-configs:/templates/aiometadata-configs:ro
-    environment:
-      - PROWLARR_URL=http://prowlarr:9696
-      - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - FLARESOLVERR_URL=http://flaresolverr:8191
-      - MEDIAFUSION_URL=http://mediafusion:8000
-      - COMET_URL=http://comet:8000
-      - SOOTIO_URL=http://sootio:55771
-      - AIOSTREAMS_URL=http://aiostreams:3000
-      - STREMIO_WEB_URL=http://stremio-web:8080
-      - AIOMETADATA_URL=http://aiometadata:4005
-      - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
-      - POSTERSPLUS_URL=http://postersplus:8000
-      - BASE_URL=${BASE_URL:-http://localhost:3001}
-      - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
-      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-      - TORBOX_API_KEY=${TORBOX_API_KEY}
-      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-      - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
-      - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
-      - SEEDR_API_KEY=${SEEDR_API_KEY}
-      - USENET_HOST=${USENET_HOST}
-      - USENET_PORT=${USENET_PORT:-563}
-      - USENET_USER=${USENET_USER}
-      - USENET_PASS=${USENET_PASS}
-      - USENET_SSL=${USENET_SSL:-true}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - FANART_API_KEY=${FANART_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    command: python3 -u /init/setup_stack.py
-    networks:
-      - stremio-net
-
-
   stack-check:
     profiles: ["test"]
     image: python:3.11-alpine
@@ -526,7 +471,7 @@ services:
       - AIOMETADATA_URL=http://aiometadata:4005
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
       - POSTERSPLUS_URL=http://postersplus:8000
-      - BASE_URL=${BASE_URL:-http://localhost:3000}
+      - BASE_URL=${BASE_URL:-http://localhost:3001}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
       - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}

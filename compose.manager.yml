@@ -6,60 +6,6 @@ x-logging:
     max-size: 10m
     max-file: '3'
 services:
-  stack-bootstrap:
-    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-bootstrap:${AIO_IMAGE_TAG:-latest}
-    restart: 'no'
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-    depends_on:
-    - aiostreams
-    - controller
-    volumes:
-    - stremio-web-data:/data/stremio-web
-    - aiostreams-data:/data/aiostreams
-    - aio-config:/app
-    environment:
-    - PROWLARR_URL=http://prowlarr:9696
-    - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-    - FLARESOLVERR_URL=http://flaresolverr:8191
-    - MEDIAFUSION_URL=http://mediafusion:8000
-    - COMET_URL=http://comet:8000
-    - SOOTIO_URL=http://sootio:55771
-    - AIOSTREAMS_URL=http://aiostreams:3000
-    - STREMIO_WEB_URL=http://stremio-web:8080
-    - AIOMETADATA_URL=http://aiometadata:4005
-    - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
-    - POSTERSPLUS_URL=http://postersplus:8000
-    - BASE_URL=${BASE_URL:-http://localhost:3000}
-    - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
-    - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
-    - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-    - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-    - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-    - TORBOX_API_KEY=${TORBOX_API_KEY}
-    - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-    - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
-    - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
-    - SEEDR_API_KEY=${SEEDR_API_KEY}
-    - USENET_HOST=${USENET_HOST}
-    - USENET_PORT=${USENET_PORT:-563}
-    - USENET_USER=${USENET_USER}
-    - USENET_PASS=${USENET_PASS}
-    - USENET_SSL=${USENET_SSL:-true}
-    - TMDB_API_KEY=${TMDB_API_KEY}
-    - TVDB_API_KEY=${TVDB_API_KEY}
-    - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-    - RPDB_API_KEY=${RPDB_API_KEY}
-    - FANART_API_KEY=${FANART_API_KEY}
-    - GEMINI_API_KEY=${GEMINI_API_KEY}
-    - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
-    - ANILIST_TOKEN=${ANILIST_TOKEN:-}
-    command: python3 -u /init/setup_stack.py
-    networks:
-    - stremio-net
   stack-check:
     profiles:
     - test
@@ -118,7 +64,6 @@ services:
     - aio-config:/app
     - control-socket:/runtime
     - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
-    - stremio-web-data:/app/data/stremio-web
     - aiostreams-data:/app/data/aiostreams
     - comet-data:/app/data/comet
     - mediafusion-data:/app/data/mediafusion
@@ -128,6 +73,7 @@ services:
     - nuvio-data:/app/data/nuvio
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
+    - stremio-web-data:/app/data/stremio-web
     - debrid-search-data:/app/data/debrid-search
     - postersplus-data:/app/data/postersplus
     - stremthru-data:/app/data/stremthru
@@ -525,6 +471,60 @@ services:
     depends_on:
       init-configs:
         condition: service_completed_successfully
+  stack-bootstrap:
+    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-bootstrap:${AIO_IMAGE_TAG:-latest}
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    depends_on:
+    - aiostreams
+    - controller
+    volumes:
+    - stremio-web-data:/data/stremio-web
+    - aiostreams-data:/data/aiostreams
+    - aio-config:/app
+    environment:
+    - PROWLARR_URL=http://prowlarr:9696
+    - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
+    - FLARESOLVERR_URL=http://flaresolverr:8191
+    - MEDIAFUSION_URL=http://mediafusion:8000
+    - COMET_URL=http://comet:8000
+    - SOOTIO_URL=http://sootio:55771
+    - AIOSTREAMS_URL=http://aiostreams:3000
+    - STREMIO_WEB_URL=http://stremio-web:8080
+    - AIOMETADATA_URL=http://aiometadata:4005
+    - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
+    - POSTERSPLUS_URL=http://postersplus:8000
+    - BASE_URL=${BASE_URL:-http://localhost:3001}
+    - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
+    - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
+    - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
+    - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
+    - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
+    - TORBOX_API_KEY=${TORBOX_API_KEY}
+    - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
+    - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
+    - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
+    - SEEDR_API_KEY=${SEEDR_API_KEY}
+    - USENET_HOST=${USENET_HOST}
+    - USENET_PORT=${USENET_PORT:-563}
+    - USENET_USER=${USENET_USER}
+    - USENET_PASS=${USENET_PASS}
+    - USENET_SSL=${USENET_SSL:-true}
+    - TMDB_API_KEY=${TMDB_API_KEY}
+    - TVDB_API_KEY=${TVDB_API_KEY}
+    - MDBLIST_API_KEY=${MDBLIST_API_KEY}
+    - RPDB_API_KEY=${RPDB_API_KEY}
+    - FANART_API_KEY=${FANART_API_KEY}
+    - GEMINI_API_KEY=${GEMINI_API_KEY}
+    - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+    - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+    command: python3 -u /init/setup_stack.py
+    networks:
+    - stremio-net
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     restart: unless-stopped
@@ -1034,7 +1034,6 @@ networks:
 volumes:
   aio-config: {}
   control-socket: {}
-  stremio-web-data: {}
   aiostreams-data: {}
   comet-data: {}
   mediafusion-data: {}
@@ -1044,6 +1043,7 @@ volumes:
   nuvio-data: {}
   aiometadata-data: {}
   infinidysk-data: {}
+  stremio-web-data: {}
   debrid-search-data: {}
   postersplus-data: {}
   stremthru-data: {}
