@@ -87,10 +87,23 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(result, bootstrap.AIOMETADATA_URL + "/stremio/test-id/manifest.json")
             self.assertEqual(request.call_args.kwargs["data"]["addonPassword"], bootstrap.ADDON_PASSWORD)
             saved_config = request.call_args.kwargs["data"]["config"]
-            self.assertEqual(saved_config["apiKeys"].get("simklTokenId"), "my-simkl-client-id")
-            self.assertEqual(saved_config["apiKeys"].get("anilistTokenId"), "my-anilist-token")
-            self.assertEqual(saved_config.get("simklTokenId"), "my-simkl-client-id")
-            self.assertEqual(saved_config.get("anilistTokenId"), "my-anilist-token")
+            self.assertNotIn("simklTokenId",saved_config["apiKeys"])
+            self.assertNotIn("anilistTokenId",saved_config["apiKeys"])
+
+    def test_metadata_repeat_setup_preserves_linked_accounts(self):
+        existing={"apiKeys":{"simklTokenId":"linked-simkl-record","anilistTokenId":"linked-anilist-record"}}
+        responses=[{"success":True,"config":existing},{"success":True,"userUUID":"existing"}]
+        with patch.dict(bootstrap.os.environ,{"AIOMETADATA_PROFILE_UUID":"existing","SIMKL_CLIENT_ID":"client-not-token"}), patch.object(bootstrap,"make_request",side_effect=responses) as request, patch.object(bootstrap,"update_env_file"):
+            bootstrap.setup_aiometadata_tamtaro()
+        payload=request.call_args.kwargs['data']['config']
+        self.assertEqual(payload['apiKeys']['simklTokenId'],'linked-simkl-record')
+        self.assertEqual(payload['apiKeys']['anilistTokenId'],'linked-anilist-record')
+        self.assertEqual(request.call_args.kwargs['method'],'PUT')
+
+    def test_metadata_load_failure_does_not_overwrite_existing_profile(self):
+        with patch.dict(bootstrap.os.environ,{"AIOMETADATA_PROFILE_UUID":"existing"}), patch.object(bootstrap,"make_request",return_value={"error":401}) as request:
+            with self.assertRaises(RuntimeError):bootstrap.setup_aiometadata_tamtaro()
+        self.assertEqual(request.call_count,1)
 
     def test_metadata_rejection_is_not_reported_as_saved(self):
         with patch.object(bootstrap, "make_request", return_value={"error": 401}):

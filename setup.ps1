@@ -453,16 +453,19 @@ function Invoke-Restore {
 
 function Invoke-Update {
     Write-Header "Updating AIO Local Services & Container Images"
-    Write-Info "Pulling newest upstream container images..."
-    docker compose pull
-    Write-Info "Rebuilding local custom images..."
-    docker compose build --pull
-    Write-Info "Re-launching stack with updated images..."
-    docker compose up -d
-    Write-Info "Pruning dangling images..."
-    docker image prune -f
-    Write-Info "Verifying stack health post-update..."
-    docker exec aio-portal python3 /app/tests/check_stack.py
+    $stages = @(
+        @{ Message = "Pulling container images"; Arguments = @("compose", "pull") },
+        @{ Message = "Rebuilding custom images"; Arguments = @("compose", "build", "--pull") },
+        @{ Message = "Starting updated services"; Arguments = @("compose", "up", "-d") },
+        @{ Message = "Checking stack health"; Arguments = @("compose", "--profile", "test", "run", "--rm", "--no-deps", "stack-check") }
+    )
+    foreach ($stage in $stages) {
+        Write-Info $stage.Message
+        & docker @($stage.Arguments)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Update stopped: $($stage.Message) failed (exit $LASTEXITCODE)."
+        }
+    }
     Write-Success "Stack update completed successfully!"
 }
 

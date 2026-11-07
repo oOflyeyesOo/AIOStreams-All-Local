@@ -4,7 +4,7 @@ const providers = [
   ['DEBRIDLINK_API_KEY','Debrid-Link','D'],['EASYDEBRID_API_KEY','EasyDebrid','E']
 ];
 const metadata = [['TMDB_API_KEY','TMDB','T'],['TVDB_API_KEY','TVDB','TV'],['FANART_API_KEY','Fanart.tv','F'],['MDBLIST_API_KEY','MDBList','M']];
-const extras = [['RPDB_API_KEY','Rating posters','RP'],['TRAKT_CLIENT_ID','Trakt','TR'],['SIMKL_CLIENT_ID','Simkl','SK'],['ANILIST_TOKEN','AniList','AL'],['SUBDL_API_KEY','SubDL','S'],['SUBSOURCE_API_KEY','SubSource','SS'],['WYZIE_API_KEY','Wyzie','W'],['GEMINI_API_KEY','Gemini','G'],['OFFCLOUD_API_KEY','Offcloud','O'],['SEEDR_API_KEY','Seedr','S']];
+const extras = [['RPDB_API_KEY','Rating posters','RP'],['TRAKT_CLIENT_ID','Trakt client ID','TR'],['TRAKT_CLIENT_SECRET','Trakt client secret','TR'],['SIMKL_CLIENT_ID','Simkl client ID','SK'],['SIMKL_CLIENT_SECRET','Simkl client secret','SK'],['ANILIST_CLIENT_ID','AniList client ID','AL'],['ANILIST_CLIENT_SECRET','AniList client secret','AL'],['SUBDL_API_KEY','SubDL','S'],['SUBSOURCE_API_KEY','SubSource','SS'],['WYZIE_API_KEY','Wyzie','W'],['GEMINI_API_KEY','Gemini','G'],['OFFCLOUD_API_KEY','Offcloud','O'],['SEEDR_API_KEY','Seedr','S']];
 const fields = [...providers,...metadata,...extras];
 let currentManifest = '';
 let currentAiometaManifest = '';
@@ -137,6 +137,14 @@ async function loadManifest() {
   }
   if (info.aiometadataManifest) {
     currentAiometaManifest = info.aiometadataManifest;
+    const tracking = document.getElementById('connect-tracking');
+    const configuration = new URL(currentAiometaManifest);
+    const profile = configuration.pathname.match(/^\/stremio\/([^/]+)\//);
+    if (tracking && profile) {
+      configuration.pathname = `/stremio/${profile[1]}/configure`;
+      configuration.search = ''; configuration.hash = '';
+      tracking.href = configuration.toString(); tracking.classList.remove('disabled');
+    }
     const aiomCode = document.getElementById('aiometa-manifest-url');
     if (aiomCode) aiomCode.textContent = currentAiometaManifest;
     const copyAiom = document.getElementById('copy-aiometa-manifest');

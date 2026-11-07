@@ -1,4 +1,5 @@
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 import tarfile
 import tempfile
 from pathlib import Path
@@ -31,6 +32,52 @@ class BackupTests(unittest.TestCase):
                 (restored / "data" / "aiostreams" / "db.sqlite").read_bytes(),
                 b"sqlite-fixture",
             )
+
+    def test_simultaneous_backups_do_not_overwrite_each_other(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            with patch.object(backup,'dump_postgres',return_value=False), ThreadPoolExecutor(max_workers=2) as pool:
+                archives=list(pool.map(lambda _:backup.create_backup(root=root),range(2)))
+            self.assertNotEqual(*archives)
+            for archive in archives:
+                with tarfile.open(archive) as tar:
+                    self.assertIn('backup-manifest.json',tar.getnames())
+            self.assertEqual(list((root/'backups').glob('*.tmp')),[])
+
+    def test_backup_keeps_prowlarr_database(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'data/prowlarr').mkdir(parents=True)
+            (root/'data/prowlarr/prowlarr.db').write_bytes(b'indexer configuration')
+            with patch.object(backup, 'dump_postgres', return_value=False):
+                archive = backup.create_backup(root=root)
+            with tarfile.open(archive) as tar:
+                self.assertEqual(tar.extractfile('data/prowlarr/prowlarr.db').read(), b'indexer configuration')
+
+    def test_failed_database_restore_is_not_success(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dump = root/'postgres_cluster.sql'
+            dump.write_text('INVALID SQL;')
+            archive = root/'fixture.tar.gz'
+            with tarfile.open(archive,'w:gz') as tar:
+                tar.add(dump,arcname=dump.name)
+            with patch.object(backup,'restore_postgres',return_value=False):
+                self.assertFalse(backup.restore_backup(archive,root/'restored'))
+
+    def test_existing_destination_symlink_cannot_escape(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source=root/'source';source.mkdir()
+            (source/'secret').write_text('preserve')
+            target=root/'target';target.mkdir()
+            (target/'data').symlink_to(source,target_is_directory=True)
+            fixture=root/'fixture';fixture.mkdir()
+            (fixture/'secret').write_text('overwrite')
+            archive=root/'fixture.tar.gz'
+            with tarfile.open(archive,'w:gz') as tar:tar.add(fixture,arcname='data')
+            self.assertFalse(backup.restore_backup(archive,target))
+            self.assertEqual((source/'secret').read_text(),'preserve')
 
     def test_sqlite_snapshot_includes_live_wal_transaction(self):
         with tempfile.TemporaryDirectory() as folder:

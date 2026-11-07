@@ -1,7 +1,7 @@
 # AIO Local
 
 [![Microservices](https://img.shields.io/badge/microservices-18%20active-success?logo=server&logoColor=white)](#-what-is-integrated)
-[![E2E Tests](https://img.shields.io/badge/regression%20tests-77%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
+[![E2E Tests](https://img.shields.io/badge/regression%20tests-89%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -242,4 +242,4 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
 
 
-Current validation: 77 regression tests, 21 internal endpoint checks, full image-only startup and portal apply, and 15-second movie/episode decode. See [release validation](docs/RELEASE-VALIDATION.md) for scope and remaining optional-integration limitations. Sootio is optional extended coverage; see [deployment options](DEPLOYMENT.md).
+Current validation: 89 regression tests, 21 internal endpoint checks, full image-only startup and portal apply, and 15-second movie/episode decode. See [release validation](docs/RELEASE-VALIDATION.md) for scope and remaining optional-integration limitations. Sootio is optional extended coverage; see [deployment options](DEPLOYMENT.md).

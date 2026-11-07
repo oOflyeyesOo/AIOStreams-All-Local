@@ -359,10 +359,8 @@ update_stack() {
     docker compose build --pull
     echo -e "${CYAN}[i] Re-launching stack with updated images...${NC}"
     docker compose up -d
-    echo -e "${CYAN}[i] Pruning dangling images...${NC}"
-    docker image prune -f
     echo -e "${CYAN}[i] Verifying stack health post-update...${NC}"
-    docker exec aio-portal python3 /app/tests/check_stack.py
+    docker compose --profile test run --rm --no-deps stack-check
     echo -e "${GREEN}[✓] Stack update completed successfully!${NC}"
 }
 

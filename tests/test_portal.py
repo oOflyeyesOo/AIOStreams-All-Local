@@ -185,6 +185,12 @@ class PortalTests(unittest.TestCase):
         connection.close()
         return result
 
+    def test_cache_cleanup_requires_post(self):
+        with patch("tools.clean_cache.clean_stack_cache") as clean:
+            status, body, _ = self.request("/api/clean-cache",auth=True)
+        self.assertEqual(status,405)
+        clean.assert_not_called()
+
     def test_public_health_and_pages(self):
         for path in ("/healthz", "/", "/dashboard", "/assets/test.png"):
             with self.subTest(path=path):
@@ -350,7 +356,9 @@ class PortalTests(unittest.TestCase):
         backup_dir.mkdir(parents=True, exist_ok=True)
         fake_archive = backup_dir / "aio-backup-20261101-000000.tar.gz"
         fake_archive.write_bytes(b"\x1f\x8b\x08mock_gzip_data")
-        status, body, headers = self.request("/api/backup", auth=True)
+        with patch("tools.backup.create_backup", return_value=fake_archive) as create:
+            status, body, headers = self.request("/api/backup", auth=True)
+        create.assert_called_once()
         self.assertEqual(status, 200)
         self.assertEqual(headers["Content-Type"], "application/gzip")
         self.assertIn("attachment", headers["Content-Disposition"])

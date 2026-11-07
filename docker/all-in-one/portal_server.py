@@ -575,7 +575,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_api_resources()
             return
         elif path == "/api/clean-cache":
-            self.handle_api_clean_cache()
+            self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
 
         return super().do_GET()
@@ -895,17 +895,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         try:
             backup_dir = Path(WEB_ROOT) / "backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
-            now = time.time()
-            recent_backups = [
-                f for f in backup_dir.glob("aio-backup-*.tar.gz")
-                if (now - f.stat().st_mtime) < 300 and f.stat().st_size > 0
-            ]
-            if recent_backups:
-                archive = max(recent_backups, key=lambda f: f.stat().st_mtime)
-            else:
-                sys.path.insert(0, str(WEB_ROOT))
-                import tools.backup as stack_backup
-                archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT))
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.backup as stack_backup
+            archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT))
 
             size = archive.stat().st_size
             self.send_response(200)

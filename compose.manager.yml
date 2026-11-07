@@ -749,7 +749,11 @@ services:
     - MDBLIST_API_KEY=${MDBLIST_API_KEY}
     - GEMINI_API_KEY=${GEMINI_API_KEY}
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
-    - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+    - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+    - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     - REDIS_URL=redis://shared-redis:6379/5
     - DATABASE_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/aiometadata
     - ADMIN_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
@@ -946,6 +950,7 @@ services:
     - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
     - STREMIO_URL=http://aiostreams:3000
     - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
+    - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
     - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
     - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
     volumes:

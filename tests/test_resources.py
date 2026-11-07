@@ -5,6 +5,7 @@ Unit tests for tools/resources.py
 
 import unittest
 from unittest.mock import MagicMock, patch
+import subprocess
 
 from tools.resources import parse_bytes, get_stack_resources
 
@@ -16,6 +17,23 @@ class TestResources(unittest.TestCase):
         self.assertEqual(parse_bytes("1.5GiB"), 1536.0)
         self.assertEqual(parse_bytes("1024KiB"), 1.0)
         self.assertEqual(parse_bytes("invalid"), 0.0)
+
+    @patch("subprocess.run")
+    def test_project_filter_uses_container_ids_and_real_host_memory(self, run):
+        listing=MagicMock(stdout='fixture-id\n',returncode=0)
+        stats=MagicMock(stdout='custom-project-web-1\t1%\t128MiB / 256MiB\t50%\t0B / 0B\t1',returncode=0)
+        host=MagicMock(stdout=str(8*1024**3),returncode=0)
+        run.side_effect=[listing,stats,host]
+        with patch.dict('os.environ',{'AIO_PROJECT_NAME':'custom-project'}):
+            result=get_stack_resources()
+        self.assertEqual(result['container_count'],1)
+        self.assertEqual(result['host_limit_gb'],8)
+        self.assertIn('fixture-id',run.call_args_list[1].args[0])
+        self.assertIn('label=com.docker.compose.project=custom-project',run.call_args_list[0].args[0])
+
+    @patch("subprocess.run",side_effect=subprocess.TimeoutExpired('docker',12))
+    def test_docker_timeout_reports_failure(self, run):
+        self.assertFalse(get_stack_resources()['success'])
 
     @patch("subprocess.run")
     def test_get_stack_resources(self, mock_run):

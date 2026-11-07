@@ -15,6 +15,7 @@ Pass --include-cache to include heavy proxy scrape caches (e.g. stremthru.db).
 import argparse
 from datetime import datetime
 import os
+import json
 from pathlib import Path
 import shutil
 import sqlite3
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import uuid
 
 # Force UTF-8 on Windows consoles to prevent charmap encoding errors
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -89,21 +91,27 @@ def copy_consistent(source, destination):
 
 
 def dump_postgres(dump_file: Path) -> bool:
-    """Attempt an atomic pg_dumpall from the shared-postgres container."""
+    """Dump application databases without dropping/recreating the connected admin role."""
     try:
-        res = subprocess.run(
-            ["docker", "exec", postgres_container(), "pg_dumpall", "-U", "postgres", "--clean"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.DEVNULL,
-            timeout=60
-        )
-        if res.returncode == 0 and res.stdout:
-            dump_file.write_bytes(res.stdout)
-            return True
-    except Exception:
-        pass
-    return False
+        container = postgres_container()
+        listing = subprocess.run(
+            ["docker", "exec", container, "psql", "-U", "postgres", "-At", "-c",
+             "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY datname"],
+            capture_output=True, check=True, timeout=30)
+        databases = listing.stdout.decode().splitlines()
+        if not databases:
+            return False
+        chunks = []
+        for database in databases:
+            result = subprocess.run(
+                ["docker", "exec", container, "pg_dump", "-U", "postgres", "--clean", "--if-exists",
+                 "--create", "--no-owner", "--no-privileges", "--dbname", database],
+                capture_output=True, check=True, timeout=120)
+            chunks.append(result.stdout)
+        dump_file.write_bytes(b"\n".join(chunks))
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def restore_postgres(dump_file: Path) -> bool:
@@ -113,7 +121,7 @@ def restore_postgres(dump_file: Path) -> bool:
             return False
         sql_data = dump_file.read_bytes()
         res = subprocess.run(
-            ["docker", "exec", "-i", postgres_container(), "psql", "-U", "postgres", "-d", "postgres"],
+            ["docker", "exec", "-i", postgres_container(), "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
             input=sql_data,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -133,7 +141,7 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
 
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    archive_path = output_dir / f"aio-backup-{timestamp}.tar.gz"
+    archive_path = output_dir / f"aio-backup-{timestamp}-{uuid.uuid4().hex[:12]}.tar.gz"
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -151,6 +159,11 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
         if not pg_ok:
             print("  [!] Note: shared-postgres container not reachable for pg_dumpall.", flush=True)
 
+        (staging_dir / "backup-manifest.json").write_text(json.dumps({
+            "format": "aio-backup-v1", "postgresIncluded": pg_ok,
+            "sqliteSnapshot": True,
+        }), encoding="utf-8")
+
         # 3. Back up essential configuration and database files
         data_dir = root / "data"
         staging_data = staging_dir / "data"
@@ -162,6 +175,7 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("aiostreams/instance-id", False),
             ("comet/comet.db", False),
             ("prowlarr/config.xml", False),
+            ("prowlarr/prowlarr.db", False),
             ("debrid-search", True),
             ("slicksync", True),
             ("infinidysk", True),
@@ -187,9 +201,15 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
                 copy_consistent(src, dest)
 
         # 4. Pack into tar.gz
-        with tarfile.open(archive_path, "w:gz") as tar:
-            for item in staging_dir.iterdir():
-                tar.add(item, arcname=item.name)
+        descriptor, pending = tempfile.mkstemp(prefix=".aio-backup-", suffix=".tmp", dir=output_dir)
+        os.close(descriptor)
+        try:
+            with tarfile.open(pending, "w:gz") as tar:
+                for item in staging_dir.iterdir():
+                    tar.add(item, arcname=item.name)
+            os.replace(pending, archive_path)
+        finally:
+            Path(pending).unlink(missing_ok=True)
 
     return archive_path
 
@@ -213,6 +233,13 @@ def restore_backup(archive_path: Path, root: Path = None) -> bool:
                         or (target != tmp_path and tmp_path not in target.parents)):
                     print(f"[!] Error: Unsafe archive member: {member.name}", file=sys.stderr)
                     return False
+            destination = root.resolve()
+            for member in members:
+                target = (destination / member.name).resolve()
+                if target != destination and destination not in target.parents:
+                    print("[!] Error: Restore destination contains an escaping symbolic link.", file=sys.stderr)
+                    return False
+            root.mkdir(parents=True, exist_ok=True)
             tar.extractall(tmp_path, members=members)
 
         # 1. Restore .env
@@ -240,6 +267,7 @@ def restore_backup(archive_path: Path, root: Path = None) -> bool:
                 print(f"      Saved SQL dump to {root / 'backups' / 'postgres_restore.sql'} for manual import.")
                 (root / "backups").mkdir(exist_ok=True)
                 shutil.copy2(sql_dump, root / "backups" / "postgres_restore.sql")
+                return False
 
     return True
 

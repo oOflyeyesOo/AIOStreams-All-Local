@@ -39,6 +39,20 @@ jobs:
         run: docker compose -p aio-tests -f compose.test.yml run --rm database-test
       - name: Web player first-visit settings
         run: docker compose -p aio-tests -f compose.test.yml run --rm browser-tests
+      - name: Update failure handling (Bash)
+        run: |
+          bash -n setup.sh
+          python3 tests/check_update_scripts.py
+      - name: Update failure handling (PowerShell)
+        shell: pwsh
+        run: ./tests/check_update_scripts.ps1
+      - name: Real database backup and restore
+        run: |
+          docker build -f docker/packaged/Dockerfile --target portal -t aio-feature-tools .
+          docker compose -p aio-feature-tests -f compose.test.yml up -d --wait shared-postgres
+          docker run --rm -e AIO_PROJECT_NAME=aio-feature-tests -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src:ro" --entrypoint python3 aio-feature-tools /src/tests/check_backup_restore_live.py
       - name: Clean up test project
         if: always()
-        run: docker compose -p aio-tests -f compose.test.yml down --volumes
+        run: |
+          docker compose -p aio-tests -f compose.test.yml down --volumes
+          docker compose -p aio-feature-tests -f compose.test.yml down --volumes

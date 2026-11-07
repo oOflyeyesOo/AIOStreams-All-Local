@@ -66,7 +66,8 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
             ids = listing.stdout.split()
             if not ids:
                 return {"success": True, "containers": [], "container_count": 0,
-                        "total_mem_mb": 0, "total_cpu_percent": 0}
+                        "total_mem_mb": 0, "total_mem_gb": 0, "total_cpu_percent": 0,
+                        "host_limit_gb": 0, "host_mem_percent": 0}
             cmd.extend(ids)
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
         if res.returncode != 0:
@@ -86,6 +87,12 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
     total_mem_mb = 0.0
     total_cpu_perc = 0.0
     host_limit_mb = 0.0
+    try:
+        memory = subprocess.run(["docker", "info", "--format", "{{.MemTotal}}"],
+                                capture_output=True, text=True, check=True, timeout=12)
+        host_limit_mb = int(memory.stdout.strip()) / (1024 * 1024)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
 
     lines = res.stdout.strip().splitlines()
     for line in lines:
@@ -120,8 +127,6 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
             used_str, limit_str = mem_raw.split("/", 1)
             used_mb = parse_bytes(used_str)
             limit_mb = parse_bytes(limit_str)
-            if limit_mb > host_limit_mb:
-                host_limit_mb = limit_mb
         else:
             used_mb = parse_bytes(mem_raw)
 

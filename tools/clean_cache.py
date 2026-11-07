@@ -59,83 +59,59 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
         ("StremThru Internal Cache", repo_root / "data" / "stremthru" / "cache"),
     ]
 
+    errors = []
     if include_poster_cache:
-        purge_targets.append(("Posters+ Image Cache", repo_root / "data" / "postersplus"))
+        # The volume also stores databases. Purge only image files, never the volume.
+        poster_root = repo_root / "data" / "postersplus"
+        if poster_root.exists() and repo_root in poster_root.resolve().parents:
+            images = [p for p in poster_root.rglob("*") if p.is_file() and not p.is_symlink()
+                      and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"}]
+            for image in images:
+                purge_targets.append(("Posters+ Image Cache", image))
+        elif poster_root.exists():
+            errors.append("Posters+ cache target escapes workspace")
 
+    # Include bytecode only within the requested workspace.
+    purge_targets.extend(("Python Bytecode Cache", p) for p in repo_root.rglob("__pycache__")
+                         if ".git" not in p.parts)
     for label, target_path in purge_targets:
         if not target_path.exists():
             continue
-
-        size = get_dir_size(target_path)
-        file_count = 0
-        try:
-            file_count = sum(1 for p in target_path.rglob("*") if p.is_file())
-        except Exception:
-            pass
-
-        if file_count == 0 and size == 0:
+        if repo_root not in target_path.resolve().parents or target_path.is_symlink():
+            errors.append(label + ": target escapes workspace or is a symbolic link")
             continue
-
-        total_bytes += size
-        total_files += file_count
-
+        size = target_path.stat().st_size if target_path.is_file() else get_dir_size(target_path)
+        count = 1 if target_path.is_file() else sum(p.is_file() for p in target_path.rglob("*"))
+        if not size and not count:
+            continue
+        failed = None
         if not dry_run:
             try:
-                for item in target_path.iterdir():
-                    if item.is_file() or item.is_symlink():
-                        try:
+                if target_path.is_file():
+                    target_path.unlink()
+                else:
+                    for item in target_path.iterdir():
+                        if item.is_symlink() or item.is_file():
                             item.unlink()
-                        except Exception:
-                            pass
-                    elif item.is_dir():
-                        shutil.rmtree(item, ignore_errors=True)
-            except Exception as e:
-                details.append({
-                    "target": label,
-                    "path": str(target_path),
-                    "size_bytes": size,
-                    "file_count": file_count,
-                    "status": f"partial: {e}"
-                })
-                continue
-
-        details.append({
-            "target": label,
-            "path": str(target_path),
-            "size_bytes": size,
-            "file_count": file_count,
-            "status": "dry-run" if dry_run else "cleaned"
-        })
-
-    # Also clean Python bytecode caches
-    pycache_count = 0
-    pycache_bytes = 0
-    for pyc_dir in repo_root.rglob("__pycache__"):
-        if ".git" in pyc_dir.parts:
-            continue
-        c_size = get_dir_size(pyc_dir)
-        c_count = sum(1 for p in pyc_dir.glob("*.pyc") if p.is_file())
-        pycache_bytes += c_size
-        pycache_count += c_count
-        if not dry_run:
-            shutil.rmtree(pyc_dir, ignore_errors=True)
-
-    if pycache_count > 0:
-        total_bytes += pycache_bytes
-        total_files += pycache_count
-        details.append({
-            "target": "Python Bytecode Cache (__pycache__)",
-            "path": "repo_root/**/__pycache__",
-            "size_bytes": pycache_bytes,
-            "file_count": pycache_count,
-            "status": "dry-run" if dry_run else "cleaned"
-        })
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+            except OSError as error:
+                failed = type(error).__name__
+                errors.append(label + ": " + failed)
+        remaining = 0 if not target_path.exists() else (target_path.stat().st_size if target_path.is_file() else get_dir_size(target_path))
+        remaining_count = 0 if not target_path.exists() else (1 if target_path.is_file() else sum(p.is_file() for p in target_path.rglob("*")))
+        recovered = size if dry_run else max(0, size - remaining)
+        total_bytes += recovered
+        total_files += count if dry_run else max(0, count - remaining_count)
+        details.append({"target": label, "path": str(target_path), "size_bytes": recovered,
+                        "file_count": count, "status": ("partial: " + failed) if failed else ("dry-run" if dry_run else "cleaned")})
 
     freed_mb = round(total_bytes / (1024 * 1024), 2)
     freed_gb = round(total_bytes / (1024 * 1024 * 1024), 2)
 
     return {
-        "success": True,
+        "success": not errors,
+        "errors": errors,
         "dry_run": dry_run,
         "total_bytes": total_bytes,
         "freed_mb": freed_mb,

@@ -505,6 +505,14 @@ def setup_aiometadata_tamtaro():
             }
         }
 
+    existing_profile = os.environ.get("AIOMETADATA_PROFILE_UUID")
+    if existing_profile:
+        loaded = make_request(f"{AIOMETADATA_URL}/api/config/load/{existing_profile}", method="POST",
+                              data={"password": ADDON_PASSWORD, "addonPassword": ADDON_PASSWORD})
+        if not isinstance(loaded, dict) or not loaded.get("success") or not isinstance(loaded.get("config"), dict):
+            raise RuntimeError("Existing metadata profile could not be loaded; refusing to overwrite linked accounts.")
+        config = loaded["config"]
+
     # Refresh environment variables
     load_env_file()
     tmdb_key = os.environ.get("TMDB_API_KEY") or TMDB_API_KEY
@@ -539,14 +547,8 @@ def setup_aiometadata_tamtaro():
         api_keys["fanart"] = fanart_key
     if gemini_key:
         api_keys["gemini"] = gemini_key
-    if simkl_key:
-        api_keys["simkl"] = simkl_key
-        api_keys["simklTokenId"] = simkl_key
-        config["simklTokenId"] = simkl_key
-    if anilist_key:
-        api_keys["anilist"] = anilist_key
-        api_keys["anilistTokenId"] = anilist_key
-        config["anilistTokenId"] = anilist_key
+    # Account token-record IDs are created by AIOMetadata OAuth, never client IDs
+    # or raw access tokens. Keep existing linked records loaded above.
 
     # Configure Posters+ Rating Poster Provider
     config["usePosterProxy"] = True
