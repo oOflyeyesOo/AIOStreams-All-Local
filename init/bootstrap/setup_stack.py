@@ -21,6 +21,7 @@ import re
 import urllib.request
 import urllib.error
 import urllib.parse
+import tempfile
 
 def load_env_file():
     for candidate in [
@@ -55,14 +56,15 @@ def print(*values, **kwargs):
     message = re.sub(r"(/stremio/)[^/\s]+/[^/\s]+", r"\1[REDACTED]", message)
     builtins.print(message, **kwargs)
 
-def update_env_file(key, value):
-    candidates = [
+def update_env_file(key, value, candidates=None):
+    candidates = candidates or [
         "/app/.env",
         os.path.join(os.getcwd(), ".env"),
         os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".env")),
         "/data/.env"
     ]
     for target in candidates:
+        temporary = None
         try:
             target_dir = os.path.dirname(target)
             if target_dir and not os.path.isdir(target_dir):
@@ -76,19 +78,26 @@ def update_env_file(key, value):
             for line in lines:
                 stripped = line.strip()
                 if stripped.startswith(f"{key}=") or stripped.startswith(f"#{key}=") or stripped.startswith(f"# {key}="):
-                    updated.append(f"{key}={value}\n")
-                    found = True
+                    if not found:
+                        updated.append(f"{key}={value}\n")
+                        found = True
                 else:
                     updated.append(line)
             if not found:
                 updated.append(f"{key}={value}\n")
-            with open(target, "w", encoding="utf-8") as f:
-                f.writelines(updated)
+            descriptor, temporary = tempfile.mkstemp(prefix=".env-", dir=target_dir or ".")
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.writelines(updated)
+            os.replace(temporary, target)
+            temporary = None
             os.environ[key] = value
             print(f"[Setup] ✓ Persisted {key} to {target}", flush=True)
             return True
-        except Exception:
-            pass
+        except (OSError, UnicodeError):
+            continue
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
     return False
 
 def resolve_path(relative_path, default_path):
@@ -212,7 +221,6 @@ TARGET_INDEXERS = [
     "thepiratebay",
     "torrentgalaxy",
     "limetorrents",
-    "magnetdl",
     "kickasstorrents-ws",
     "badass-torrents",
     "torrentdownload",
@@ -323,7 +331,7 @@ def setup_prowlarr_indexers():
                 existing_definitions.add(name)
 
     print(f"[Prowlarr Setup] Currently active indexers in Prowlarr: {len(existing_indexers) if isinstance(existing_indexers, list) else 0}", flush=True)
-    schemas = make_request(f"{PROWLARR_URL}/api/v1/indexer/schema", headers=headers)
+    schemas = make_request(f"{PROWLARR_URL}/api/v1/indexer/schema", headers=headers, timeout=60)
     if not isinstance(schemas, list):
         print(f"[Prowlarr Setup] Could not retrieve indexer schemas: {schemas}", flush=True)
         return
@@ -584,6 +592,17 @@ def setup_aiometadata_tamtaro():
 
     return manifest_url
 
+
+def setup_optional_metadata():
+    """Configure the metadata addon only when its profile services are ready."""
+    if not wait_for_postersplus():
+        print("[AIOMetadata Setup] ℹ️ Posters+ is unavailable; continuing without optional metadata.", flush=True)
+        return None
+    if not wait_for_aiometadata():
+        print("[AIOMetadata Setup] ℹ️ AIOMetadata is unavailable; continuing without optional metadata.", flush=True)
+        return None
+    return setup_aiometadata_tamtaro()
+
 # ==============================================================================
 # 4. AIOSTREAMS DEFAULT TEMPLATE & ADDON AUTO-CONFIGURATION
 # ==============================================================================
@@ -598,8 +617,9 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams status. Trying user endpoint anyway...", flush=True)
     return False
 
-def build_default_config(aiometadata_manifest=None):
+def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     """Builds our comprehensive Tamtaro All-Local Self-Hosted configuration dictionary."""
+    reachable = is_url_reachable if probe_services else lambda *args, **kwargs: True
     template_data = {}
     if os.path.exists(TEMPLATE_PATH):
         try:
@@ -624,6 +644,8 @@ def build_default_config(aiometadata_manifest=None):
             }
         }
     ]
+    if not all(os.environ.get(key) for key in ("USENET_HOST", "USENET_USER", "USENET_PASS")):
+        services = []
     if PREMIUMIZE_API_KEY:
         services.insert(0, {
             "id": "premiumize",
@@ -846,7 +868,9 @@ def build_default_config(aiometadata_manifest=None):
                 "DebridApiKey": debrid_services[0]["apiKey"],
                 "Languages": ["en"],
                 "Resolutions": ["4k", "1080p", "720p"],
-                "ShowCatalog": False
+                "ShowCatalog": False,
+                "Scrapers": ["magnetdl", "btdig"],
+                "IndexerScrapers": []
             }
             sootio_url = f"{SOOTIO_URL}/{urllib.parse.quote(json.dumps(sootio_cfg))}/manifest.json"
 
@@ -870,7 +894,7 @@ def build_default_config(aiometadata_manifest=None):
         if os.environ.get(env_key):
             subtitle_config[config_key] = os.environ[env_key]
     subtitle_url = "http://subsense:3100/manifest.json"
-    if len(subtitle_config) > 1 and is_url_reachable("http://subsense:3100/manifest.json", timeout=1.0):
+    if probe_services and len(subtitle_config) > 1 and reachable("http://subsense:3100/manifest.json", timeout=1.0):
         try:
             encrypted = make_request("http://subsense:3100/api/config/encrypt", method="POST", data={"config": subtitle_config})
             if isinstance(encrypted, dict) and encrypted.get("encrypted"):
@@ -890,7 +914,7 @@ def build_default_config(aiometadata_manifest=None):
             validated_presets.append(p)
         elif ptype == "mediafusion":
             opts["useCachedResultsOnly"] = True
-            if is_url_reachable(f"{MEDIAFUSION_URL}/manifest.json", timeout=1.0):
+            if reachable(f"{MEDIAFUSION_URL}/manifest.json", timeout=1.0):
                 p["enabled"] = True
                 print(f"[AIOStreams Setup] ✓ MediaFusion (Local) is online and active.", flush=True)
             else:
@@ -904,7 +928,13 @@ def build_default_config(aiometadata_manifest=None):
             curr_timeout = int(opts.get("timeout") or 7000)
             if curr_timeout < 20000:
                 opts["timeout"] = 20000
-            validated_presets.append(p)
+            manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
+            if reachable(manifest_url, timeout=1.0):
+                p["enabled"] = True
+                print("[AIOStreams Setup] ✓ Comet (Local) is online and active.", flush=True)
+                validated_presets.append(p)
+            else:
+                print("[AIOStreams Setup] ℹ️ Comet not active in current profile; preset disabled.", flush=True)
         elif ptype in ("knaben", "stremthruTorz"):
             p["enabled"] = False
             curr_timeout = int(opts.get("timeout") or 7000)
@@ -921,7 +951,7 @@ def build_default_config(aiometadata_manifest=None):
                 curr_timeout = int(opts.get("timeout") or 7000)
                 if curr_timeout < 20000:
                     opts["timeout"] = 20000
-                if is_url_reachable(sootio_url, timeout=1.0):
+                if reachable(sootio_url, timeout=1.0) and os.environ.get("ENABLE_EXTENDED_SCRAPERS", "false").lower() == "true":
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Sootio (Local) is online and active.", flush=True)
                     validated_presets.append(p)
@@ -930,7 +960,7 @@ def build_default_config(aiometadata_manifest=None):
             elif aiometadata_manifest and (pid == "aiometadata-local" or ("aiometadata" in pid)):
                 opts["manifestUrl"] = aiometadata_manifest
                 opts["resources"] = ["catalog", "meta"]
-                if is_url_reachable(aiometadata_manifest, timeout=1.0):
+                if reachable(aiometadata_manifest, timeout=1.0):
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ AIOMetadata (Local) is online and active: {aiometadata_manifest}", flush=True)
                     validated_presets.append(p)
@@ -939,7 +969,7 @@ def build_default_config(aiometadata_manifest=None):
             elif pid == "subsense-local":
                 opts["manifestUrl"] = subtitle_url
                 opts["resources"] = ["subtitles"]
-                if is_url_reachable(subtitle_url, timeout=1.0):
+                if reachable(subtitle_url, timeout=1.0):
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ SubSense Subtitles (Local) is online and active.", flush=True)
                     validated_presets.append(p)
@@ -948,7 +978,7 @@ def build_default_config(aiometadata_manifest=None):
             elif pid == "debrid-search-local":
                 opts["resources"] = ["catalog", "stream"]
                 murl = opts.get("manifestUrl", "http://debrid-search:3011/manifest.json")
-                if is_url_reachable(murl, timeout=1.0):
+                if reachable(murl, timeout=1.0):
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Debrid Search (Local) is online and active.", flush=True)
                     validated_presets.append(p)
@@ -956,20 +986,15 @@ def build_default_config(aiometadata_manifest=None):
                     print(f"[AIOStreams Setup] ℹ️ Debrid Search not active in current profile; omitting from active presets.", flush=True)
             elif pid == "anime-kitsu-local":
                 murl = opts.get("manifestUrl", "http://anime-kitsu:7000/manifest.json")
-                if is_url_reachable(murl, timeout=1.0):
+                if reachable(murl, timeout=1.0):
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Anime Kitsu (Local) is online and active.", flush=True)
-                    validated_presets.append(p)
-                elif is_url_reachable("https://anime-kitsu.strem.fun/manifest.json", timeout=2.0):
-                    opts["manifestUrl"] = "https://anime-kitsu.strem.fun/manifest.json"
-                    p["enabled"] = True
-                    print(f"[AIOStreams Setup] ℹ️ Local anime-kitsu offline, falling back to public https://anime-kitsu.strem.fun/manifest.json", flush=True)
                     validated_presets.append(p)
                 else:
                     print(f"[AIOStreams Setup] ℹ️ Anime Kitsu not reachable; omitting from active presets.", flush=True)
             else:
                 murl = opts.get("manifestUrl")
-                if murl and is_url_reachable(murl, timeout=1.0):
+                if murl and reachable(murl, timeout=1.0):
                     print(f"[AIOStreams Setup] ✓ Custom addon '{pid}' ({murl}) is online and active.", flush=True)
                     validated_presets.append(p)
                 else:
@@ -982,9 +1007,16 @@ def build_default_config(aiometadata_manifest=None):
     # resolve and stream properly through AIOStreams over the single public port (3001)
     existing_proxy = base_config.get("proxy") if isinstance(base_config.get("proxy"), dict) else {}
     proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
+    proxy_host = urllib.parse.urlsplit(BASE_URL or "").hostname
+    proxy_is_public = bool(
+        proxy_host
+        and proxy_host not in ("localhost", "127.0.0.1", "aiostreams")
+        and "." in proxy_host
+        and not proxy_host.endswith((".local", ".lan"))
+    )
     config["proxy"] = {
         "id": existing_proxy.get("id") or "builtin",
-        "enabled": True,
+        "enabled": proxy_is_public,
         "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
         "credentials": proxy_creds
     }
@@ -1025,8 +1057,8 @@ def build_default_config(aiometadata_manifest=None):
 
     if TMDB_API_KEY:
         config["tmdbApiKey"] = TMDB_API_KEY
-    if TVDB_API_KEY:
-        config["tvdbApiKey"] = TVDB_API_KEY
+    # TVDB is consumed by AIOMetadata. Do not make AIOStreams registration
+    # depend on an optional TVDB endpoint or key being reachable.
 
     return config
 
@@ -1380,28 +1412,24 @@ def run_stream_diagnostics(config_info, aiometadata_manifest=None):
     else:
         print(f"[Test 4/5] Note on alias manifest (active after AIOStreams reload): {manifest}", flush=True)
 
-    # 5. Test Stream Resolution with Debrid on a Benchmark Title
-    benchmark_id = "tt1375666"  # Inception
-    print(f"[Test 5/5] Testing stream scraper resolution for movie '{benchmark_id}' (Inception)...", flush=True)
-    stream_res = make_request(f"{AIOSTREAMS_URL}/stremio/u/local/stream/movie/{benchmark_id}.json", timeout=25)
-    if (not isinstance(stream_res, dict) or "streams" not in stream_res) and uuid and enc:
-        # Fallback test with direct canonical path
-        stream_res = make_request(f"{AIOSTREAMS_URL}/stremio/{uuid}/{enc}/stream/movie/{benchmark_id}.json", timeout=25)
-
-    if isinstance(stream_res, dict) and "streams" in stream_res:
+    # 5. Test movie and episode stream resolution with the configured provider.
+    for kind, content_id, label in CORE_SMOKE_CASES:
+        print(f"[Test 5/6] Testing stream resolution for {label} '{content_id}'...", flush=True)
+        stream_res = make_request(
+            f"{AIOSTREAMS_URL}/stremio/u/local/stream/{kind}/{content_id}.json",
+            timeout=25,
+        )
+        if (not isinstance(stream_res, dict) or "streams" not in stream_res) and uuid and enc:
+            stream_res = make_request(
+                f"{AIOSTREAMS_URL}/stremio/{uuid}/{enc}/stream/{kind}/{content_id}.json",
+                timeout=25,
+            )
         streams = playable_streams(stream_res)
         if not streams:
-            print("[Test 5/5] No playable stream URLs resolved. Error/information entries do not count as playback success.", flush=True)
+            print(f"[Test 5/6] No playable {label} stream resolved.", flush=True)
             return False
-        print(f"[Test 5/5] Resolved {len(streams)} playable stream candidates (playback not tested).", flush=True)
-        for i, s in enumerate(streams[:3]):
-            name = s.get("name", "Unknown")
-            title = s.get("title", s.get("description", ""))
-            print(f"       [{i+1}] {name} -> {title.split(chr(10))[0]}", flush=True)
-        return True
-    else:
-        print("[Test 5/5] Stream lookup failed; inspect service logs.", flush=True)
-        return False
+        print(f"[Test 5/6] Resolved {len(streams)} playable {label} stream candidates.", flush=True)
+    return True
 
 
 def playable_streams(response):
@@ -1410,6 +1438,12 @@ def playable_streams(response):
     return [stream for stream in response.get("streams", [])
             if isinstance(stream, dict) and (stream.get("url") or stream.get("infoHash") or stream.get("ytId"))
             and stream.get("url", "").rstrip("/") != "https://comet.feels.legal"]
+
+
+CORE_SMOKE_CASES = (
+    ("movie", "tt1375666", "movie"),
+    ("series", "tt0903747:1:1", "episode"),
+)
 
 # ==============================================================================
 # MAIN WORKFLOW
@@ -1445,13 +1479,10 @@ def main():
     # 4. Posters+ & AIOMetadata (Tamtaro + Posters+)
     aiometadata_manifest = None
     try:
-        wait_for_postersplus()
-        wait_for_aiometadata()
-        aiometadata_manifest = setup_aiometadata_tamtaro()
+        aiometadata_manifest = setup_optional_metadata()
     except Exception as e:
         print(f"[AIOMetadata/Posters+ Setup] Error: {e}", flush=True)
-        if TMDB_API_KEY or TVDB_API_KEY:
-            return 1
+        print("[AIOMetadata/Posters+ Setup] ℹ️ Continuing with AIOStreams providers only.", flush=True)
 
     # 5. AIOStreams Default User & Addon Configuration (Tamtaro All-Local)
     config_info = {}

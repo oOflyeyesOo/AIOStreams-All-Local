@@ -21,6 +21,8 @@ services:
     working_dir: /app
     volumes:
       - ./:/app:ro
+      # Never let bootstrap imports read the operator's live credentials.
+      - ./.env.example:/app/.env:ro
     environment:
       - PYTHONDONTWRITEBYTECODE=1
     command: python3 -m unittest discover -s tests -v

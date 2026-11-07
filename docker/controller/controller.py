@@ -11,6 +11,7 @@ import threading
 from collections import deque
 
 ROOT = Path('/workspace')
+COMPOSE_FILE = os.environ.get('AIO_COMPOSE_FILE', 'docker-compose.yml')
 SOCKET = '/runtime/control.sock'
 LOCK = threading.Lock()
 JOB = {'status': 'idle', 'step': 'Ready to configure', 'logs': deque(maxlen=80), 'exit_code': None}
@@ -91,17 +92,30 @@ def apply():
     try:
         own = command_json(['docker', 'inspect', os.environ['HOSTNAME']])[0]
         project, host_root = project_identity(own)
-        compose = ['docker', 'compose', '-p', project, '--project-directory', str(ROOT), '-f', str(ROOT / 'docker-compose.yml')]
+        if COMPOSE_FILE not in ('docker-compose.yml', 'compose.manager.yml'):
+            raise RuntimeError('Unsupported Compose definition')
+        compose = ['docker', 'compose', '-p', project, '--project-directory', str(ROOT), '-f', str(ROOT / COMPOSE_FILE)]
         rendered = rewrite_mount_paths(command_json(compose + ['config', '--format', 'json']), host_root)
         descriptor, temporary = tempfile.mkstemp(suffix='.json')
         with os.fdopen(descriptor, 'w') as output:
             json.dump(rendered, output)
         run = ['docker', 'compose', '-p', project, '-f', temporary]
+        excluded = {'controller', 'stack-bootstrap'}
+        # The manager owns the portal's published port and image version. It also
+        # seeds the shared definition; replacing it here would race that write.
+        if COMPOSE_FILE == 'compose.manager.yml':
+            excluded.add('portal')
+        profiles = {'all'}
+        env_file = ROOT / '.env'
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.startswith('COMPOSE_PROFILES='):
+                    profiles = set(line.split('=', 1)[1].strip().strip("\"'").split(','))
         services = [name for name, service in rendered['services'].items()
-                    if name not in ('controller', 'stack-bootstrap') and not service.get('profiles')
+                    if name not in excluded and (not service.get('profiles') or profiles.intersection(service['profiles']))
                     and service.get('restart') != 'no']
         databases = [name for name in ('shared-postgres', 'shared-redis', 'mediafusion-mongo') if name in services]
-        up = ['up', '-d', '--no-deps', '--no-build', '--wait', '--wait-timeout', '180']
+        up = ['up', '-d', '--no-deps', '--no-build', '--wait', '--wait-timeout', '600']
         if databases:
             log_command(run + up + databases, 'Applying database settings')
         for initializer in ('init-postgres', 'init-configs'):

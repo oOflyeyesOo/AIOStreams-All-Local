@@ -17,6 +17,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
@@ -60,11 +61,38 @@ def get_project_root() -> Path:
     return cwd
 
 
+def postgres_container():
+    """Resolve only this Compose project's database; never a global container name."""
+    project = os.environ.get("AIO_PROJECT_NAME")
+    if project:
+        command = ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}",
+                   "--filter", "label=com.docker.compose.service=shared-postgres"]
+    else:
+        command = ["docker", "compose", "--project-directory", str(get_project_root()), "ps", "-q", "shared-postgres"]
+    result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=15)
+    containers = result.stdout.split()
+    if len(containers) != 1:
+        raise RuntimeError("Expected one database in this Compose project")
+    return containers[0]
+
+
+def copy_consistent(source, destination):
+    source, destination = Path(source), Path(destination)
+    with source.open("rb") as handle:
+        is_sqlite = handle.read(16) == b"SQLite format 3\x00"
+    if is_sqlite:
+        with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as db:
+            with sqlite3.connect(destination) as output:
+                db.backup(output)
+        return str(destination)
+    return shutil.copy2(source, destination)
+
+
 def dump_postgres(dump_file: Path) -> bool:
     """Attempt an atomic pg_dumpall from the shared-postgres container."""
     try:
         res = subprocess.run(
-            ["docker", "exec", "shared-postgres", "pg_dumpall", "-U", "postgres", "--clean"],
+            ["docker", "exec", postgres_container(), "pg_dumpall", "-U", "postgres", "--clean"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
@@ -85,7 +113,7 @@ def restore_postgres(dump_file: Path) -> bool:
             return False
         sql_data = dump_file.read_bytes()
         res = subprocess.run(
-            ["docker", "exec", "-i", "shared-postgres", "psql", "-U", "postgres", "-d", "postgres"],
+            ["docker", "exec", "-i", postgres_container(), "psql", "-U", "postgres", "-d", "postgres"],
             input=sql_data,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -153,10 +181,10 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
                 def filter_files(directory, contents):
                     # Filter out cache subdirs and shm/wal files
                     return [c for c in contents if c in EXCLUDE_PATTERNS or c.endswith(("-shm", "-wal"))]
-                shutil.copytree(src, dest, ignore=filter_files, dirs_exist_ok=True)
+                shutil.copytree(src, dest, ignore=filter_files, dirs_exist_ok=True, copy_function=copy_consistent)
             elif not is_dir and src.is_file():
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
+                copy_consistent(src, dest)
 
         # 4. Pack into tar.gz
         with tarfile.open(archive_path, "w:gz") as tar:
@@ -178,7 +206,14 @@ def restore_backup(archive_path: Path, root: Path = None) -> bool:
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         with tarfile.open(archive_path, "r:gz") as tar:
-            tar.extractall(tmp_path)
+            members = tar.getmembers()
+            for member in members:
+                target = (tmp_path / member.name).resolve()
+                if (not (member.isfile() or member.isdir())
+                        or (target != tmp_path and tmp_path not in target.parents)):
+                    print(f"[!] Error: Unsafe archive member: {member.name}", file=sys.stderr)
+                    return False
+            tar.extractall(tmp_path, members=members)
 
         # 1. Restore .env
         env_backup = tmp_path / ".env"

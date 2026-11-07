@@ -263,6 +263,75 @@ if (copyAiomBtn) {
   });
 }
 
+async function runOperations() {
+  const output = id => document.getElementById(id);
+  document.getElementById('run-diagnostics')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/api/diagnostics');
+      output('diagnostics-output').textContent = result.checks.map(item => `${item.status.toUpperCase()}: ${item.name} — ${item.detail}`).join('\n');
+    } catch (error) { output('diagnostics-output').textContent = error.message; }
+  });
+  document.getElementById('run-smoke-test')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/api/smoke-test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({kind:document.getElementById('smoke-kind').value, id:document.getElementById('smoke-id').value})});
+      output('smoke-output').textContent = JSON.stringify(result, null, 2);
+    } catch (error) { output('smoke-output').textContent = error.message; }
+  });
+  document.getElementById('validate-provider')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/api/validate-provider', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider:document.getElementById('provider-check').value, key:document.getElementById('provider-key').value})});
+      output('provider-output').textContent = `${result.status.toUpperCase()}: ${result.detail}`;
+      document.getElementById('provider-key').value = '';
+    } catch (error) { output('provider-output').textContent = error.message; }
+  });
+  document.getElementById('recommend-profile')?.addEventListener('click', async () => {
+    try { output('profile-output').textContent = JSON.stringify(await api('/api/profile-recommendation'), null, 2); }
+    catch (error) { output('profile-output').textContent = error.message; }
+  });
+  document.getElementById('generate-proxy')?.addEventListener('click', async () => {
+    try {
+      const format = document.getElementById('proxy-format').value;
+      const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(document.getElementById('base-url').value)}`);
+      output('proxy-output').textContent = response.ok ? await response.text() : `Server returned ${response.status}`;
+    } catch (error) { output('proxy-output').textContent = error.message; }
+  });
+  document.getElementById('show-update-plan')?.addEventListener('click', async () => {
+    try { output('update-output').textContent = JSON.stringify(await api('/api/update-plan'), null, 2); }
+    catch (error) { output('update-output').textContent = error.message; }
+  });
+  document.getElementById('export-config')?.addEventListener('click', async () => {
+    try {
+      const response = await api('/api/config-export');
+      const blob = new Blob([JSON.stringify(response, null, 2)], {type:'application/json'});
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-config-redacted.json'; link.click(); URL.revokeObjectURL(link.href);
+      output('config-output').textContent = 'Redacted configuration downloaded.';
+    } catch (error) { output('config-output').textContent = error.message; }
+  });
+  document.getElementById('export-profile')?.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/export-profile');
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      const blob = await response.blob();
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-optimized-profile.json'; link.click(); URL.revokeObjectURL(link.href);
+      output('config-output').textContent = 'Optimized profile downloaded.';
+    } catch (error) { output('config-output').textContent = error.message; }
+  });
+  document.getElementById('import-config')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0]; if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const values = data.values && typeof data.values === 'object' ? data.values : data;
+      for (const key of ['BASE_URL','AIOMETADATA_HOST','COMPOSE_PROFILES','TMDB_API_KEY','REALDEBRID_API_KEY','TORBOX_API_KEY','PREMIUMIZE_API_KEY','ALLDEBRID_API_KEY']) {
+        if (typeof data[key] === 'string') values[key] = data[key];
+      }
+      const result = await api('/api/config-import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({format:'aio-local-config-v1', values})});
+      output('config-output').textContent = `Imported ${result.updated.length} supported settings.`;
+      await loadSettings();
+    } catch (error) { output('config-output').textContent = error.message; }
+  });
+}
+
+runOperations();
 Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);

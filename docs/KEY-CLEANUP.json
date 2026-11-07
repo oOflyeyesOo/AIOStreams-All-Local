@@ -1,0 +1,17 @@
+{
+  "release_source_matches": [],
+  "reference_keys_available_for_check": 4,
+  "existing_installation_and_original_archive": "preserved at user request",
+  "history_action": "Supplied keys removed from affected commits and all three release tags; commit structure preserved",
+  "historical_findings_before_cleanup": [
+    "de8e4fd9287bb44b2396bb15bcf6861dc7123b5c:tests/benchmark_pathways.py",
+    "de8e4fd9287bb44b2396bb15bcf6861dc7123b5c:tests/check_all_services_e2e.py",
+    "cda55190707eaa4c8271e6c8ae5a0389d6dca41e:tests/benchmark_pathways.py",
+    "cda55190707eaa4c8271e6c8ae5a0389d6dca41e:tests/check_all_services_e2e.py",
+    "f0762872a79872f055c22fb157d7d15a3fec5ed1:tests/benchmark_pathways.py",
+    "f0762872a79872f055c22fb157d7d15a3fec5ed1:tests/check_all_services_e2e.py",
+    "72c5c20f0f069a9595b4971bb408f84ab887232d:tests/benchmark_pathways.py",
+    "72c5c20f0f069a9595b4971bb408f84ab887232d:tests/check_all_services_e2e.py"
+  ],
+  "local_history_matches": []
+}

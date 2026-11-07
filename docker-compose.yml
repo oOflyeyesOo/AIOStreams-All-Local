@@ -5,6 +5,106 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  stack-bootstrap:
+    image: python:3.11-alpine
+    container_name: stack-bootstrap
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: "no"
+    depends_on:
+      - aiostreams
+    volumes:
+      - ./init/bootstrap:/init:ro
+      - ./data/stremio-web:/data/stremio-web
+      - ./data/aiostreams:/data/aiostreams
+      - ./:/app
+      - ./templates/builtin:/templates/builtin:ro
+      - ./templates/aiometadata-configs:/templates/aiometadata-configs:ro
+    environment:
+      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
+      - FLARESOLVERR_URL=http://flaresolverr:8191
+      - MEDIAFUSION_URL=http://mediafusion:8000
+      - COMET_URL=http://comet:8000
+      - SOOTIO_URL=http://sootio:55771
+      - AIOSTREAMS_URL=http://aiostreams:3000
+      - STREMIO_WEB_URL=http://stremio-web:8080
+      - AIOMETADATA_URL=http://aiometadata:4005
+      - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
+      - POSTERSPLUS_URL=http://postersplus:8000
+      - BASE_URL=${BASE_URL:-http://localhost:3001}
+      - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
+      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
+      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
+      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
+      - TORBOX_API_KEY=${TORBOX_API_KEY}
+      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
+      - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
+      - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
+      - SEEDR_API_KEY=${SEEDR_API_KEY}
+      - USENET_HOST=${USENET_HOST}
+      - USENET_PORT=${USENET_PORT:-563}
+      - USENET_USER=${USENET_USER}
+      - USENET_PASS=${USENET_PASS}
+      - USENET_SSL=${USENET_SSL:-true}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - TVDB_API_KEY=${TVDB_API_KEY}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
+      - RPDB_API_KEY=${RPDB_API_KEY}
+      - FANART_API_KEY=${FANART_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    command: python3 -u /init/setup_stack.py
+    networks:
+      - stremio-net
+
+
+  stack-check:
+    profiles: ["test"]
+    image: python:3.11-alpine
+    volumes:
+      - ./init:/init:ro
+      - ./tests/check_stack.py:/check_stack.py:ro
+      - ./tests/check_streams.py:/check_streams.py:ro
+      - ./tests/check_playback.py:/check_playback.py:ro
+      - ./data/aiostreams:/app/data/aiostreams:ro
+    command: python3 /check_stack.py
+    networks:
+      - stremio-net
+
+  # ============================================================================
+  # 0. BUILT-IN WEB PORTAL & SETUP HUB (PORT 8088)
+  # ============================================================================
+
+  controller:
+    build:
+      context: .
+      dockerfile: docker/controller/Dockerfile
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: unless-stopped
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      - DOCKER_CONFIG=/tmp/docker-config
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ./:/workspace:ro
+      - control-socket:/runtime
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/runtime/control.sock'); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
   # ============================================================================
   # 0. BUILT-IN WEB PORTAL & SETUP HUB (PORT 8088)
   # ============================================================================
@@ -17,12 +117,15 @@ services:
       - "8088:8088"
     volumes:
       - ./:/app
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - control-socket:/runtime
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     working_dir: /app
     command: sh -c "apk add --no-cache docker-cli >/dev/null 2>&1; exec python3 -u /app/docker/all-in-one/portal_server.py"
     environment:
+      - AIO_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
+      - COMPOSE_CONTROL_SOCKET=/runtime/control.sock
       - AIOSTREAMS_URL=http://aiostreams:3000
-      - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
+      - ADDON_PASSWORD=${ADDON_PASSWORD:-}
       - BASE_URL=${BASE_URL:-}
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
@@ -42,6 +145,12 @@ services:
   aiostreams:
     image: ghcr.io/viren070/aiostreams:latest
     container_name: aiostreams
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "/app/scripts/healthcheck.js"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 5m
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${AIOSTREAMS_MEM_LIMIT:-512m}
@@ -95,7 +204,6 @@ services:
       - FANART_API_KEY=${FANART_API_KEY}
       - FETCH_TRAKT_ALIASES=true
       - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY}\nrealdebrid.apiKey=${REALDEBRID_API_KEY}\nalldebrid.apiKey=${ALLDEBRID_API_KEY}\ntorbox.apiKey=${TORBOX_API_KEY}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
-      - FORCED_SERVICE_CREDENTIALS=nzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
 
       # --- Community Templates & SEL Auto-Sync (Tam-Taro & Vidhin05) ---
       - TEMPLATE_URLS=${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}
@@ -129,19 +237,21 @@ services:
     profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: ${COMET_MEM_LIMIT:-512m}
+    mem_limit: ${COMET_MEM_LIMIT:-1024m}
     dns:
       - 1.1.1.1
       - 8.8.8.8
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/manifest.json')\" || exit 1"]
-      interval: 10s
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/manifest.json', timeout=3)"]
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 6
+      start_period: 10m
     environment:
+      # AIOStreams owns anime ID mapping; Comet receives normalized IMDb IDs.
+      - ANIME_MAPPING_ENABLED=false
       - FASTAPI_PORT=8000
       - DATABASE_PATH=/app/data/comet.db
       - ADMIN_DASHBOARD_PASSWORD=${ADDON_PASSWORD:-admin}
@@ -152,8 +262,8 @@ services:
       - INDEXER_MANAGER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-10}
       - SCRAPE_PROWLARR=true
       - SCRAPE_ZILEAN=true
-      - SCRAPE_NYAA=true
-      - SCRAPE_ANIMETOSHO=true
+      - SCRAPE_NYAA=false
+      - SCRAPE_ANIMETOSHO=false
       - ZILEAN_URL=http://zilean:8181
       - STREMTHRU_URL=http://stremthru:8080
       - TMDB_API_KEY=${TMDB_API_KEY}
@@ -198,7 +308,7 @@ services:
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
       - ZILEAN_URL=http://zilean:8181
       - IS_SCRAP_FROM_PROWLARR=${MEDIAFUSION_SCRAPE_PROWLARR:-false}
-      - IS_SCRAP_FROM_ZILEAN=true
+      - IS_SCRAP_FROM_ZILEAN=false
       - IS_SCRAP_FROM_TORRENTIO=false
       - IS_SCRAP_FROM_PUBLIC_INDEXERS=false
       - TMDB_API_KEY=${TMDB_API_KEY}
@@ -246,17 +356,17 @@ services:
       - LOG_LEVEL=info
       - TMDB_API_KEY=${TMDB_API_KEY}
       - TMDB_FALLBACK_ENABLED=true
-      - ZILEAN_ENABLED=true
+      - ZILEAN_ENABLED=false
+      - COMET_ENABLED=false
+      - TORRENTIO_ENABLED=false
+      - STREMTHRU_ENABLED=false
       - ZILEAN_URL=http://zilean:8181
       - ZILEAN_LIMIT=200
       - FLARESOLVERR_URL=http://flaresolverr:8191
       - FLARESOLVERR_MAX_CONCURRENT=2
-      - TORRENT_1337X_ENABLED=true
+      - TORRENT_1337X_ENABLED=false
       - BTDIG_ENABLED=true
       - MAGNETDL_ENABLED=true
-      - KNABEN_ENABLED=true
-      - EXTTO_ENABLED=true
-      - TORRENTDOWNLOAD_ENABLED=true
       - DEFAULT_DEBRID_SERVICE=${DEFAULT_DEBRID_SERVICE:-Premiumize}
       - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
       - RD_API_KEY=${REALDEBRID_API_KEY}
@@ -355,6 +465,7 @@ services:
           fi;
         fi;
         chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /debrid-search /postersplus /aiostreams 2>/dev/null || true;
+        if [ ! -f /stremio-web/localStorage.json ]; then echo '{}' > /stremio-web/localStorage.json; fi;
         if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;
       "
 
@@ -494,9 +605,9 @@ services:
       - STREMTHRU_FEATURE_DMM_HASHLIST=false
       - STREMTHRU_FEATURE_IMDB_TITLE=false
       - STREMTHRU_FEATURE_ANIME=false
-      - STREMTHRU_AUTH=
-      - STREMTHRU_PROXY_AUTH=
-      - STREMTHRU_AUTH_ADMIN=admin
+      - STREMTHRU_AUTH=${STREMTHRU_AUTH:-}
+      - STREMTHRU_PROXY_AUTH=${STREMTHRU_AUTH:-}
+      - STREMTHRU_AUTH_ADMIN=${ADDON_PASSWORD:-}
       - STREMTHRU_VAULT_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - STREMTHRU_REDIS_URI=redis://shared-redis:6379/3
       - STREMTHRU_DATABASE_URI=sqlite:///app/data/stremthru.db
@@ -610,7 +721,9 @@ services:
 
   # Anime Kitsu (TheBeastLT's anime catalog addon built directly from source)
   anime-kitsu:
-    build: https://github.com/TheBeastLT/stremio-kitsu-anime.git#master
+    build:
+      context: .
+      dockerfile: docker/anime-kitsu/Dockerfile
     container_name: anime-kitsu
     profiles: ["web", "all"]
     restart: unless-stopped
@@ -780,19 +893,6 @@ services:
     depends_on:
       - shared-redis
 
-  # Hidden Cinemeta (Self-hosted utility to hide or remove default Cinemeta catalogs from Stremio)
-  hidden-cinemeta:
-    build: ./docker/hidden-cinemeta
-    container_name: hidden-cinemeta
-    profiles: ["web", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: 128m
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:3000"
-    networks:
-      - stremio-net
-
   # ============================================================================
   # 7. WEB PLAYERS & STREAM CLIENTS (NUVIO & STREMIO WEB)
   # ============================================================================
@@ -822,16 +922,20 @@ services:
     image: tsaridas/stremio-docker:latest
     container_name: stremio-web
     profiles: ["web", "all"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
     restart: unless-stopped
-    logging: *default-logging
-    mem_limit: 256m
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8080"   # Stremio Web UI & Streaming Engine
     environment:
-      - AUTO_SERVER_URL=true
+      - AUTO_SERVER_URL=false
+    entrypoint: ["/bin/sh", "/aio-entrypoint.sh"]
     volumes:
       - ./data/stremio-web:/root/.stremio-server
-      - ./data/stremio-web/localStorage.json:/srv/stremio-server/build/localStorage.json
+      - ./data/stremio-web:/aio-config:ro
+      - ./docker/stremio-web/entrypoint.sh:/aio-entrypoint.sh:ro
+      - ./docker/stremio-web/bootstrap.js:/srv/stremio-server/build/aio-bootstrap.js:ro
     networks:
       - stremio-net
     depends_on:
@@ -950,3 +1054,6 @@ services:
 networks:
   stremio-net:
     driver: bridge
+
+volumes:
+  control-socket:

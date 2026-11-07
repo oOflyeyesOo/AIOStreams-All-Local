@@ -51,5 +51,5 @@ class ControllerTests(unittest.TestCase):
             arguments = call.args[0]
             if 'up' in arguments:
                 self.assertIn('--no-deps', arguments)
-                self.assertNotIn('controller', arguments[arguments.index('180') + 1:])
+                self.assertNotIn('controller', arguments[arguments.index('--wait-timeout') + 1 + 1:])
         self.assertEqual(controller.JOB['status'], 'complete')

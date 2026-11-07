@@ -5,6 +5,8 @@ import socket
 import sys
 import urllib.request
 
+from init.service_inventory import TCP_PORTS
+
 HTTP_CHECKS = {
     "portal": ("http://portal:8088/healthz", False),
     "aiostreams": ("http://aiostreams:3000/api/v1/status", False),
@@ -16,11 +18,12 @@ HTTP_CHECKS = {
     "prowlarr": ("http://prowlarr:9696/ping", False),
     "stremio-web": ("http://stremio-web:8080/", False),
 }
-TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379,
-              "stremthru": 8080, "mediaflow": 8888, "flaresolverr": 8191,
-              "subsense": 3100, "debrid-search": 3011, "postersplus": 8000,
-              "sootio": 55771, "slicksync": 3000, "nuvio": 3000, "zilean": 8181,
-              "hidden-cinemeta": 3000}
+TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
+    host: TCP_PORTS[host] for host in (
+        "stremthru", "mediaflow", "flaresolverr", "subsense", "debrid-search",
+        "postersplus", "sootio", "slicksync", "nuvio", "zilean",
+    )
+}}
 
 
 def check(name):

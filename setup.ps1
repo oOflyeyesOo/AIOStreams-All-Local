@@ -121,7 +121,6 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" },
         @{ Port = 4005; Service = "AIOMetadata" },
         @{ Port = 3100; Service = "SubSense Subtitles" },
-        @{ Port = 7015; Service = "Hidden Cinemeta" },
         @{ Port = 8085; Service = "Nuvio Web Player" },
         @{ Port = 8086; Service = "SlickSync (Nuvio & Stremio Hub)" },
         @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
@@ -242,7 +241,7 @@ function Invoke-CLIWizard {
     $prowlarrKey = if ($existingEnv.ContainsKey("PROWLARR_API_KEY") -and $existingEnv["PROWLARR_API_KEY"]) { $existingEnv["PROWLARR_API_KEY"] } else { "prow_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 16) }
     $stremthruAuth = if ($existingEnv.ContainsKey("STREMTHRU_AUTH") -and $existingEnv["STREMTHRU_AUTH"]) { $existingEnv["STREMTHRU_AUTH"] } else { "admin:" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
     $mediaflowPass = if ($existingEnv.ContainsKey("MEDIAFLOW_PASS") -and $existingEnv["MEDIAFLOW_PASS"]) { $existingEnv["MEDIAFLOW_PASS"] } else { "mf_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
-    $addonPassword = if ($existingEnv.ContainsKey("ADDON_PASSWORD") -and $existingEnv["ADDON_PASSWORD"]) { $existingEnv["ADDON_PASSWORD"] } else { "admin" }
+    $addonPassword = if ($existingEnv.ContainsKey("ADDON_PASSWORD") -and $existingEnv["ADDON_PASSWORD"]) { $existingEnv["ADDON_PASSWORD"] } else { "aio_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 24) }
     $postersKey = if ($existingEnv.ContainsKey("POSTERSPLUS_ACCESS_KEY") -and $existingEnv["POSTERSPLUS_ACCESS_KEY"]) { $existingEnv["POSTERSPLUS_ACCESS_KEY"] } else { $addonPassword }
     $adminEmail = if ($existingEnv.ContainsKey("ADMIN_EMAIL") -and $existingEnv["ADMIN_EMAIL"]) { $existingEnv["ADMIN_EMAIL"] } else { "admin@mediafusion.local" }
 
@@ -334,11 +333,29 @@ function Start-Stack {
             Write-Success "Generated unique cryptographic keys for SECRET_KEY, POSTGRES_PASSWORD, and PROWLARR_API_KEY."
         }
     }
+    $envLines = Get-Content $envPath
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    foreach ($key in @("SECRET_KEY", "POSTGRES_PASSWORD", "PROWLARR_API_KEY", "MEDIAFLOW_PASS", "STREMTHRU_AUTH", "POSTERSPLUS_ACCESS_KEY", "ADDON_PASSWORD")) {
+        $line = $envLines | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
+        $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
+        if ([string]::IsNullOrWhiteSpace($value) -or $value -eq "admin" -or $value -eq "postgres_supersecret_db_pass_2026" -or $value -eq "prowlarr_internal_secret_key_99" -or $value -eq "supersecretmediaflowpass") {
+            $bytes = New-Object byte[] 24
+            $rng.GetBytes($bytes)
+            $generated = -join ($bytes | ForEach-Object { "{0:x2}" -f $_ })
+            if ($line) {
+                $envLines = $envLines | ForEach-Object { if ($_ -match "^$key=") { "$key=$generated" } else { $_ } }
+            } else {
+                $envLines += "$key=$generated"
+            }
+        }
+    }
+    Set-Content -Path $envPath -Value $envLines -Encoding utf8
+    Write-Success "Internal credentials verified and missing values generated."
     if ($ComposeProfile) {
         Write-Info "Launching with profile: $ComposeProfile..."
         docker compose --profile $ComposeProfile up -d
     } else {
-        docker compose up -d
+        docker compose --profile all up -d
     }
     Write-Success "Docker stack start command completed."
     Show-StremioLinks
@@ -388,10 +405,10 @@ function Show-StremioLinks {
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"
     Write-Host "  • StremThru Proxy UI:    http://localhost:8080"
     Write-Host "  • MediaFlow Proxy:       http://localhost:8888"
-    Write-Host "  • Hidden Cinemeta:       http://localhost:7015"
+    Write-Host "  • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/"
 
-    Write-Host "`nCinemeta Removal (Hidden Cinemeta Local Utility):" -ForegroundColor Yellow
-    Write-Host "  1. Visit Local Hidden Cinemeta: http://localhost:7015"
+    Write-Host "`nCinemeta Removal (Optional external utility):" -ForegroundColor Yellow
+    Write-Host "  1. Visit Hidden Cinemeta: https://hidden-cinemeta.vercel.app/"
     Write-Host "     (Hosted Fallback: https://hidden-cinemeta.vercel.app/ | Source: https://github.com/Skarian/hidden-cinemeta)"
     Write-Host "  2. Input your Stremio AuthKey to hide Cinemeta's cloud catalogs."
     Write-Host "  3. AIOMetadata (:4005) serves as your primary local rich metadata & catalog provider."

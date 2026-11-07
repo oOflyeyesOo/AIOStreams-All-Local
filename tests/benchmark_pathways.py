@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Configuration & Secrets
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
-PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
+PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
@@ -428,6 +428,9 @@ def print_optimal_topology_analysis():
 
 
 if __name__ == "__main__":
+    if not PROWLARR_API_KEY or not PREMIUMIZE_API_KEY:
+        print("SKIPPED: set PROWLARR_API_KEY and PREMIUMIZE_API_KEY for benchmark checks.")
+        raise SystemExit(0)
     t_start = time.time()
     benchmark_prowlarr_pathways()
     benchmark_zilean_pathways()

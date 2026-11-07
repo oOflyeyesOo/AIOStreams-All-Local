@@ -12,6 +12,7 @@ import json
 import base64
 import urllib.parse
 import urllib.request
+import urllib.error
 import subprocess
 import hmac
 import pathlib
@@ -24,6 +25,7 @@ import threading
 import ipaddress
 import socket
 import http.client
+import platform
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
@@ -37,9 +39,16 @@ PORT = int(os.environ.get("PORTAL_PORT", "8088"))
 WEB_ROOT = os.environ.get("WEB_ROOT", "/app")
 ENV_PATH = os.path.join(WEB_ROOT, ".env")
 ENV_EXAMPLE_PATH = os.path.join(WEB_ROOT, ".env.example")
+APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
+if WEB_ROOT not in sys.path:
+    sys.path.insert(0, WEB_ROOT)
+from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
+AUTH_FAILURES = {}
+AUTH_FAILURE_WINDOW = 60
+AUTH_FAILURE_LIMIT = 10
 
 
 def control_request(method, path):
@@ -99,20 +108,6 @@ def launch_setup():
     return True
 
 
-INTEGRATIONS = [
-    ("AIOStreams", "aiostreams", 3000, "Core"), ("Comet", "comet", 8000, "Scrapers"),
-    ("MediaFusion", "mediafusion", 8000, "Scrapers"), ("Sootio", "sootio", 55771, "Scrapers"),
-    ("Prowlarr", "prowlarr", 9696, "Indexers"), ("FlareSolverr", "flaresolverr", 8191, "Indexers"),
-    ("Zilean", "zilean", 8181, "Indexers"), ("AIOMetadata", "aiometadata", 4005, "Metadata"),
-    ("Anime Kitsu", "anime-kitsu", 7000, "Metadata"), ("Posters+", "postersplus", 8000, "Metadata"),
-    ("SubSense", "subsense", 3100, "Subtitles"), ("Debrid Search", "debrid-search", 3011, "Library"),
-    ("InfiniDysk", "infinidysk", 3000, "Usenet"), ("StremThru", "stremthru", 8080, "Proxies"),
-    ("MediaFlow", "mediaflow", 8888, "Proxies"), ("Stremio Web", "stremio-web", 8080, "Players"),
-    ("Nuvio", "nuvio", 3000, "Players"), ("SlickSync", "slicksync", 3000, "Sync"),
-    ("Hidden Cinemeta", "hidden-cinemeta", 3000, "Metadata")
-]
-
-
 def probe_integration(item):
     import socket
     name, host, port, group = item
@@ -122,6 +117,148 @@ def probe_integration(item):
     except OSError:
         reachable = False
     return {"name": name, "group": group, "reachable": reachable}
+
+
+def read_saved_env():
+    values = {}
+    source = ENV_PATH if os.path.isfile(ENV_PATH) else ENV_EXAMPLE_PATH
+    if os.path.isfile(source):
+        with open(source, "r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    values[key.strip()] = value.strip().strip("\"'")
+    return values
+
+
+def diagnostics_snapshot():
+    env_vars = read_saved_env()
+    required_keys = ("BASE_URL", "TMDB_API_KEY")
+    provider_keys = (
+        "REALDEBRID_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY",
+        "PREMIUMIZE_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY",
+        "OFFCLOUD_API_KEY", "SEEDR_API_KEY",
+    )
+    configured = {key: bool(env_vars.get(key)) for key in required_keys + provider_keys}
+    checks = [
+        {"name": "portal", "status": "ready", "detail": "Portal process is responding"},
+        {"name": "configuration", "status": "ready" if all(configured[key] for key in required_keys) else "attention",
+         "detail": "Base URL and TMDB are configured" if all(configured[key] for key in required_keys)
+         else "BASE_URL and TMDB_API_KEY are required for the core path"},
+        {"name": "provider", "status": "ready" if any(configured[key] for key in provider_keys) else "attention",
+         "detail": "At least one debrid provider is configured" if any(configured[key] for key in provider_keys)
+         else "Configure one debrid provider API key"},
+    ]
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        integrations = list(pool.map(probe_integration, INTEGRATIONS))
+    reachable = sum(1 for item in integrations if item["reachable"])
+    checks.append({
+        "name": "integrations",
+        "status": "ready" if reachable else "attention",
+        "detail": f"{reachable}/{len(integrations)} application services reachable",
+    })
+    return {
+        "checks": checks,
+        "configuredKeys": sorted(key for key, value in configured.items() if value),
+        "integrations": integrations,
+        "setup": setup_snapshot(),
+    }
+
+
+PROVIDER_VALIDATORS = {
+    "tmdb": ("TMDB_API_KEY", "https://api.themoviedb.org/3/configuration?api_key={key}"),
+    "realdebrid": ("REALDEBRID_API_KEY", "https://api.real-debrid.com/rest/1.0/user"),
+    "premiumize": ("PREMIUMIZE_API_KEY", "https://www.premiumize.me/api/account/info?apikey={key}"),
+    "torbox": ("TORBOX_API_KEY", "https://api.torbox.app/v1/api/user/me?token={key}"),
+}
+
+
+def validate_provider(provider, key):
+    provider = str(provider or "").lower().strip()
+    if provider not in PROVIDER_VALIDATORS or not isinstance(key, str) or not key.strip():
+        return {"status": "invalid", "detail": "Choose a supported provider and enter a key."}
+    _, template = PROVIDER_VALIDATORS[provider]
+    request = urllib.request.Request(template.format(key=urllib.parse.quote(key.strip(), safe="")), headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            body = json.load(response)
+        valid = isinstance(body, dict) and not body.get("error") and not body.get("success") is False
+        return {"status": "valid" if valid else "rejected", "detail": "Provider accepted the credentials." if valid else "Provider rejected the credentials."}
+    except urllib.error.HTTPError as error:
+        return {"status": "rejected", "detail": f"Provider returned HTTP {error.code}."}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {"status": "unavailable", "detail": "Provider could not be reached for validation."}
+
+
+def run_smoke_test(kind, content_id):
+    kind = str(kind or "").lower()
+    content_id = str(content_id or "").strip()
+    if kind not in ("movie", "series") or not content_id:
+        return {"status": "invalid", "detail": "Use movie or series with a content ID."}
+    base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+    url = f"{base}/stremio/u/local/stream/{kind}/{urllib.parse.quote(content_id, safe='')}.json"
+    try:
+        with urllib.request.urlopen(url, timeout=12) as response:
+            payload = json.load(response)
+        streams = payload.get("streams", []) if isinstance(payload, dict) else []
+        playable = [item for item in streams if isinstance(item, dict) and (item.get("url") or item.get("infoHash")) and "error" not in str(item.get("title", "")).lower()]
+        return {"status": "pass" if playable else "attention", "kind": kind, "contentId": content_id, "streamCount": len(streams), "playableCount": len(playable)}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, urllib.error.URLError):
+        return {"status": "unavailable", "kind": kind, "contentId": content_id, "streamCount": 0, "playableCount": 0}
+
+
+def config_export():
+    env_vars = read_saved_env()
+    values = {
+        "BASE_URL": env_vars.get("BASE_URL", ""),
+        "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
+    }
+    return {
+        "format": "aio-local-config-v1",
+        "baseUrl": env_vars.get("BASE_URL", ""),
+        "profile": env_vars.get("COMPOSE_PROFILES", "all"),
+        "values": values,
+        "configuredKeys": sorted(key for key, value in env_vars.items() if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key)),
+        "secrets": {key: bool(value) for key, value in env_vars.items() if re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key)},
+    }
+
+
+def optimized_profile_export():
+    """Build the same local profile used by bootstrap for authenticated download."""
+    import importlib.util
+    path = os.path.join(WEB_ROOT, "init", "bootstrap", "setup_stack.py")
+    if not os.path.isfile(path):
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "init", "bootstrap", "setup_stack.py")
+    spec = importlib.util.spec_from_file_location("aio_profile_builder", path)
+    if not spec or not spec.loader:
+        raise RuntimeError("Profile builder is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {
+        "format": "aio-local-optimized-profile-v1",
+        "profile": "all",
+        "providerKeys": sorted(
+            key for key in ("REALDEBRID_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY",
+                            "PREMIUMIZE_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY",
+                            "OFFCLOUD_API_KEY", "SEEDR_API_KEY", "TMDB_API_KEY", "TVDB_API_KEY")
+            if os.environ.get(key) or read_saved_env().get(key)
+        ),
+        "config": module.build_default_config(probe_services=False),
+    }
+def proxy_config(kind, base_url):
+    base_url = normalize_base_url(base_url or "https://aio.yourdomain.com")
+    aiometa = derive_aiometadata_host(base_url)
+    hostname = urllib.parse.urlsplit(base_url).hostname or "aio.yourdomain.com"
+    if kind == "caddy":
+        return f"{base_url.replace('https://', '').replace('http://', '')} {{\n  reverse_proxy aiostreams:3000\n}}\n\n{aiometa.replace('https://', '').replace('http://', '')} {{\n  reverse_proxy aiometadata:4005\n}}"
+    if kind == "nginx":
+        return f"location / {{\n  proxy_pass http://aiostreams:3000;\n  proxy_set_header Host $host;\n  proxy_set_header X-Forwarded-Proto $scheme;\n  proxy_read_timeout 3600s;\n  proxy_buffering off;\n}}\n\n# AIOMetadata host: {aiometa}"
+    if kind == "traefik":
+        return f"labels:\n  - traefik.enable=true\n  - traefik.http.routers.aiostreams.rule=Host(`{hostname}`)\n  - traefik.http.services.aiostreams.loadbalancer.server.port=3000"
+    if kind == "cloudflare":
+        return f"tunnel: aio-local\ncredentials-file: /etc/cloudflared/credentials.json\n\ningress:\n  - hostname: {base_url.split('://', 1)[-1].split(':', 1)[0]}\n    service: http://aiostreams:3000\n  - hostname: {aiometa.split('://', 1)[-1].split(':', 1)[0]}\n    service: http://aiometadata:4005\n  - service: http_status:404"
+    raise ValueError("Unsupported proxy format")
 
 
 def save_env_updates(updates):
@@ -233,18 +370,38 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
+
+    def request_origin_is_local(self):
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        try:
+            return urllib.parse.urlsplit(origin).netloc.lower() == self.headers.get("Host", "").lower()
+        except ValueError:
+            return False
 
     def authorize(self):
         password = os.environ.get("ADDON_PASSWORD")
         if not password:
             self.send_error(503, "Portal password is not configured")
             return False
+        client = self.client_address[0]
+        now = time.monotonic()
+        recent = [stamp for stamp in AUTH_FAILURES.get(client, []) if now - stamp < AUTH_FAILURE_WINDOW]
+        if len(recent) >= AUTH_FAILURE_LIMIT:
+            self.send_error(429, "Too many authentication attempts")
+            return False
         expected = "Basic " + base64.b64encode(
             ("admin:" + password).encode()
         ).decode()
         if hmac.compare_digest(self.headers.get("Authorization", "").encode(), expected.encode()):
+            AUTH_FAILURES.pop(client, None)
             return True
+        recent.append(now)
+        AUTH_FAILURES[client] = recent
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="AIOStreams Portal"')
         self.end_headers()
@@ -269,6 +426,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         return super().send_head()
 
     def do_OPTIONS(self):
+        if not self.request_origin_is_local():
+            self.send_error(403, "Cross-origin requests are not allowed")
+            return
         self.send_response(200)
         self.end_headers()
 
@@ -277,9 +437,31 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         path = url_parts.path
 
         if path == "/healthz":
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
+            self.json_response({"status": "ok", "service": "portal"})
+            return
+        if path == "/version":
+            self.json_response({"version": APP_VERSION, "service": "aio-local-portal"})
+            return
+        if path == "/ready":
+            try:
+                base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+                with urllib.request.urlopen(base + "/api/v1/status", timeout=2):
+                    pass
+                self.json_response({"status": "ready", "dependencies": {"aiostreams": "ready"}})
+            except (OSError, ValueError, urllib.error.URLError):
+                self.json_response({"status": "starting", "dependencies": {"aiostreams": "unavailable"}}, 503)
+            return
+        if path == "/manifest-ready":
+            try:
+                base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+                manifest_url = base + "/stremio/u/local/manifest.json"
+                with urllib.request.urlopen(manifest_url, timeout=3) as response:
+                    manifest = json.load(response)
+                if not isinstance(manifest, dict) or not manifest.get("id") or not manifest.get("resources"):
+                    raise ValueError("Manifest is incomplete")
+                self.json_response({"status": "ready", "manifest": manifest.get("id")})
+            except (OSError, ValueError, TypeError, json.JSONDecodeError, urllib.error.URLError):
+                self.json_response({"status": "starting", "manifest": "unavailable"}, 503)
             return
         if (path.startswith("/api/") or path in ("/", "/index.html", "/dashboard", "/dashboard.html")) and not self.authorize():
             return
@@ -308,6 +490,50 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             with ThreadPoolExecutor(max_workers=10) as pool:
                 integrations = list(pool.map(probe_integration, INTEGRATIONS))
             self.json_response({"integrations": integrations})
+            return
+        if path == "/api/diagnostics":
+            self.json_response(diagnostics_snapshot())
+            return
+        if path == "/api/config-export":
+            self.json_response(config_export())
+            return
+        if path == "/api/export-profile":
+            try:
+                body = json.dumps(optimized_profile_export(), indent=2).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Disposition", 'attachment; filename="aio-local-optimized-profile.json"')
+                self.end_headers()
+                self.wfile.write(body)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                self.json_response({"error": "The optimized profile is not available yet."}, 503)
+            return
+        if path == "/api/profile-recommendation":
+            try:
+                memory_kb = int(next(line.split()[1] for line in open("/proc/meminfo", encoding="ascii") if line.startswith("MemTotal:")))
+            except (OSError, StopIteration, ValueError):
+                memory_kb = 0
+            memory_gb = memory_kb / 1024 / 1024
+            profile = "core" if memory_gb and memory_gb < 4 else "scrapers" if memory_gb < 8 else "all"
+            self.json_response({"recommendedProfile": profile, "memoryGb": round(memory_gb, 1), "cpuCount": os.cpu_count() or 1})
+            return
+        if path == "/api/update-plan":
+            self.json_response({"status": "manual-review", "commands": ["docker compose pull", "docker compose build --pull", "docker compose up -d"], "backupFirst": True, "rollback": "Restore the latest backup and redeploy the previous image tags."})
+            return
+        if path == "/api/proxy-config":
+            query = urllib.parse.parse_qs(url_parts.query)
+            try:
+                config = proxy_config(query.get("format", ["caddy"])[0], query.get("base_url", [""])[0])
+            except ValueError as error:
+                self.json_response({"error": str(error)}, 400)
+                return
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(config.encode())
+            except OSError:
+                return
             return
 
         # Route aliases
@@ -359,8 +585,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         path = url_parts.path
         if not self.authorize():
             return
-        origin = self.headers.get("Origin")
-        if origin and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host"):
+        if not self.request_origin_is_local():
             self.send_error(403, "Cross-origin configuration changes are not allowed")
             return
         if path == "/api/setup":
@@ -371,6 +596,48 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     self.json_response({"success": False, "message": "Setup is already running."}, 409)
             except (OSError, ValueError, RuntimeError):
                 self.json_response({"error": "Compose controller is unavailable. Check its container health."}, 503)
+            return
+        if path == "/api/validate-provider":
+            try:
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                self.json_response(validate_provider(payload.get("provider"), payload.get("key")))
+            except (json.JSONDecodeError, TypeError):
+                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            return
+        if path == "/api/smoke-test":
+            try:
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                self.json_response(run_smoke_test(payload.get("kind"), payload.get("id")))
+            except (json.JSONDecodeError, TypeError):
+                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            return
+        if path == "/api/config-import":
+            try:
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
+                    self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
+                    return
+                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
+                supplied = payload["values"]
+                unknown = sorted(key for key in supplied if key not in allowed)
+                if unknown:
+                    self.json_response({"error": f"Unsupported configuration keys: {', '.join(unknown)}"}, 400)
+                    return
+                if not supplied or any(not isinstance(value, str) or "\n" in value or "\r" in value or "$" in value for value in supplied.values()):
+                    self.json_response({"error": "Configuration values must be single-line strings without interpolation."}, 400)
+                    return
+                if "BASE_URL" in supplied:
+                    normalize_base_url(supplied["BASE_URL"])
+                if "COMPOSE_PROFILES" in supplied:
+                    profiles = {profile.strip() for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip()}
+                    if not profiles or not profiles.issubset({"core", "scrapers", "proxies", "web", "tunnel", "all"}):
+                        self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
+                        return
+                updates = supplied
+                save_env_updates(updates)
+                self.json_response({"success": True, "updated": sorted(updates)})
+            except (json.JSONDecodeError, TypeError, OSError, ValueError):
+                self.json_response({"error": "Configuration import failed validation."}, 400)
             return
 
         if path in ("/api/save-env", "/api/quick-setup", "/api/settings", "/api/env", "/api/save"):

@@ -13,10 +13,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ADDON_PASSWORD = os.environ.get("ADDON_PASSWORD", "admin")
+ADDON_PASSWORD = os.environ.get("ADDON_PASSWORD", "")
 PREMIUMIZE_API_KEY = os.environ.get("PREMIUMIZE_API_KEY", "")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
-PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
+PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 PORTAL_AUTH = base64.b64encode(f"admin:{ADDON_PASSWORD}".encode("utf-8")).decode("ascii")
 
 PASS_COUNT = 0
@@ -271,13 +271,6 @@ def test_anime_kitsu():
         record("14. Anime Kitsu Catalog", False, str(e))
 
 
-def test_hidden_cinemeta():
-    try:
-        with urllib.request.urlopen("http://hidden-cinemeta:3000/", timeout=5) as resp:
-            record("15. Hidden Cinemeta Catalog Cleaner", True, "Web application responsive (200 OK)")
-    except Exception as e:
-        record("15. Hidden Cinemeta Catalog Cleaner", False, str(e))
-
 
 def test_stremthru():
     try:
@@ -402,6 +395,9 @@ def main():
     print("   AIO STACK COMPREHENSIVE END-TO-END AUTOMATED VERIFICATION")
     print("=" * 70)
     start_time = time.time()
+    if not ADDON_PASSWORD or not PROWLARR_API_KEY or not PREMIUMIZE_API_KEY or not TMDB_API_KEY:
+        print("SKIPPED: set ADDON_PASSWORD, PROWLARR_API_KEY, PREMIUMIZE_API_KEY, and TMDB_API_KEY for live E2E checks.")
+        return
 
     test_postgres()
     test_redis()
@@ -417,7 +413,6 @@ def main():
     test_debrid_search()
     test_infinidysk()
     test_anime_kitsu()
-    test_hidden_cinemeta()
     test_stremthru()
     test_mediaflow()
     test_slicksync()

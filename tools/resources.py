@@ -2,12 +2,13 @@
 """
 AIO Local Stack Live Resource Monitor
 =====================================
-Monitors real-time CPU % and RAM usage across all 20+ containers in the
+Monitors real-time CPU % and RAM usage across all application containers in the
 AIOStreams self-hosted stack. Formats output cleanly for CLI dashboards
 and supplies structured JSON metrics for the Appliance Setup Portal.
 """
 
 import argparse
+import os
 import json
 import re
 import subprocess
@@ -56,7 +57,17 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
         "docker", "stats", "--no-stream",
         "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.PIDs}}"
     ]
+    project = os.environ.get("AIO_PROJECT_NAME") if filter_aio else None
     try:
+        if project:
+            listing = subprocess.run(["docker", "ps", "-q", "--filter",
+                                      f"label=com.docker.compose.project={project}"],
+                                     capture_output=True, text=True, check=True, timeout=12)
+            ids = listing.stdout.split()
+            if not ids:
+                return {"success": True, "containers": [], "container_count": 0,
+                        "total_mem_mb": 0, "total_cpu_percent": 0}
+            cmd.extend(ids)
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
         if res.returncode != 0:
             return {
@@ -82,7 +93,7 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
         if len(parts) < 5:
             continue
         c_name = parts[0].strip()
-        if filter_aio and c_name not in AIO_CONTAINERS and not c_name.startswith("aio-"):
+        if filter_aio and not project and c_name not in AIO_CONTAINERS and not c_name.startswith("aio-"):
             continue
 
         cpu_raw = parts[1].strip()

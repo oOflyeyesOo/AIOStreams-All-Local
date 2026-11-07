@@ -20,7 +20,6 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:8086"   # SlickSync Hub
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8082"   # Stremio Web Player
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:7015:7015"   # Hidden Cinemeta Catalog Stripper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
       - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"   # Debrid Search Provider

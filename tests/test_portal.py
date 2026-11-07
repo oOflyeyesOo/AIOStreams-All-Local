@@ -17,6 +17,125 @@ spec.loader.exec_module(portal)
 
 
 class PortalTests(unittest.TestCase):
+    def test_integration_probes_use_container_ports(self):
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 18)
+        expected = {
+            "anime-kitsu": 7000,
+            "postersplus": 8000,
+            "stremio-web": 8080,
+            "nuvio": 3000,
+            "slicksync": 3000,
+        }
+        actual = {host: port for _, host, port, _ in portal.INTEGRATIONS}
+        self.assertEqual({host: actual[host] for host in expected}, expected)
+
+    def test_diagnostics_redacts_provider_values(self):
+        with patch.object(portal, "probe_integration", return_value={
+            "name": "Comet", "group": "Scrapers", "reachable": True,
+        }), patch.object(portal, "read_saved_env", return_value={
+            "BASE_URL": "https://example.test",
+            "TMDB_API_KEY": "tmdb-secret",
+            "REALDEBRID_API_KEY": "provider-secret",
+        }):
+            status, body, _ = self.request("/api/diagnostics", auth=True)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode())
+        self.assertIn("TMDB_API_KEY", payload["configuredKeys"])
+        self.assertNotIn("tmdb-secret", body.decode())
+        self.assertEqual(payload["checks"][2]["status"], "ready")
+
+    def test_proxy_config_and_update_plan_are_safe(self):
+        status, body, _ = self.request("/api/proxy-config?format=traefik&base_url=https%3A%2F%2Faio.example.test", auth=True)
+        self.assertEqual(status, 200)
+        self.assertIn("Host(`aio.example.test`)", body.decode())
+        status, body, _ = self.request("/api/update-plan", auth=True)
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body.decode())["backupFirst"])
+
+    def test_provider_validation_does_not_persist_key(self):
+        with patch("urllib.request.urlopen", side_effect=OSError("offline")):
+            status, body, _ = self.request(
+                "/api/validate-provider", "POST",
+                {"provider": "tmdb", "key": "not-saved"}, auth=True,
+                headers={"Content-Type": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body.decode())["status"], "unavailable")
+
+    def test_smoke_test_reports_playable_streams(self):
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self: json.dumps({"streams": [{"url": "https://cdn.example.test/movie.mp4"}]}).encode(),
+        })()
+        with patch("urllib.request.urlopen", return_value=response):
+            status, body, _ = self.request(
+                "/api/smoke-test", "POST", {"kind": "movie", "id": "tt0133093"}, auth=True,
+                headers={"Content-Type": "application/json"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body.decode())["playableCount"], 1)
+
+    def test_config_export_contains_presence_only(self):
+        with patch.object(portal, "read_saved_env", return_value={"TMDB_API_KEY": "secret", "COMPOSE_PROFILES": "core"}):
+            status, body, _ = self.request("/api/config-export", auth=True)
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode())
+        self.assertTrue(payload["secrets"]["TMDB_API_KEY"])
+        self.assertEqual(payload["values"]["COMPOSE_PROFILES"], "core")
+        self.assertNotIn("tmdb-secret", body.decode())
+
+    def test_optimized_profile_export_uses_bootstrap_configuration(self):
+        with patch.object(portal, "WEB_ROOT", str(Path(__file__).resolve().parents[1])), \
+             patch("urllib.request.urlopen", side_effect=AssertionError("Export must not contact services")):
+            status, body, headers = self.request("/api/export-profile", auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Disposition"], 'attachment; filename="aio-local-optimized-profile.json"')
+        payload = json.loads(body.decode())
+        self.assertEqual(payload["format"], "aio-local-optimized-profile-v1")
+        self.assertIn("services", payload["config"])
+
+    def test_profile_export_failure_returns_one_error_response(self):
+        with patch.object(portal, "optimized_profile_export", side_effect=RuntimeError("unavailable")):
+            status, body, _ = self.request("/api/export-profile", auth=True)
+        self.assertEqual(status, 503)
+        self.assertEqual(json.loads(body)["error"], "The optimized profile is not available yet.")
+
+    def test_config_import_rejects_unsafe_or_unknown_values(self):
+        with patch.object(portal, "save_env_updates") as save:
+            status, body, _ = self.request(
+                "/api/config-import", "POST",
+                {"format": "aio-local-config-v1", "values": {"BASE_URL": "https://example.test\nBAD"}},
+                auth=True, headers={"Content-Type": "application/json"},
+            )
+        self.assertEqual(status, 400)
+        save.assert_not_called()
+        status, body, _ = self.request(
+            "/api/config-import", "POST",
+            {"format": "aio-local-config-v1", "values": {"NOT_ALLOWED": "x"}},
+            auth=True, headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 400)
+
+    def test_machine_readable_health_endpoints(self):
+        for path, expected in (("/healthz", "ok"), ("/version", portal.APP_VERSION)):
+            with self.subTest(path=path):
+                status, body, _ = self.request(path)
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body.decode())["status" if path == "/healthz" else "version"], expected)
+
+    def test_manifest_readiness_requires_valid_manifest(self):
+        manifest = {"id": "aio-local", "resources": [{"name": "stream"}]}
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self: json.dumps(manifest).encode(),
+        })()
+        with patch("urllib.request.urlopen", return_value=response):
+            status, body, _ = self.request("/manifest-ready")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body.decode())["manifest"], "aio-local")
+
     def test_server_address_normalization(self):
         for value, expected in (("nas", "http://nas:3000"), ("172.20.0.2", "http://172.20.0.2:3000"),
                                 ("172.200.1.2", "https://172.200.1.2"), ("[::1]", "http://[::1]:3000"),
@@ -165,6 +284,13 @@ class PortalTests(unittest.TestCase):
     def test_cross_origin_write_blocked(self):
         self.assertEqual(self.request("/api/save", "POST", {}, True,
                                       {"Origin": "https://untrusted.example"})[0], 403)
+
+    def test_authentication_rate_limit(self):
+        portal.AUTH_FAILURES.clear()
+        for _ in range(portal.AUTH_FAILURE_LIMIT):
+            self.assertEqual(self.request("/api/status")[0], 401)
+        self.assertEqual(self.request("/api/status")[0], 429)
+        portal.AUTH_FAILURES.clear()
 
     def test_no_wildcard_cors_or_cache(self):
         headers = self.request("/healthz")[2]

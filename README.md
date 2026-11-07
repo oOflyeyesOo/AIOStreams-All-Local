@@ -1,11 +1,11 @@
 # AIO Local
 
-[![Microservices](https://img.shields.io/badge/microservices-22%20active-success?logo=server&logoColor=white)](#-what-is-integrated)
-[![E2E Tests](https://img.shields.io/badge/e2e%20tests-23%2F23%20passing-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
+[![Microservices](https://img.shields.io/badge/microservices-18%20active-success?logo=server&logoColor=white)](#-what-is-integrated)
+[![E2E Tests](https://img.shields.io/badge/regression%20tests-77%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 22 bundled microservices together on your private Docker network (`stremio-net`), and copy your personalized manifest URLs directly into Stremio or any compatible player.
+A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 18 bundled application services together on your private Docker network (`stremio-net`), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
 The interface is a single page: keys, setup progress, dual manifest cards, and live service health together, with no multi-page wizard or complex configuration menus.
 
@@ -21,7 +21,7 @@ The interface is a single page: keys, setup progress, dual manifest cards, and l
 </p>
 
 ### 2. Live Integration Status (`:8088#integrations`)
-> All 22 bundled services grouped by purpose with real-time connection checks and database handshakes.
+> All bundled application services grouped by purpose with real-time connection checks and database handshakes.
 
 <p align="center">
   <img src="assets/integrations.png" alt="AIO Local integration status" width="100%">
@@ -93,11 +93,17 @@ flowchart LR
 
 ### 1. Launch the Stack
 ```sh
-docker compose up -d --build
+./setup.sh start
 ```
 
+The setup script creates `.env` and generates a unique portal password before
+starting Compose. For manual Compose usage, set `ADDON_PASSWORD` in `.env`
+first; the portal intentionally has no built-in password fallback.
+
 ### 2. Configure via Setup Portal
-Open **`http://YOUR-SERVER:8088`** and sign in with username `admin` and your `ADDON_PASSWORD` (default: `admin`).
+Open **`http://YOUR-SERVER:8088`** and sign in with username `admin` and your
+`ADDON_PASSWORD`. Fresh installs generate a random password; retrieve it from
+the generated `.env` file and change it during setup if desired.
 1. Set your server addresses:
    - **AIOStreams address**: `https://aio.yourdomain.com` (or `http://localhost:3001` for local play)
    - **AIOMetadata address**: `https://aiometa.yourdomain.com` (or `http://localhost:4005`)
@@ -106,6 +112,38 @@ Open **`http://YOUR-SERVER:8088`** and sign in with username `admin` and your `A
 4. Click **Connect my stack**.
 
 The portal automatically saves `.env` safely, provisions indexers and databases, configures AIOMetadata presets with Posters+, and activates the AIOStreams super-addon profile. Once complete, copy the manifest URLs directly into your player.
+
+After entering provider and metadata keys, use **Download optimized profile
+JSON** in the portal to retrieve the generated AIOStreams profile. This is the
+same optimized configuration used by bootstrap; the download is authenticated
+and contains the configured provider credentials, so keep it private.
+
+For monitoring and reverse-proxy health checks, the portal exposes:
+
+- `/healthz` — portal process is responding.
+- `/ready` — the AIOStreams dependency is responding.
+- `/manifest-ready` — the local AIOStreams manifest has an ID and stream resources.
+- `/api/diagnostics` — authenticated, credential-redacted core-path diagnostics.
+- `/version` — current portal version.
+
+### 3. Automation and maintenance commands
+
+The repository includes a portable `Makefile` for non-interactive validation and
+maintenance. These commands use the same Compose files as the Linux and
+Windows management scripts:
+
+```sh
+make validate
+make test
+make build
+make backup
+make restore ARCHIVE=/path/to/aio-backup.tar.gz
+make integrations       # report configured optional adapters without secrets
+make e2e                 # requires a running aio-portal container
+```
+
+Use `./setup.sh` or `setup.ps1` for interactive startup, profile selection,
+status, updates, resource monitoring, and cache cleanup.
 
 ---
 
@@ -119,10 +157,10 @@ Modular Docker Compose profiles allow you to run a lean, fast setup on low-resou
 | **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.5 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, FlareSolverr, Debrid-Search |
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + MediaFlow, StremThru, InfiniDysk Usenet Engine |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player, Nuvio Web Player, SlickSync Hub |
-| **`all`** (Default) | `docker compose up -d` | **~4.5 GB** | Full appliance with all 22 services active |
+| **`all`** (Default) | `docker compose up -d` | **~4.5 GB** | Full appliance with all 18 application services active |
 
 > [!TIP]
-> You can set your default profile in `.env` using `COMPOSE_PROFILES=core` (or `COMPOSE_PROFILES=all`), or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`.
+> The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
 
 ---
 
@@ -131,9 +169,9 @@ Modular Docker Compose profiles allow you to run a lean, fast setup on low-resou
 | Category | Bundled Services | Purpose |
 | :--- | :--- | :--- |
 | **Core Aggregator** | AIOStreams (`:3001`) | Super-addon aggregator, filtering engine, BuiltinProxy & Stremio manifest generator |
-| **Management** | AIO Portal (`:8088`) | Central setup wizard, dual manifest exporter, and live 19-service integration monitor |
+| **Management** | AIO Portal (`:8088`) | Central setup wizard, dual manifest exporter, and live 18-service integration monitor |
 | **Scrapers** | Comet (`:8000`), MediaFusion (`:8001`), Sootio (`:55771`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
-| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), FlareSolverr (`:8191`) | DMM hash cache (<100ms lookup), tracker manager pre-seeded with healthy indexers, and Cloudflare bypass |
+| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), FlareSolverr (`:8191`) | DMM hash cache (<100ms lookup), tracker manager with automatically provisioned public indexers, and Cloudflare bypass |
 | **Metadata & Artwork** | AIOMetadata (`:4005`), Posters+ (`:9039`), Anime Kitsu (`:7005`) | Rich streaming-provider catalogs (Netflix, Disney+, Apple TV+, Max, Prime), rating badges, and local anime metadata |
 | **Subtitles** | SubSense (`:3100`) | Multi-provider subtitle aggregator (OpenSubtitles, SubSource, SubDL, YIFY) with WARP routing |
 | **Personal Library** | Debrid Search (`:3011`) | Instant library search querying personal Real-Debrid / TorBox / Premiumize cloud cache |
@@ -141,6 +179,13 @@ Modular Docker Compose profiles allow you to run a lean, fast setup on low-resou
 | **Usenet Engine** | InfiniDysk (`:3005`) | High-throughput Usenet and WebDAV streaming engine |
 | **Web Players & Sync** | Nuvio Web (`:8085`), Stremio Web (`:8082`), SlickSync (`:8086`) | Modern web players, Trakt sync hub, collections builder, and addon sync |
 | **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean, MediaFusion, Comet, and AIOMetadata |
+
+The 18-service count covers application containers monitored by the portal.
+The portal itself, PostgreSQL, Redis, one-shot initialization jobs, and the
+optional Cloudflare Tunnel are infrastructure and are counted separately.
+Trakt, Simkl, AniList, Gemini, and the subtitle/debrid providers are adapters
+configured through the bundled AIOStreams, AIOMetadata, SlickSync, and
+SubSense services rather than additional containers.
 
 ---
 
@@ -155,7 +200,7 @@ docker compose -p aio-tests -f compose.test.yml run --rm browser-tests
 docker compose -p aio-tests -f compose.test.yml run --rm database-test
 docker compose -p aio-tests -f compose.test.yml down --volumes
 
-# 2. Comprehensive End-to-End Suite (Live queries, cache, scraper, and playback through all 22 services)
+# 2. Comprehensive End-to-End Suite (Live queries, cache, scraper, and playback through the full stack)
 docker exec aio-portal python3 /app/tests/check_all_services_e2e.py
 
 # 3. Remote Playback Probe (HTTP 206 Partial Content byte streaming via AIOStreams BuiltinProxy)
@@ -178,6 +223,15 @@ Keys remain in your local `.env`, service configuration, and Docker environment.
   ```
   Then open the portal and choose **Connect my stack** to re-verify manifests and refresh services.
 
+### Internet-facing deployment
+
+The portal requires `ADDON_PASSWORD` to be generated by `setup.sh` or supplied
+in `.env`; Compose no longer supplies the insecure `admin` fallback for the
+portal. Authentication failures are rate-limited, state-changing requests
+reject foreign origins, and portal responses disable caching and framing.
+Expose only ports 3001 and 4005 through a TLS reverse proxy or Cloudflare
+Tunnel; keep port 8088 restricted to the administration network.
+
 ---
 
 ## 🧩 Standalone Custom Stack Builder (Offline Tool)
@@ -186,3 +240,6 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Open [`tools/stack-builder/index.html`](tools/stack-builder/index.html) directly in any browser.
 * **100% client-side** and uncoupled from the rest of the running stack.
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
+
+
+Current validation: 77 regression tests, 21 internal endpoint checks, full image-only startup and portal apply, and 15-second movie/episode decode. See [release validation](docs/RELEASE-VALIDATION.md) for scope and remaining optional-integration limitations. Sootio is optional extended coverage; see [deployment options](DEPLOYMENT.md).

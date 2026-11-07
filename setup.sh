@@ -65,7 +65,7 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
-    local ports=(3000 3001 3011 8000 8001 8181 9696 8191 8080 8888 7005 4005 3100 7015 8085 8086 3005 8082 55771)
+    local ports=(3000 3001 3011 8000 8001 8181 9696 8191 8080 8888 7005 4005 3100 8085 8086 3005 8082 55771)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -92,12 +92,14 @@ start_stack() {
         echo -e "${YELLOW}[!] .env not found. Copying .env.example and generating unique security keys...${NC}"
         cp .env.example .env
         RAND_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || od -vN 32 -An -tx1 /dev/urandom | tr -d ' \n')
+        RAND_ADDON=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_PG=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_PROWLARR=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_MEDIAFLOW=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_POSTERS=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_STREMTHRU=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         sed -i "s|SECRET_KEY=e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09|SECRET_KEY=${RAND_SECRET}|" .env
+        sed -i "s|^ADDON_PASSWORD=.*|ADDON_PASSWORD=${RAND_ADDON}|" .env
         sed -i "s|POSTGRES_PASSWORD=postgres_supersecret_db_pass_2026|POSTGRES_PASSWORD=${RAND_PG}|" .env
         sed -i "s|PROWLARR_API_KEY=prowlarr_internal_secret_key_99|PROWLARR_API_KEY=${RAND_PROWLARR}|" .env
         sed -i "s|MEDIAFLOW_PASS=supersecretmediaflowpass|MEDIAFLOW_PASS=${RAND_MEDIAFLOW}|" .env
@@ -105,15 +107,38 @@ start_stack() {
         sed -i "s|STREMTHRU_PROXY_AUTH_PASSWORD=admin|STREMTHRU_PROXY_AUTH_PASSWORD=${RAND_STREMTHRU}|" .env
         echo -e "${GREEN}[✓] Generated unique cryptographic keys across all internal services.${NC}"
     fi
+    ensure_internal_secrets
 
     if [ -n "$profile" ]; then
         echo -e "${CYAN}[i] Launching with profile: ${profile}...${NC}"
         docker compose --profile "$profile" up -d
     else
-        docker compose up -d
+        docker compose --profile all up -d
     fi
     echo -e "${GREEN}[✓] Docker stack started.${NC}"
     show_links
+}
+
+ensure_internal_secrets() {
+    [ -f .env ] || return 1
+    local key current generated
+    for key in SECRET_KEY POSTGRES_PASSWORD PROWLARR_API_KEY MEDIAFLOW_PASS STREMTHRU_AUTH POSTERSPLUS_ACCESS_KEY; do
+        current=$(grep -E "^${key}=" .env | tail -1 | cut -d '=' -f2-)
+        if [ -z "$current" ] || [ "$current" = "admin" ] || [ "$current" = "postgres_supersecret_db_pass_2026" ] || [ "$current" = "prowlarr_internal_secret_key_99" ] || [ "$current" = "supersecretmediaflowpass" ]; then
+            generated=$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))")
+            if grep -qE "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${generated}|" .env
+            else
+                printf '%s=%s\n' "$key" "$generated" >> .env
+            fi
+        fi
+    done
+    current=$(grep -E '^ADDON_PASSWORD=' .env | tail -1 | cut -d '=' -f2-)
+    if [ -z "$current" ] || [ "$current" = "admin" ]; then
+        generated=$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))")
+        sed -i "s|^ADDON_PASSWORD=.*|ADDON_PASSWORD=${generated}|" .env
+    fi
+    echo -e "${GREEN}[✓] Internal credentials verified and missing values generated.${NC}"
 }
 
 stop_stack() {
@@ -156,10 +181,10 @@ show_links() {
     echo -e "  • Zilean Hash Cache:     http://localhost:8181"
     echo -e "  • StremThru Proxy UI:    http://localhost:8080"
     echo -e "  • MediaFlow Proxy:       http://localhost:8888"
-    echo -e "  • Hidden Cinemeta:       http://localhost:7015\n"
+    echo -e "  • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/\n"
 
-    echo -e "${YELLOW}Cinemeta Removal (Hidden Cinemeta Local Utility):${NC}"
-    echo -e "  1. Visit Local Hidden Cinemeta: http://localhost:7015"
+    echo -e "${YELLOW}Cinemeta Removal (Optional external utility):${NC}"
+    echo -e "  1. Visit Hidden Cinemeta: https://hidden-cinemeta.vercel.app/"
     echo -e "     (Hosted Fallback: https://hidden-cinemeta.vercel.app/ | Source: https://github.com/Skarian/hidden-cinemeta)"
     echo -e "  2. Input your Stremio AuthKey to hide Cinemeta's cloud catalogs."
     echo -e "  3. AIOMetadata (:4005) serves as your primary local rich metadata & catalog provider.\n"
@@ -181,7 +206,7 @@ cli_wizard() {
     local cur_rp=""
     local cur_md=""
     local cur_ge=""
-    local cur_pass="admin"
+    local cur_pass=""
     local cur_sec=""
     local cur_pg=""
     local cur_prowl=""
@@ -201,7 +226,7 @@ cli_wizard() {
         cur_rp=$(grep -E '^RPDB_API_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_md=$(grep -E '^MDBLIST_API_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_ge=$(grep -E '^GEMINI_API_KEY=' .env | cut -d '=' -f2- || echo "")
-        cur_pass=$(grep -E '^ADDON_PASSWORD=' .env | cut -d '=' -f2- || echo "admin")
+        cur_pass=$(grep -E '^ADDON_PASSWORD=' .env | cut -d '=' -f2- || echo "")
         cur_sec=$(grep -E '^SECRET_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_pg=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2- || echo "")
         cur_prowl=$(grep -E '^PROWLARR_API_KEY=' .env | cut -d '=' -f2- || echo "")
@@ -223,6 +248,7 @@ cli_wizard() {
 
     # Retain or generate random secrets
     [ -z "$cur_sec" ] && cur_sec=$(openssl rand -hex 32 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d '-')
+    [ -z "$cur_pass" ] || [ "$cur_pass" = "admin" ] && cur_pass=$(openssl rand -hex 24 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d '-')
     [ -z "$cur_pg" ] && cur_pg="pg_$(openssl rand -hex 12 2>/dev/null || date +%s%N)"
     [ -z "$cur_prowl" ] && cur_prowl="prow_$(openssl rand -hex 12 2>/dev/null || date +%s%N)"
     [ -z "$cur_strem" ] && cur_strem="admin:$(openssl rand -hex 8 2>/dev/null || date +%s)"

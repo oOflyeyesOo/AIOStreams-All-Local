@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,63 @@ spec.loader.exec_module(bootstrap)
 
 
 class BootstrapTests(unittest.TestCase):
+    def setUp(self):
+        # Unit tests model availability explicitly; DNS/network delays belong in E2E checks.
+        probe = patch.object(bootstrap, "is_url_reachable", return_value=True)
+        probe.start()
+        self.addCleanup(probe.stop)
+
+    def test_update_env_file_replaces_existing_key_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text("BASE_URL=http://old.example\nBASE_URL=http://duplicate.example\n", encoding="utf-8")
+            self.assertTrue(bootstrap.update_env_file(
+                "BASE_URL", "https://new.example", candidates=[str(env_path)]
+            ))
+            self.assertEqual(env_path.read_text(encoding="utf-8"), "BASE_URL=https://new.example\n")
+
+    def test_optional_metadata_is_skipped_when_dependencies_are_unavailable(self):
+        with patch.object(bootstrap, "wait_for_postersplus", return_value=False), \
+             patch.object(bootstrap, "wait_for_aiometadata") as wait_metadata, \
+             patch.object(bootstrap, "setup_aiometadata_tamtaro") as configure_metadata:
+            self.assertIsNone(bootstrap.setup_optional_metadata())
+        wait_metadata.assert_not_called()
+        configure_metadata.assert_not_called()
+
+    def test_optional_metadata_configures_only_after_both_dependencies_are_ready(self):
+        with patch.object(bootstrap, "wait_for_postersplus", return_value=True), \
+             patch.object(bootstrap, "wait_for_aiometadata", return_value=True), \
+             patch.object(bootstrap, "setup_aiometadata_tamtaro", return_value="http://aiometadata:4005/manifest.json") as configure_metadata:
+            self.assertEqual(
+                bootstrap.setup_optional_metadata(),
+                "http://aiometadata:4005/manifest.json",
+            )
+        configure_metadata.assert_called_once_with()
+
+    def test_prowlarr_indexer_setup_skips_existing_definitions(self):
+        schemas = [
+            {"definitionName": "1337x", "name": "1337x"},
+            {"definitionName": "yts", "name": "YTS"},
+        ]
+        requests = []
+
+        def request(url, method="GET", data=None, headers=None, timeout=12):
+            if url.endswith("/api/v1/indexer") and method == "GET":
+                return [{"definitionName": "1337x", "name": "Existing 1337x", "id": 7}]
+            if url.endswith("/api/v1/indexer/schema"):
+                return schemas
+            if method == "POST":
+                requests.append((url, data))
+                return {"id": 8}
+            raise AssertionError(f"Unexpected request: {method} {url}")
+
+        with patch.object(bootstrap, "make_request", side_effect=request):
+            with patch.object(bootstrap, "TARGET_INDEXERS", ["1337x", "yts"]):
+                bootstrap.setup_prowlarr_indexers()
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0][1]["definitionName"], "yts")
+
     def test_error_entries_are_not_playable(self):
         self.assertEqual(bootstrap.playable_streams({"streams": [{"name": "Error", "title": "Invalid Api Key"}]}), [])
         self.assertEqual(bootstrap.playable_streams({"streams": [{"url": "https://comet.feels.legal/", "title": "Invalid Api Key"}]}), [])
@@ -47,12 +105,18 @@ class BootstrapTests(unittest.TestCase):
         response = {"streams": [{"url": "https://example.org/video.mp4"}, {"infoHash": "hash"}, {"title": "Error"}]}
         self.assertEqual(len(bootstrap.playable_streams(response)), 2)
 
+    def test_core_smoke_cases_cover_movie_and_episode(self):
+        self.assertEqual(
+            bootstrap.CORE_SMOKE_CASES,
+            (("movie", "tt1375666", "movie"), ("series", "tt0903747:1:1", "episode")),
+        )
+
     def test_unreachable_custom_addons_omitted_from_presets_in_core_profile(self):
         # In core profile, debrid-search, sootio, etc. are not running.
         # Ensure build_default_config omits unreachable custom addons so AIOStreams
         # doesn't reject the profile with USER_INVALID_CONFIG.
         def mock_reachable(url, timeout=1.0):
-            return "comet" in url or "aiometadata" in url
+            return "aiometadata" in url
 
         with patch.object(bootstrap, "is_url_reachable", side_effect=mock_reachable):
             config = bootstrap.build_default_config(aiometadata_manifest="http://aiometadata:4005/stremio/test/manifest.json")
@@ -64,3 +128,19 @@ class BootstrapTests(unittest.TestCase):
             self.assertNotIn("debrid-search-local", preset_ids)
             self.assertNotIn("sootio-local", preset_ids)
             self.assertNotIn("anime-kitsu-local", preset_ids)
+            self.assertNotIn("comet-local", preset_ids)
+
+    def test_builtin_proxy_is_disabled_for_local_base_url(self):
+        with patch.object(bootstrap, "BASE_URL", "http://localhost:3001"):
+            config = bootstrap.build_default_config()
+        self.assertFalse(config["proxy"]["enabled"])
+
+    def test_builtin_proxy_is_enabled_for_public_base_url(self):
+        with patch.object(bootstrap, "BASE_URL", "https://aio.example.test"):
+            config = bootstrap.build_default_config()
+        self.assertTrue(config["proxy"]["enabled"])
+
+    def test_optional_tvdb_key_does_not_block_aiostreams_config(self):
+        with patch.object(bootstrap, "TVDB_API_KEY", "optional-tvdb-key"):
+            config = bootstrap.build_default_config()
+        self.assertNotEqual(config.get("tvdbApiKey"), "optional-tvdb-key")
