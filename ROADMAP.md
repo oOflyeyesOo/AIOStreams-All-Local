@@ -6,12 +6,12 @@ Copilot's original suggestions are retained in [docs/COPILOT-ROADMAP.md](docs/CO
 
 ## Verified baseline
 
-- [x] Source and prebuilt manager deployments; all eight packaged images published.
-- [x] Fresh image-only stack, 21 internal endpoint checks, and portal/controller apply.
+- [x] Source and prebuilt manager deployments; all nine packaged images published, plus the appliance image.
+- [x] Fresh image-only stack, 22 internal endpoint checks, and portal/controller apply; exact digest-pinned bundle also passed on a fresh Linux runner.
 - [x] Movie and episode HTTP range reads and 15-second media decode.
 - [x] Request tracing: default slow-source timeout removed; sampled repeated internal requests reuse cache without identical repeated upstream targets.
 - [x] Live fixture PostgreSQL backup/delete/restore, SQLite snapshots, Prowlarr backup coverage, fresh backup downloads and safe cache cleanup.
-- [x] Update failure handling in Bash and PowerShell; 89 regression tests and latest CI workflows passing.
+- [x] Update failure handling in Bash and PowerShell; 104 Python tests, eight browser checks and source release CI passing.
 - [x] Corrected OAuth client wiring and preservation of saved account links on repeated setup.
 - [x] Supplied keys removed from development copies, current release files and reachable Git history/tags. Original installation and original backup remain unchanged by explicit request.
 

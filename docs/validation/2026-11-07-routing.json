@@ -536,5 +536,24 @@
         }
       }
     ]
+  },
+  "decode": {
+    "scope": "retained installation, internal address override; process memory only; not browser/public playback",
+    "results": [
+      {
+        "case": "movie",
+        "decodeSeconds": 15,
+        "passed": true,
+        "exitCode": 0,
+        "wallSeconds": 6.565
+      },
+      {
+        "case": "series",
+        "decodeSeconds": 15,
+        "passed": true,
+        "exitCode": 0,
+        "wallSeconds": 10.215
+      }
+    ]
   }
 }

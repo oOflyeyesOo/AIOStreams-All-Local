@@ -80,8 +80,12 @@ URL.
 Movie and episode origin reads returned HTTP 206 and 1,024 media bytes, with TTFB
 1.343 s and 0.404 s. The original advertised public host is still the placeholder
 `aio.yourdomain.com`; these reads deliberately used the internal AIOStreams address.
-They do not validate public DNS, a tunnel, Stremio Web playback or media decoding.
-Earlier 15-second decode evidence remains recorded in the release validation.
+The range probes do not validate public DNS, a tunnel, Stremio Web playback or
+decoding. A separate fresh FFmpeg check in the retained web-player container decoded
+15 seconds of movie and episode audio/video successfully (exit 0), taking 6.565 s
+and 10.215 s respectively. Candidate URLs traveled only in process memory/stdin;
+no new credential-bearing candidate file was written. This used the same internal
+address override and does not establish browser codec compatibility or public access.
 StremThru and MediaFlow health endpoints passed; that alone is not transport playback.
 
 ## Tracing scope and repeatability

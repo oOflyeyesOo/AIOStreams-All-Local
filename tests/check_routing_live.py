@@ -83,6 +83,7 @@ try:
         assert cold['streams']>0,(ident,cold)
         warm=fetch(ident,kind)
         with ThreadPoolExecutor(max_workers=4) as pool:concurrent=list(pool.map(lambda _:fetch(ident,kind),range(4)))
+        assert warm['streams']>0 and all(item['streams']>0 for item in concurrent), 'Repeated fixture response lost streams'
         with lock:after={name:calls.count(name) for name in expected}
         assert after==expected,('Repeated upstream fixture calls',after)
         report.append({'case':kind+' '+ident,'cold':cold,'warm':warm,'concurrent4':concurrent,'upstreamCalls':after})
@@ -91,6 +92,8 @@ try:
     with lock:calls.clear()
     with ThreadPoolExecutor(max_workers=4) as pool:concurrent=list(pool.map(lambda _:fetch('fixture-concurrent-cold'),range(4)))
     with lock:observed={name:calls.count(name) for name in ('primary','fallback')}
+    assert observed=={'primary':1,'fallback':0}, ('Concurrent cold request duplication',observed)
+    assert all(item['streams']>0 for item in concurrent), 'Concurrent cold fixture response lost streams'
     report.append({'case':'simultaneous cold viewers','concurrent4':concurrent,'upstreamCalls':observed})
     print(json.dumps({'scope':'deterministic AIOStreams routing; no external providers','results':report},indent=2))
 finally:
