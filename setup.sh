@@ -211,6 +211,7 @@ cli_wizard() {
     local cur_pg=""
     local cur_prowl=""
     local cur_strem=""
+    local cur_posters=""
     local cur_mf=""
 
     if [ -f .env ]; then
@@ -226,6 +227,7 @@ cli_wizard() {
         cur_rp=$(grep -E '^RPDB_API_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_md=$(grep -E '^MDBLIST_API_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_ge=$(grep -E '^GEMINI_API_KEY=' .env | cut -d '=' -f2- || echo "")
+        cur_posters=$(grep -E '^POSTERSPLUS_ACCESS_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_pass=$(grep -E '^ADDON_PASSWORD=' .env | cut -d '=' -f2- || echo "")
         cur_sec=$(grep -E '^SECRET_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_pg=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2- || echo "")
@@ -275,7 +277,7 @@ ADDON_PASSWORD=${cur_pass}
 SECRET_KEY=${cur_sec}
 POSTGRES_PASSWORD=${cur_pg}
 PROWLARR_API_KEY=${cur_prowl}
-POSTERSPLUS_ACCESS_KEY=${cur_pass}
+POSTERSPLUS_ACCESS_KEY=${cur_posters:-$(openssl rand -hex 16)}
 ADMIN_EMAIL=admin@mediafusion.local
 STREMTHRU_AUTH=${cur_strem}
 MEDIAFLOW_PASS=${cur_mf}

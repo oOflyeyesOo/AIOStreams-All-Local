@@ -26,6 +26,7 @@ jobs:
           docker compose --env-file .env.example config --quiet
           docker compose --env-file .env.example -f docker-compose.aio.yml config --quiet
           docker compose --env-file .env.example -f compose.test.yml config --quiet
+          docker compose --env-file .env.example -f compose.tools.yml config --quiet
           for profile in core scrapers proxies web tunnel all; do
             docker compose --env-file .env.example --profile "$profile" config --quiet
           done

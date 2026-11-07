@@ -8,6 +8,7 @@ import urllib.request
 from init.service_inventory import TCP_PORTS
 
 HTTP_CHECKS = {
+    "search-broker": ("http://search-broker:8091/healthz", False),
     "portal": ("http://portal:8088/healthz", False),
     "aiostreams": ("http://aiostreams:3000/api/v1/status", False),
     "comet": ("http://comet:8000/manifest.json", True),

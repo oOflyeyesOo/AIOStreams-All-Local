@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/build-all-in-one.yml'
+      - 'docker/**'
+      - 'tools/**'
+      - 'init/**'
+      - 'templates/**'
+      - 'assets/**'
+      - 'index.html'
+      - 'dashboard.html'
+      - '.env.example'
+      - 'docker-compose.yml'
+      - 'setup.sh'
   workflow_dispatch:
 
 permissions:

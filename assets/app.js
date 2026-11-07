@@ -100,7 +100,7 @@ async function loadSettings() {
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
   const detectedServer = new URL(location.origin);
-  detectedServer.port = '3000';
+  detectedServer.port = '3001';
   const defaultBase = detectedServer.origin;
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;
@@ -185,12 +185,12 @@ async function pollSetup() {
     const running = job.status === 'running';
     document.getElementById('setup-button').disabled = running;
     document.getElementById('setup-button').firstElementChild.textContent = running ? 'Connecting your stack…' : 'Connect my stack';
-    if (job.status !== 'idle') setProgress(job.step, running ? 'Services are being configured. You can leave this page open.' : job.status === 'complete' ? 'Your local configuration is ready. Copy the manifests into your player.' : 'Review setup details below, check your keys, then try again.',running);
+    if (job.status !== 'idle') setProgress(job.status === 'complete' ? 'Manifest configuration saved' : job.step, running ? 'Services are being configured. You can leave this page open.' : job.status === 'complete' ? 'Manifest configuration saved. Check readiness below before testing playback.' : 'Review setup details below, check your keys, then try again.',running);
     document.getElementById('step-2').classList.toggle('active',running);
     document.getElementById('step-3').classList.toggle('active',job.status === 'complete');
     if (job.status === 'complete' && lastJobStatus !== 'complete') {
       await loadManifest(); await refreshServices();
-      notify('Your manifests are ready to copy.');
+      notify('Manifest configuration saved.');
     }
     lastJobStatus = job.status;
     if (running) pollTimer = setTimeout(pollSetup,1600);
@@ -271,7 +271,46 @@ if (copyAiomBtn) {
   });
 }
 
+async function refreshMaintenance() {
+  const state = await api('/api/maintenance');
+  document.getElementById('readiness-output').textContent = [
+    `Provider keys: ${state.readiness.providerConfigured ? 'configured' : 'missing'}`,
+    `Metadata key: ${state.readiness.metadataConfigured ? 'configured' : 'missing'}`,
+    'Authorization: run a provider check to test access',
+    'Playback: not verified by configuration alone',
+    state.security.defaultPassword ? 'Portal password: replace the default before remote access' : 'Portal password: configured'
+  ].join('\n');
+  const backup = state.backup;
+  document.getElementById('maintenance-output').textContent = [
+    `Release: ${state.release.release || 'not pinned'} (${state.release.status})`,
+    `Backup: ${backup.status}`,
+    backup.createdAt ? `Created: ${new Date(backup.createdAt).toLocaleString()}` : 'Make a backup before an upgrade.',
+    `PostgreSQL included: ${backup.postgresIncluded ? 'yes' : 'not confirmed'}`
+  ].join('\n');
+}
+
 async function runOperations() {
+  document.getElementById('refresh-maintenance')?.addEventListener('click', () => refreshMaintenance().catch(error=>notify(error.message)));
+  document.getElementById('refresh-resources')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/api/resources');
+      document.getElementById('resources-output').textContent = result.success ? `${result.container_count} containers\n${result.total_mem_gb} GB memory\n${result.total_cpu_percent}% CPU` : result.error;
+    } catch (error) { document.getElementById('resources-output').textContent = error.message; }
+  });
+  document.getElementById('refresh-search-status')?.addEventListener('click', async () => {
+    try { document.getElementById('search-status-output').textContent = JSON.stringify(await api('/api/search-status'), null, 2); }
+    catch (error) { document.getElementById('search-status-output').textContent = error.message; }
+  });
+  document.getElementById('clean-cache')?.addEventListener('click', async event => {
+    const button=event.currentTarget;
+    if (!confirm('Clear temporary cache? Stored profiles and databases will be kept.')) return;
+    button.disabled=true;
+    try {
+      const result=await api('/api/clean-cache',{method:'POST'});
+      document.getElementById('cache-output').textContent = result.success ? `Cleared ${result.freed_mb} MB.` : `Cleanup incomplete: ${(result.errors || []).join('; ')}`;
+    } catch(error) { document.getElementById('cache-output').textContent=error.message; }
+    finally { button.disabled=false; }
+  });
   const output = id => document.getElementById(id);
   document.getElementById('run-diagnostics')?.addEventListener('click', async () => {
     try {
@@ -340,7 +379,7 @@ async function runOperations() {
 }
 
 runOperations();
-Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup()]).then(results=>{
+Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup(),refreshMaintenance()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);
 });

@@ -8,6 +8,7 @@ data/
 data/*
 backups/
 backups/*
+.private-upgrades/
 
 # Logs and temporary files
 *.log

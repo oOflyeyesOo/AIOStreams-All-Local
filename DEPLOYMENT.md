@@ -25,10 +25,11 @@ describe where to paste the file. In Dockge, choose **Compose** to create a stac
 paste the same file, add environment values and deploy. Other Compose editors can
 use the same file; product-specific UI paths may differ.
 
-The Docker socket is required by the setup controller. It can control the host
-Docker engine, as described in [COMPOSE.md](COMPOSE.md). Only the controller mounts
-that socket; the portal talks to it through a separate local Unix socket. No
-privileged container or nested Docker daemon is needed for this deployment.
+The setup controller and portal maintenance tools mount the host Docker socket.
+Both therefore have Docker-engine control; the controller's restricted API does
+not remove that underlying access. Protect portal credentials and keep its port
+on a trusted network. See [COMPOSE.md](COMPOSE.md). No privileged container or
+nested Docker daemon is needed for this deployment.
 
 The controller applies settings to this Compose project only. Keep the project
 name stable. Change provider keys in the portal; a manager redeploy initially uses
@@ -40,7 +41,7 @@ the source deployment for custom Compose definitions.
 ## Image access and versions
 
 Images are built by [Build Docker manager images](../../actions/workflows/build-manager-images.yml)
-on pushes to `main`. Wait for **all eight builds** to succeed before installing a
+on relevant source pushes to `main`. Wait for **all nine builds** to succeed before installing a
 new revision. They are published under `ghcr.io/ooflyeyesoo/aio-local-*` with
 `latest` and full commit-SHA tags. Set `AIO_IMAGE_TAG` to a successful commit SHA to
 keep all packaged components on the same release. Upstream services still use
@@ -118,6 +119,6 @@ a Hidden Cinemeta server.
 
 Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_STREMIO_WEB`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
 
-The default request path uses Comet and MediaFusion. Set `ENABLE_EXTENDED_SCRAPERS=true` in the saved configuration before rerunning setup to include Sootio's slower direct sources. The container remains available with extended coverage disabled. This avoids starting repeated long-running Sootio calls for every normal lookup.
+The default request path uses Comet and MediaFusion plus the Debrid Search library. `SOOTIO_MODE=fallback` invokes Sootio sequentially only when primary sources have no cached streams. Use `off` to omit it or `parallel` to request it alongside primary sources, then rerun setup. See [timed routing validation](docs/ROUTING-VALIDATION.md).
 
 Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.

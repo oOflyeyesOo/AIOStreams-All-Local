@@ -6,7 +6,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGED = {
-    'portal': 'portal', 'controller': 'controller', 'aiostreams': 'aiostreams',
+    'search-broker': 'search-broker', 'portal': 'portal', 'controller': 'controller', 'aiostreams': 'aiostreams',
     'sootio': 'sootio', 'anime-kitsu': 'kitsu', 'stremio-web': 'stremio-web',
     'stack-bootstrap': 'bootstrap', 'stack-check': 'bootstrap', 'init-postgres': 'postgres-init',
 }

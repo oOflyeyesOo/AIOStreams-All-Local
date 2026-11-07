@@ -13,11 +13,12 @@ provisioner (`stack-bootstrap`) to configure Prowlarr indexers, MediaFusion admi
 credentials, Posters+ rating badges, AIOMetadata profiles, and the AIOStreams
 unified super-addon profile.
 
-### Zero Docker Socket Escalation
-Unlike legacy management systems that mount `/var/run/docker.sock` inside containers,
-this stack is designed with strict security isolation: **no container has access to
-the host Docker socket**. This completely eliminates container breakout and host takeover
-risks.
+### Docker-engine access
+The controller mounts the host Docker socket for setup; the portal also mounts it
+for backup, restore and maintenance. Either container has effective Docker-engine
+control. The controller exposes a restricted local setup API, but that does not
+reduce the power of its socket mount. Keep the portal authenticated and on a
+trusted network. Moving maintenance behind controller actions remains planned.
 
 ### Port Exposure & Firewall Protection
 By default, internal microservices (Comet, Prowlarr, MediaFusion, Sootio, Zilean,

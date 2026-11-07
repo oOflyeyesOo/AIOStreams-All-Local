@@ -79,6 +79,15 @@ class BackupTests(unittest.TestCase):
             self.assertFalse(backup.restore_backup(archive,target))
             self.assertEqual((source/'secret').read_text(),'preserve')
 
+    def test_offline_restore_removes_stale_sqlite_journals(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'snapshot.db';target=root/'restored.db'
+            with sqlite3.connect(source) as db:db.execute('CREATE TABLE sentinel(value text)')
+            for suffix in ('-wal','-shm','-journal'):target.with_name(target.name+suffix).write_bytes(b'stale')
+            backup.restore_file(source,target)
+            for suffix in ('-wal','-shm','-journal'):self.assertFalse(target.with_name(target.name+suffix).exists())
+            with sqlite3.connect(target) as db:self.assertEqual(db.execute('PRAGMA quick_check').fetchone()[0],'ok')
+
     def test_sqlite_snapshot_includes_live_wal_transaction(self):
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / "live.sqlite"

@@ -553,9 +553,13 @@ def setup_aiometadata_tamtaro():
     # Configure Posters+ Rating Poster Provider
     config["usePosterProxy"] = True
     config["posterRatingProvider"] = "customArt"
-    config["customPosterUrl"] = f"{POSTERSPLUS_URL}/poster/{{id}}"
+    poster_key = os.environ.get("POSTERSPLUS_ACCESS_KEY", "")
+    poster_url = f"{POSTERSPLUS_URL}/poster?stremio_id={{id}}"
+    if poster_key:
+        poster_url += '&access_key=' + urllib.parse.quote(poster_key, safe='')
+    config["customPosterUrl"] = poster_url
     config["enableRatingPostersForLibrary"] = True
-    config.setdefault("customArt", {})["posterUrl"] = f"{POSTERSPLUS_URL}/poster/{{id}}"
+    config.setdefault("customArt", {})["posterUrl"] = poster_url
     config["customArt"]["proxy"] = True
 
     # Register configuration in AIOMetadata
@@ -897,14 +901,23 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
         if os.environ.get(env_key):
             subtitle_config[config_key] = os.environ[env_key]
-    subtitle_url = "http://subsense:3100/manifest.json"
-    if probe_services and len(subtitle_config) > 1 and reachable("http://subsense:3100/manifest.json", timeout=1.0):
+    # SubSense serves subtitle resources only beneath a configuration segment.
+    subtitle_public = urllib.parse.quote(json.dumps({"languages": ["eng"]}), safe='')
+    subtitle_url = f"http://subsense:3100/{subtitle_public}/manifest.json"
+    if probe_services and reachable("http://subsense:3100/manifest.json", timeout=1.0):
         try:
             encrypted = make_request("http://subsense:3100/api/config/encrypt", method="POST", data={"config": subtitle_config})
             if isinstance(encrypted, dict) and encrypted.get("encrypted"):
                 subtitle_url = f"http://subsense:3100/{urllib.parse.quote(encrypted['encrypted'], safe='')}/manifest.json"
         except Exception as e:
             print(f"[AIOStreams Setup] Note encrypting subtitle config: {e}", flush=True)
+
+    sootio_mode = os.environ.get("SOOTIO_MODE")
+    if sootio_mode is None:
+        legacy = os.environ.get("ENABLE_EXTENDED_SCRAPERS")
+        sootio_mode = "off" if legacy == "false" else "fallback"
+    if sootio_mode not in ("off", "fallback", "parallel"):
+        raise ValueError("SOOTIO_MODE must be off, fallback or parallel")
 
     # Post-process presets: verify reachability for custom manifests to prevent
     # AIOStreams from rejecting the profile with USER_INVALID_CONFIG on partial/core profiles.
@@ -955,13 +968,16 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 curr_timeout = int(opts.get("timeout") or 7000)
                 if curr_timeout < 20000:
                     opts["timeout"] = 20000
-                if reachable(sootio_url, timeout=1.0) and os.environ.get("ENABLE_EXTENDED_SCRAPERS", "false").lower() == "true":
+                if reachable(sootio_url, timeout=1.0) and sootio_mode != "off":
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Sootio (Local) is online and active.", flush=True)
                     validated_presets.append(p)
                 else:
                     print(f"[AIOStreams Setup] ℹ️ Sootio not reachable in current profile; omitting from active presets.", flush=True)
-            elif aiometadata_manifest and (pid == "aiometadata-local" or ("aiometadata" in pid)):
+            elif pid == "aiometadata-local" or ("aiometadata" in pid):
+                if not aiometadata_manifest:
+                    print("[AIOStreams Setup] AIOMetadata has no saved profile; omitting its unconfigured manifest.", flush=True)
+                    continue
                 opts["manifestUrl"] = aiometadata_manifest
                 opts["resources"] = ["catalog", "meta"]
                 if reachable(aiometadata_manifest, timeout=1.0):
@@ -989,6 +1005,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 else:
                     print(f"[AIOStreams Setup] ℹ️ Debrid Search not active in current profile; omitting from active presets.", flush=True)
             elif pid == "anime-kitsu-local":
+                opts["resources"] = ["catalog", "meta"]
                 murl = opts.get("manifestUrl", "http://anime-kitsu:7000/manifest.json")
                 if reachable(murl, timeout=1.0):
                     p["enabled"] = True
@@ -1029,6 +1046,14 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config["addonDescription"] = "Unified all-in-one local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers."
     config["services"] = services
     config["presets"] = validated_presets
+    fallback = [p["instanceId"] for p in validated_presets if p.get("enabled") and p.get("instanceId") == "sootio-local"]
+    primary = [p["instanceId"] for p in validated_presets if p.get("enabled") and p.get("instanceId") not in fallback]
+    if fallback and primary and sootio_mode == "fallback":
+        config["groups"] = {"enabled": True, "behaviour": "sequential", "onConditionFailure": "stop",
+                            "groupings": [{"addons": primary, "condition": "true"},
+                                          {"addons": fallback, "condition": "count(cached(totalStreams)) == 0"}]}
+    else:
+        config.pop("groups", None)
 
     # Sanitize formatter to ensure compliance with AIOStreams schema
     if "formatter" in config and isinstance(config["formatter"], dict):

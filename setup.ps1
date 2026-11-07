@@ -242,7 +242,7 @@ function Invoke-CLIWizard {
     $stremthruAuth = if ($existingEnv.ContainsKey("STREMTHRU_AUTH") -and $existingEnv["STREMTHRU_AUTH"]) { $existingEnv["STREMTHRU_AUTH"] } else { "admin:" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
     $mediaflowPass = if ($existingEnv.ContainsKey("MEDIAFLOW_PASS") -and $existingEnv["MEDIAFLOW_PASS"]) { $existingEnv["MEDIAFLOW_PASS"] } else { "mf_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
     $addonPassword = if ($existingEnv.ContainsKey("ADDON_PASSWORD") -and $existingEnv["ADDON_PASSWORD"]) { $existingEnv["ADDON_PASSWORD"] } else { "aio_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 24) }
-    $postersKey = if ($existingEnv.ContainsKey("POSTERSPLUS_ACCESS_KEY") -and $existingEnv["POSTERSPLUS_ACCESS_KEY"]) { $existingEnv["POSTERSPLUS_ACCESS_KEY"] } else { $addonPassword }
+    $postersKey = if ($existingEnv.ContainsKey("POSTERSPLUS_ACCESS_KEY") -and $existingEnv["POSTERSPLUS_ACCESS_KEY"]) { $existingEnv["POSTERSPLUS_ACCESS_KEY"] } else { "posters_" + [System.Guid]::NewGuid().ToString("N") }
     $adminEmail = if ($existingEnv.ContainsKey("ADMIN_EMAIL") -and $existingEnv["ADMIN_EMAIL"]) { $existingEnv["ADMIN_EMAIL"] } else { "admin@mediafusion.local" }
 
     $pmKey = if ($existingEnv.ContainsKey("PREMIUMIZE_API_KEY")) { $existingEnv["PREMIUMIZE_API_KEY"] } else { "" }

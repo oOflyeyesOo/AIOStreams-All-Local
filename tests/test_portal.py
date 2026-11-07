@@ -191,6 +191,17 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status,405)
         clean.assert_not_called()
 
+    def test_maintenance_does_not_confuse_configured_keys_with_authorization(self):
+        with patch.object(portal,"read_saved_env",return_value={"PREMIUMIZE_API_KEY":"fixture-private","TMDB_API_KEY":"fixture-meta"}):
+            status,body,_=self.request('/api/maintenance',auth=True)
+        payload=json.loads(body)
+        self.assertEqual(status,200)
+        self.assertTrue(payload['readiness']['providerConfigured'])
+        self.assertEqual(payload['readiness']['authorization'],'not_tested')
+        self.assertEqual(payload['readiness']['playback'],'not_tested')
+        self.assertNotIn(b'fixture-private',body)
+        self.assertEqual(self.request('/api/maintenance',auth=False)[0],401)
+
     def test_public_health_and_pages(self):
         for path in ("/healthz", "/", "/dashboard", "/assets/test.png"):
             with self.subTest(path=path):

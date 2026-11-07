@@ -132,6 +132,26 @@ def read_saved_env():
     return values
 
 
+def maintenance_snapshot():
+    from tools.backup import latest_backup_status
+    from tools.release_manager import decode_lock
+    values=read_saved_env()
+    encoded=os.environ.get('AIO_RELEASE_LOCK_B64') or values.get('AIO_RELEASE_LOCK_B64')
+    release={'pinned':False,'release':None,'status':'Unpinned deployment'}
+    if encoded:
+        try:
+            lock=decode_lock(encoded)
+            release={'pinned':True,'release':lock['release'],'imageCount':len(lock['images']),
+                     'localOnly':bool(lock.get('localOnly')),'status':'Immutable image set'}
+        except (ValueError,TypeError):release['status']='Invalid release lock; fix before applying changes'
+    providers=('PREMIUMIZE_API_KEY','REALDEBRID_API_KEY','TORBOX_API_KEY','ALLDEBRID_API_KEY','DEBRIDLINK_API_KEY','EASYDEBRID_API_KEY')
+    return {'release':release,'backup':latest_backup_status(Path(WEB_ROOT)/'backups'),
+            'readiness':{'providerConfigured':any(values.get(key) for key in providers),
+                         'metadataConfigured':bool(values.get('TMDB_API_KEY')),
+                         'authorization':'not_tested','playback':'not_tested'},
+            'security':{'defaultPassword':(values.get('ADDON_PASSWORD') or os.environ.get('ADDON_PASSWORD','')) in ('','admin')}}
+
+
 def diagnostics_snapshot():
     env_vars = read_saved_env()
     required_keys = ("BASE_URL", "TMDB_API_KEY")
@@ -490,6 +510,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             with ThreadPoolExecutor(max_workers=10) as pool:
                 integrations = list(pool.map(probe_integration, INTEGRATIONS))
             self.json_response({"integrations": integrations})
+            return
+        if path == "/api/maintenance":
+            self.json_response(maintenance_snapshot())
+            return
+        if path == "/api/search-status":
+            try:
+                with urllib.request.urlopen('http://search-broker:8091/status',timeout=2) as response:
+                    self.json_response(json.load(response))
+            except (OSError,ValueError):self.json_response({'status':'unavailable'},503)
             return
         if path == "/api/diagnostics":
             self.json_response(diagnostics_snapshot())

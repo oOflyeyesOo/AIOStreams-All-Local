@@ -19,16 +19,16 @@ These checks do not establish every external integration as working. Real OAuth 
 
 ## Next milestones
 
-### 1. Reproducible releases and recoverable upgrades — next
+### 1. Reproducible releases and recoverable upgrades — implementation and acceptance
 
 **Outcome:** an operator can install a known version, upgrade it and recover without losing profiles or keys.
 
-- [ ] Publish a tested release manifest that pins packaged components and upstream images to a known set of versions/digests; avoid mixing independently changing `latest` images.
-- [ ] Add an update preview showing versions, downloads, migrations and required restarts.
-- [ ] Create and verify a backup before an upgrade; stop on backup, download, migration or readiness failure.
-- [ ] Test an upgrade and rollback between two actual release sets using named volumes and fixture accounts/data.
-- [ ] Document recovery for custom PostgreSQL roles, older archive formats and database migrations that cannot be reversed by changing an image tag.
-- [ ] Prevent documentation-only edits from rebuilding/publishing every image.
+- [x] Generate digest-pinned packaged/upstream release bundles; gate upload on startup, endpoint and actual-AIOStreams routing tests.
+- [x] Preview changed/removed images and require migration review; download sizes and automatic migration detection remain unavailable.
+- [x] Verify fresh SQL/configuration/profile backups before replacing services; stop on download, startup or controller failure.
+- [x] Exercise two immutable local fixture image sets: upgrade, snapshot rollback and injected failed-upgrade recovery preserve identity/data. Published-version migration compatibility remains a separate gate.
+- [x] Document custom-role, legacy archive and database migration limits in [release recovery](docs/IMMUTABLE-RELEASES.md).
+- [x] Exclude documentation-only changes from image build triggers.
 
 **Exit gate:** fresh install -> fixture data -> upgrade -> failed-upgrade recovery/rollback preserves stored data, provider configuration, profile identity and installed manifest URLs. Published image references resolve to the tested versions.
 
@@ -36,13 +36,13 @@ These checks do not establish every external integration as working. Real OAuth 
 
 **Outcome:** the single page explains what is ready and offers the next useful action.
 
-- [ ] Distinguish missing credentials, configured integration, successful authorization, service readiness and verified playback.
-- [ ] Surface resource use, backup status and safe cleanup controls on the existing page; keep optional integrations under advanced settings.
-- [ ] Show when the last backup succeeded and whether PostgreSQL was included; never present a partial backup as complete.
+- [x] Display missing/configured keys separately from reachable services; authorization/playback explicitly unverified until tested.
+- [x] Surface resource use, backup status, search activity and confirmed safe cleanup on the existing page.
+- [x] Show backup time, SQL coverage and partial/unverified state; upgrade requires saved-profile coverage too.
 - [ ] Guide users from tracking app credentials to the upstream account-connection screen, then show connected/disconnected status.
 - [ ] Audit first-run credentials and password rotation; remove default-password assumptions from installation instructions.
-- [ ] Audit Docker-engine access: the portal currently needs it for maintenance as well as the controller for setup. Correct documentation and evaluate moving maintenance behind narrow controller actions.
-- [ ] Refresh desktop/mobile screenshots using an empty or fixture configuration, with no live keys or personalized URLs.
+- [x] Correct Docker-engine access documentation: both portal and controller mount the socket. Moving maintenance behind narrower actions remains outstanding.
+- [x] Verify desktop/mobile maintenance layout and save fixture-only screenshots; eight browser regression checks pass.
 
 **Exit gate:** a new operator completes setup in one page, can identify a failed dependency and recover, and can download a current, clearly labeled backup. Browser tests cover errors, disabled actions and mobile layouts.
 
@@ -65,12 +65,12 @@ These checks do not establish every external integration as working. Real OAuth 
 
 **Outcome:** cold searches are bounded and repeated searches do not multiply background work.
 
-- [ ] Extend privacy-preserving traces to additional request edges; distinguish different search forms from exact duplicates.
+- [x] Add resource/caller-aware native-path trace listeners and bounded event storage; only instrumented edges establish call counts.
 - [ ] Investigate Prowlarr TV searches that continue after the player has already received a response.
-- [ ] Add cancellation, bounded concurrency and in-flight request coalescing where supported.
-- [ ] Evaluate cache-first discovery and selective fallback; keep slow direct scrapers opt-in unless measurements justify changing the default.
+- [x] Add bounded search admission, identical-request sharing, cache and failure cooldown; cancelling Prowlarr's server-side work remains outstanding.
+- [x] Validate sequential Sootio fallback in actual AIOStreams: cached primary skips it; empty/failed primary invokes it once. Explicit off/parallel modes remain available.
 - [ ] Measure cold/warm movie, episode and anime lookups, unavailable indexers, concurrent viewers and memory pressure on a documented reference host.
-- [ ] Set latency/resource budgets from those measurements and guard against regressions with deterministic fixtures.
+- [x] Record deterministic movie/episode/error/concurrent routing budgets and broker bounds in [routing validation](docs/ROUTING-VALIDATION.md). Full-host pressure budgets remain outstanding.
 
 **Exit gate:** a repeatable report shows cold/warm timings, request counts, cancelled work and peak memory. No claim of duplicate-free external traffic is made beyond the instrumented coverage.
 
@@ -95,4 +95,4 @@ These checks do not establish every external integration as working. Real OAuth 
 4. Attach regression coverage to concrete bugs and repeat live checks when the affected deployment path changes.
 5. Keep one generated manager definition aligned with source Compose; validate both in CI.
 
-**Recommended next work:** milestone 1, starting with a version-pinned release manifest and a disposable upgrade/rollback test. Continue OAuth/tunnel testing when dedicated test accounts are available.
+**Current acceptance:** [immutable release and recovery](docs/IMMUTABLE-RELEASES.md), [timed routing and limits](docs/ROUTING-VALIDATION.md). Finish the unchecked operator/authentication and cold-load gates before claiming milestones 1/2/4 universally complete. Continue OAuth/tunnel testing with dedicated accounts.

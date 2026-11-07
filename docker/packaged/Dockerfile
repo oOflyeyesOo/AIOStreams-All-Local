@@ -14,6 +14,7 @@ ENTRYPOINT ["python3", "-u", "/usr/local/lib/aio/entrypoint.py"]
 FROM docker:29-cli AS controller
 RUN apk add --no-cache python3
 COPY docker/controller/controller.py /controller.py
+COPY tools/release_manager.py /tools/release_manager.py
 ENTRYPOINT ["python3", "-u", "/controller.py"]
 
 FROM ghcr.io/viren070/aiostreams:latest AS aiostreams
@@ -36,3 +37,8 @@ COPY tests/check_stack.py tests/check_streams.py tests/check_playback.py /
 
 FROM postgres:16-alpine AS postgres-init
 COPY init/postgres/init-databases.sh /init-databases.sh
+
+FROM python:3.11-alpine AS search-broker
+COPY tools/search_broker.py /search_broker.py
+USER 65532:65532
+ENTRYPOINT ["python3", "-u", "/search_broker.py"]

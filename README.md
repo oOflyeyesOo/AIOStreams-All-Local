@@ -1,13 +1,15 @@
 # AIO Local
 
 [![Microservices](https://img.shields.io/badge/microservices-18%20active-success?logo=server&logoColor=white)](#-what-is-integrated)
-[![E2E Tests](https://img.shields.io/badge/regression%20tests-89%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
+[![Regression Tests](https://img.shields.io/badge/regression%20tests-104%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 18 bundled application services together on your private Docker network (`stremio-net`), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
-The interface is a single page: keys, setup progress, dual manifest cards, and live service health together, with no multi-page wizard or complex configuration menus.
+The interface is one page: keys, setup progress, the main AIOStreams manifest, an optional standalone metadata manifest, service health and maintenance. Installing both manifests can duplicate catalogs.
+
+For reproducible deployments, use the [digest-pinned release bundle and recovery guide](docs/IMMUTABLE-RELEASES.md). See the [request ownership map and timed routing results](docs/ROUTING-VALIDATION.md) for tested paths and limits.
 
 ---
 
@@ -36,9 +38,19 @@ The interface is a single page: keys, setup progress, dual manifest cards, and l
 
 ---
 
+### Readiness and maintenance
+
+Configuration, authorization and playback are labeled separately. Resource use,
+backup coverage, search activity and confirmed cache cleanup stay on the same page.
+These screenshots use a disposable stack with no provider keys.
+
+![Desktop maintenance](assets/maintenance-desktop.jpg)
+
+<img src="assets/maintenance-mobile.jpg" alt="Mobile maintenance with missing keys clearly labeled" width="390">
+
 ## 🔒 Remote Playback & Dual Subdomain Architecture
 
-This stack is architected with strict security isolation: **only two endpoints are exposed externally**, each mapped to a dedicated subdomain on your reverse proxy or Cloudflare Tunnel:
+For remote playback, route these two endpoints through your reverse proxy or tunnel. Keep the portal and other published dashboards on a trusted network, and review the actual Compose port bindings:
 1. **AIOStreams (`aio.yourdomain.com` ➔ Port 3001)**: Aggregates streams, queries local scrapers, proxies requests through `BuiltinProxy`, and handles Debrid CDN stream handoffs.
 2. **AIOMetadata (`aiometa.yourdomain.com` ➔ Port 4005)**: Serves rich catalogs (Netflix, Prime, Disney+, Apple TV+, Max, Anime) and poster artwork badges directly to players anywhere in the world.
 
@@ -242,4 +254,4 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
 
 
-Current validation: 89 regression tests, 21 internal endpoint checks, full image-only startup and portal apply, and 15-second movie/episode decode. See [release validation](docs/RELEASE-VALIDATION.md) for scope and remaining optional-integration limitations. Sootio is optional extended coverage; see [deployment options](DEPLOYMENT.md).
+Current validation: 104 Python regression tests and eight browser checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.

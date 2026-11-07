@@ -6,12 +6,16 @@ import json
 import hashlib
 import hmac
 import secrets
+import os
 import threading
 import time
 import urllib.parse
 
 TARGETS = {'comet':('comet',8000), 'sootio':('sootio',55771),
-           'mediafusion':('mediafusion',8000), 'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181)}
+           'mediafusion':('mediafusion',8000), 'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181),
+           'aiometadata':('aiometadata',4005), 'subsense':('subsense',3100),
+           'anime-kitsu':('anime-kitsu',7000), 'postersplus':('postersplus',8000),
+           'debrid-search':('debrid-search',3011), 'search-broker':('search-broker',8091)}
 LOCK = threading.Lock()
 EVENTS = []
 FINGERPRINT_KEY = secrets.token_bytes(32)
@@ -27,14 +31,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if self.path.endswith('reset'): EVENTS.clear()
                 body=json.dumps(list(EVENTS)).encode()
             self.send_response(200); self.send_header('Content-Length',str(len(body))); self.end_headers();self.wfile.write(body);return
-        service, _, rest=self.path.lstrip('/').partition('/')
+        edge=getattr(self.server,'trace_edge',None)
+        if edge:
+            service=edge['service'];path=self.path
+        else:
+            service, _, rest=self.path.lstrip('/').partition('/');path='/'+rest
         if service not in TARGETS: self.send_error(404);return
-        path='/'+rest
         clean=urllib.parse.urlsplit(path).path
         category=next((name for name in ('stream','manifest','catalog','meta','subtitles') if '/'+name+'/' in clean or clean.endswith('/'+name+'.json')), 'api')
         started=time.monotonic();status=502
         event={'service':service,'resource':category,'method':self.command,'status':None,'seconds':None,'finished':False,'requestFingerprint':hmac.new(FINGERPRINT_KEY,(self.command+' '+service+' '+path).encode(),hashlib.sha256).hexdigest()[:24]}
-        with LOCK: EVENTS.append(event)
+        if edge:event['caller']=edge['caller']
+        with LOCK:
+            if len(EVENTS)>=10000:del EVENTS[:1000]
+            EVENTS.append(event)
         connection=http.client.HTTPConnection(*TARGETS[service],timeout=150)
         try:
             length=int(self.headers.get('Content-Length','0'))
@@ -54,4 +64,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             connection.close()
             with LOCK: event.update(status=status,seconds=round(time.monotonic()-started,3),finished=True)
 
-if __name__=='__main__': http.server.ThreadingHTTPServer(('0.0.0.0',8090),Handler).serve_forever()
+if __name__=='__main__':
+    # Separate internal listeners preserve native addon paths and attribute callers.
+    # Example: [{"port":8101,"service":"comet","caller":"aiostreams"}]
+    for edge in json.loads(os.environ.get('TRACE_EDGES_JSON','[]')):
+        if edge['service'] not in TARGETS or not str(edge['caller']).replace('-','').isalnum():
+            raise ValueError('Invalid trace edge')
+        server=http.server.ThreadingHTTPServer(('0.0.0.0',int(edge['port'])),Handler)
+        server.trace_edge=edge
+        threading.Thread(target=server.serve_forever,daemon=True).start()
+    http.server.ThreadingHTTPServer(('0.0.0.0',8090),Handler).serve_forever()

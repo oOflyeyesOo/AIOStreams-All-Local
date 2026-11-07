@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 from collections import deque
+from tools.release_manager import apply_images, decode_lock
 
 ROOT = Path('/workspace')
 COMPOSE_FILE = os.environ.get('AIO_COMPOSE_FILE', 'docker-compose.yml')
@@ -61,7 +62,7 @@ def redact(line):
     try:
         for entry in (ROOT / '.env').read_text().splitlines():
             key, separator, value = entry.partition('=')
-            if separator and len(value) >= 6 and any(item in key for item in ('KEY', 'PASSWORD', 'TOKEN', 'ENCRYPTED')):
+            if separator and len(value) >= 6 and any(item in key for item in ('KEY', 'PASSWORD', 'TOKEN', 'ENCRYPTED', 'SECRET')):
                 line = line.replace(value, '[REDACTED]')
     except OSError:
         pass
@@ -95,7 +96,13 @@ def apply():
         if COMPOSE_FILE not in ('docker-compose.yml', 'compose.manager.yml'):
             raise RuntimeError('Unsupported Compose definition')
         compose = ['docker', 'compose', '-p', project, '--project-directory', str(ROOT), '-f', str(ROOT / COMPOSE_FILE)]
-        rendered = rewrite_mount_paths(command_json(compose + ['config', '--format', 'json']), host_root)
+        rendered = rewrite_mount_paths(command_json(compose + ['--profile', '*', 'config', '--format', 'json']), host_root)
+        release_value = os.environ.get('AIO_RELEASE_LOCK_B64', '')
+        if not release_value and (ROOT / '.env').exists():
+            release_value = next((line.split('=', 1)[1].strip() for line in (ROOT / '.env').read_text().splitlines()
+                                  if line.startswith('AIO_RELEASE_LOCK_B64=')), '')
+        if release_value:
+            rendered = apply_images(rendered, decode_lock(release_value))
         descriptor, temporary = tempfile.mkstemp(suffix='.json')
         with os.fdopen(descriptor, 'w') as output:
             json.dump(rendered, output)

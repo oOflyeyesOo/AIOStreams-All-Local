@@ -13,9 +13,10 @@ Pass --include-cache to include heavy proxy scrape caches (e.g. stremthru.db).
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import json
+import hashlib
 from pathlib import Path
 import shutil
 import sqlite3
@@ -211,7 +212,45 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
         finally:
             Path(pending).unlink(missing_ok=True)
 
+    digest=hashlib.sha256()
+    with archive_path.open('rb') as source:
+        for chunk in iter(lambda:source.read(1024*1024),b''):digest.update(chunk)
+    with tarfile.open(archive_path,'r:gz') as archive:
+        members={m.name:m.size for m in archive.getmembers()}
+    profile_ok=all(members.get('data/aiostreams/'+item,0)>0 for item in ('db.sqlite','aiostreams_install.json'))
+    status={'archive':archive_path.name,'createdAt':datetime.now(timezone.utc).isoformat(),
+            'sizeBytes':archive_path.stat().st_size,'sha256':digest.hexdigest(),
+            'postgresIncluded':pg_ok,'configurationIncluded':env_file.is_file(),
+            'profileIncluded':profile_ok,'complete':bool(pg_ok and env_file.is_file() and profile_ok)}
+    descriptor, pending = tempfile.mkstemp(prefix='.backup-status-',dir=output_dir)
+    try:
+        with os.fdopen(descriptor,'w',encoding='utf-8') as output:json.dump(status,output)
+        os.replace(pending,archive_path.with_suffix(archive_path.suffix+'.json'))
+    finally:Path(pending).unlink(missing_ok=True)
     return archive_path
+
+
+def latest_backup_status(directory):
+    directory=Path(directory)
+    archives=sorted(directory.glob('aio-backup-*.tar.gz'),key=lambda p:p.stat().st_mtime,reverse=True)
+    if not archives:return {'status':'missing','complete':False}
+    archive=archives[0]
+    try:
+        data=json.loads(archive.with_suffix(archive.suffix+'.json').read_text(encoding='utf-8'))
+        if data.get('archive')!=archive.name or data.get('sizeBytes')!=archive.stat().st_size:raise ValueError('Backup changed')
+        return {key:data.get(key) for key in ('archive','createdAt','sizeBytes','sha256','postgresIncluded','configurationIncluded','profileIncluded','complete')} | {'status':'complete' if data.get('complete') else 'partial'}
+    except (OSError,ValueError):return {'status':'unverified','complete':False,'archive':archive.name}
+
+
+def restore_file(source, destination):
+    source, destination = Path(source), Path(destination)
+    with source.open('rb') as handle:
+        sqlite = handle.read(16) == b'SQLite format 3\x00'
+    if sqlite:
+        # Applications must be stopped; a stale journal must never replay over a snapshot.
+        for suffix in ('-wal', '-shm', '-journal'):
+            destination.with_name(destination.name + suffix).unlink(missing_ok=True)
+    return shutil.copy2(source, destination)
 
 
 def restore_backup(archive_path: Path, root: Path = None) -> bool:
@@ -253,7 +292,7 @@ def restore_backup(archive_path: Path, root: Path = None) -> bool:
         if data_backup.is_dir():
             target_data = root / "data"
             target_data.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(data_backup, target_data, dirs_exist_ok=True)
+            shutil.copytree(data_backup, target_data, dirs_exist_ok=True, copy_function=restore_file)
             print("  [✓] Restored data/ directory contents (SQLite DBs & configs)")
 
         # 3. Restore PostgreSQL SQL dump if present

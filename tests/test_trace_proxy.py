@@ -29,6 +29,14 @@ class TraceProxyTests(unittest.TestCase):
                 self.assertEqual(events[0]['status'],200)
                 self.assertNotIn('must-stay-private',json.dumps(events))
                 self.assertNotIn('private-config',json.dumps(events))
+                proxy.trace_edge={'service':'fixture','caller':'aiostreams'}
+                urllib.request.urlopen(base+'/__trace/reset').close()
+                with urllib.request.urlopen(base+'/private-native-config/stream/series/tt1:2:2.json') as response:
+                    self.assertEqual(json.load(response),{'streams':[]})
+                with urllib.request.urlopen(base+'/__trace/report') as response:events=json.load(response)
+                self.assertEqual(events[0]['caller'],'aiostreams')
+                self.assertEqual(events[0]['resource'],'stream')
+                self.assertNotIn('private-native-config',json.dumps(events))
         finally:
             for server in (proxy,upstream):server.shutdown();server.server_close()
             for t in threads:t.join()

@@ -16,6 +16,9 @@ class BootstrapTests(unittest.TestCase):
         probe = patch.object(bootstrap, "is_url_reachable", return_value=True)
         probe.start()
         self.addCleanup(probe.stop)
+        requests = patch.object(bootstrap, "make_request", return_value={})
+        requests.start()
+        self.addCleanup(requests.stop)
 
     def test_update_env_file_replaces_existing_key_without_duplicates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -123,6 +126,23 @@ class BootstrapTests(unittest.TestCase):
             bootstrap.CORE_SMOKE_CASES,
             (("movie", "tt1375666", "movie"), ("series", "tt0903747:1:1", "episode")),
         )
+
+    def test_subtitles_use_configured_path_even_without_optional_keys(self):
+        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"off"}),patch.object(bootstrap,"make_request",return_value={}):
+            config=bootstrap.build_default_config(probe_services=False)
+        subtitle=next(p for p in config['presets'] if p['instanceId']=='subsense-local')
+        self.assertNotEqual(subtitle['options']['manifestUrl'],'http://subsense:3100/manifest.json')
+        self.assertEqual(subtitle['options']['resources'],['subtitles'])
+        self.assertFalse(any(p['instanceId']=='aiometadata-local' for p in config['presets']))
+
+    def test_sootio_is_sequential_fallback_not_parallel_default(self):
+        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"fallback"}):
+            config=bootstrap.build_default_config(probe_services=False)
+        self.assertEqual(config['groups']['behaviour'],'sequential')
+        self.assertEqual(config['groups']['groupings'][1]['addons'],['sootio-local'])
+        self.assertEqual(config['groups']['groupings'][1]['condition'],'count(cached(totalStreams)) == 0')
+        anime=next(p for p in config['presets'] if p['instanceId']=='anime-kitsu-local')
+        self.assertEqual(anime['options']['resources'],['catalog','meta'])
 
     def test_unreachable_custom_addons_omitted_from_presets_in_core_profile(self):
         # In core profile, debrid-search, sootio, etc. are not running.

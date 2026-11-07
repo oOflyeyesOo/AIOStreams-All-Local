@@ -1,0 +1,13 @@
+# Operator-only release commands; does not run with the application stack.
+services:
+  release-tools:
+    build:
+      context: .
+      dockerfile: docker/release-tools/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    environment:
+      - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
+    command: ["--help"]

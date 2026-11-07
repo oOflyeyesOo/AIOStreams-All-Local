@@ -4,7 +4,7 @@ services:
     working_dir: /app
     volumes:
       - ./:/app:ro
-    command: node --test tests/browser-bootstrap.test.cjs
+    command: node --test tests/browser-bootstrap.test.cjs tests/maintenance-ui.test.cjs
 
   providers:
     image: python:3.11-alpine
