@@ -43,6 +43,8 @@ established.
 absent. A custom `KNIGHTCRAWLER_URL` replaces the endpoint; it never creates a
 second preset. Usenet-only configurations omit it entirely.
 
+The production native Torrentio adapter places enabled provider credentials in its configured addon URL and sends it to the selected external addon. This differs from the credential-free discovery benchmark above. Disable it with `ENABLE_TORRENTIO=false` if that sharing is unsuitable. Personalized manifests/profile exports are private configuration, not release files.
+
 An isolated, credential-free native AIOStreams profile also passed movie/episode
 discovery: 168/79 P2P candidates in 1.798/0.786 seconds. The native schema retained
 cache-and-play, remux database, language inference, episode matching and sequential

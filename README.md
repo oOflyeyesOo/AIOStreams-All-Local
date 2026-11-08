@@ -9,6 +9,8 @@ A Docker Compose streaming backend centered on **AIOStreams**. Enter your provid
 
 MediaFusion is optional and off by default. The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
 
+Torrentio is an external addon. Its native integration includes enabled provider credentials in its configured addon URL; set `ENABLE_TORRENTIO=false` to disable it. Treat personalized manifests and profile exports as private.
+
 The interface is one page: keys, setup progress, the main AIOStreams manifest, an optional standalone metadata manifest, service health and maintenance. Installing both manifests can duplicate catalogs.
 
 For reproducible deployments, use the [digest-pinned release bundle and recovery guide](docs/IMMUTABLE-RELEASES.md). See the [request ownership map and timed routing results](docs/ROUTING-VALIDATION.md) for tested paths and limits.
