@@ -237,6 +237,7 @@ def config_export():
         "BASE_URL": env_vars.get("BASE_URL", ""),
         "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
         "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
+        "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
     }
     return {
         "format": "aio-local-config-v1",
@@ -650,7 +651,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
                     self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
                     return
-                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "MEDIAFUSION_REPLICAS", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
+                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "MEDIAFUSION_REPLICAS", "ENABLE_ANIME_SOURCES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
                 supplied = payload["values"]
                 unknown = sorted(key for key in supplied if key not in allowed)
                 if unknown:
@@ -669,6 +670,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 updates = supplied
                 if updates.get('MEDIAFUSION_REPLICAS','0') not in ('0','1'):
                     raise ValueError('Invalid optional-service state')
+                if updates.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
+                    raise ValueError('Invalid optional-source state')
                 save_env_updates(updates)
                 self.json_response({"success": True, "updated": sorted(updates)})
             except (json.JSONDecodeError, TypeError, OSError, ValueError):
@@ -741,6 +744,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         resp_env = {
             **public_settings(env_vars),
             "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
+            "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
             "configuredKeys": sorted(key for key, value in env_vars.items()
@@ -866,6 +870,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("Values must be single-line scalars without quotes or dollar interpolation")
 
             keys_to_update = {str(k): str(v).strip() for k, v in data.items() if v is not None}
+            if keys_to_update.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
+                raise ValueError('Anime sources must be enabled or disabled')
             if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):
                 raise ValueError('MediaFusion must be enabled (1) or disabled (0)')
             if keys_to_update.get('MEDIAFUSION_MANIFEST_URL'):

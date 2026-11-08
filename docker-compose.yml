@@ -104,6 +104,7 @@ services:
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
+      - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/healthz')\" || exit 1"]
       interval: 10s
@@ -359,8 +360,6 @@ services:
       - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
       - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
       - DEBRID_API_KEY=${PREMIUMIZE_API_KEY}
-      - EASYNEWS_USER=${EASYNEWS_USER:-}
-      - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
     volumes:
       - ./docker/sootio/configuration.js:/app/lib/util/configuration.js:ro
       - ./docker/sootio/landingTemplate.js:/app/lib/util/landingTemplate.js:ro
@@ -506,6 +505,7 @@ services:
       - FLARESOLVERR_URL=http://flaresolverr:8191
       - MEDIAFUSION_URL=http://mediafusion:8000
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
+      - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
       - COMET_URL=http://comet:8000
       - SOOTIO_URL=http://sootio:55771
       - SOOTIO_MODE=${SOOTIO_MODE:-fallback}

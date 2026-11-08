@@ -229,9 +229,7 @@ TARGET_INDEXERS = [
     "badass-torrents",
     "torrentdownload",
     "nyaasi",
-    "tokyotosho",
-    "subsplease",
-    "animetosho-xyz"
+    "tokyotosho"
 ]
 
 def make_request(url, method="GET", data=None, headers=None, timeout=12):
@@ -840,54 +838,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             }
         },
         {
-            "type": "anime-tosho-new",
-            "instanceId": "anime-tosho-new",
-            "enabled": True,
-            "options": {
-                "name": "Anime Tosho",
-                "timeout": 15000,
-                "resources": ["stream"],
-                "mediaTypes": [],
-                "useMultipleInstances": False
-            }
-        },
-        {
-            "type": "tsukihime",
-            "instanceId": "tsukihime-scraper",
-            "enabled": True,
-            "options": {
-                "name": "TsukiHime",
-                "timeout": 15000,
-                "resources": ["stream"],
-                "mediaTypes": ["anime"],
-                "useMultipleInstances": False
-            }
-        },
-        {
-            "type": "neko-bt",
-            "instanceId": "neko-bt-scraper",
-            "enabled": True,
-            "options": {
-                "name": "nekoBT",
-                "timeout": 15000,
-                "resources": ["stream"],
-                "mediaTypes": [],
-                "useMultipleInstances": False
-            }
-        },
-        {
-            "type": "easynews-search",
-            "instanceId": "easynews-search",
-            "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
-            "options": {
-                "name": "Easynews Search",
-                "timeout": 15000,
-                "resources": ["stream"],
-                "mediaTypes": [],
-                "useMultipleInstances": False
-            }
-        },
-        {
             "type": "custom",
             "instanceId": "sootio-local",
             "enabled": True,
@@ -960,7 +910,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             'name':'Usenet (Prowlarr → InfiniDysk)','prowlarrUrl':PROWLARR_URL,'prowlarrApiKey':PROWLARR_API_KEY,
             'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':20000}})
     sootio_url = f"{SOOTIO_URL}/manifest.json"
-    if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY or (EASYNEWS_USER and EASYNEWS_PASSWORD):
+    if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY:
         debrid_services = []
         if REALDEBRID_API_KEY:
             debrid_services.append({"provider": "RealDebrid", "apiKey": REALDEBRID_API_KEY})
@@ -970,13 +920,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             debrid_services.append({"provider": "TorBox", "apiKey": TORBOX_API_KEY})
         if ALLDEBRID_API_KEY:
             debrid_services.append({"provider": "AllDebrid", "apiKey": ALLDEBRID_API_KEY})
-        if EASYNEWS_USER and EASYNEWS_PASSWORD:
-            debrid_services.append({"provider": "Easynews", "username": EASYNEWS_USER, "password": EASYNEWS_PASSWORD})
         if debrid_services:
             sootio_cfg = {
                 "DebridServices": debrid_services,
                 "DebridProvider": debrid_services[0]["provider"],
-                "DebridApiKey": debrid_services[0].get("apiKey", debrid_services[0].get("password", "")),
+                "DebridApiKey": debrid_services[0]["apiKey"],
                 "Languages": ["en"],
                 "Resolutions": ["4k", "1080p", "720p"],
                 "ShowCatalog": False,
@@ -1085,7 +1033,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         pid = p.get("instanceId", "")
         opts = p.setdefault("options", {})
         if ptype == "torrentio":
-            if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
                 continue
             opts["name"] = "Torrentio"
             if os.environ.get("KNIGHTCRAWLER_URL"):
@@ -1111,7 +1059,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 opts["timeout"] = 20000
             validated_presets.append(p)
         elif ptype == "comet":
-            if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
                 continue
             curr_timeout = int(opts.get("timeout") or 7000)
             if curr_timeout < 20000:
@@ -1131,6 +1079,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             validated_presets.append(p)
         elif ptype == "easynews-search":
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
+            # Direct EasyNews delivery owns this account; no second Sootio/NNTP route.
+            opts['services']=['easynews']
+            opts['useMultipleInstances']=False
+            opts['paginate']=False
             curr_timeout = int(opts.get("timeout") or 15000)
             opts["timeout"] = curr_timeout
             if p["enabled"]:
@@ -1139,7 +1091,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 print("[AIOStreams Setup] ℹ️ Easynews credentials not provided; preset disabled.", flush=True)
             validated_presets.append(p)
         elif ptype in ("anime-tosho-new", "tsukihime", "neko-bt"):
-            p["enabled"] = True
+            compatible={'alldebrid','debrider','debridlink','easydebrid','offcloud','premiumize','pikpak','realdebrid','torbox','torrin'}
+            if ptype=='tsukihime':compatible.add('nzbdav')
+            selected=[s['id'] for s in services if s.get('enabled') and s['id'] in compatible]
+            p["enabled"] = os.environ.get('ENABLE_ANIME_SOURCES','false')=='true' and bool(selected)
+            opts['services']=selected
+            opts['mediaTypes']=['anime']
+            opts['useMultipleInstances']=False
             curr_timeout = int(opts.get("timeout") or 15000)
             opts["timeout"] = curr_timeout
             validated_presets.append(p)

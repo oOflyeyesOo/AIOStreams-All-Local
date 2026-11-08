@@ -116,21 +116,23 @@
       {
         "type": "anime-tosho-new",
         "instanceId": "anime-tosho-new",
-        "enabled": true,
+        "enabled": false,
         "options": {
           "name": "Anime Tosho",
           "timeout": 15000,
           "resources": [
             "stream"
           ],
-          "mediaTypes": [],
+          "mediaTypes": [
+            "anime"
+          ],
           "useMultipleInstances": false
         }
       },
       {
         "type": "tsukihime",
         "instanceId": "tsukihime-scraper",
-        "enabled": true,
+        "enabled": false,
         "options": {
           "name": "TsukiHime",
           "timeout": 15000,
@@ -146,14 +148,16 @@
       {
         "type": "neko-bt",
         "instanceId": "neko-bt-scraper",
-        "enabled": true,
+        "enabled": false,
         "options": {
           "name": "nekoBT",
           "timeout": 15000,
           "resources": [
             "stream"
           ],
-          "mediaTypes": [],
+          "mediaTypes": [
+            "anime"
+          ],
           "useMultipleInstances": false
         }
       },
@@ -168,7 +172,11 @@
             "stream"
           ],
           "mediaTypes": [],
-          "useMultipleInstances": false
+          "useMultipleInstances": false,
+          "services": [
+            "easynews"
+          ],
+          "paginate": false
         }
       },
       {

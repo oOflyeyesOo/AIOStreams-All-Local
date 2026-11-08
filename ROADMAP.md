@@ -109,3 +109,6 @@ These checks do not establish every external integration as working. Real OAuth 
 - [ ] Real paid NNTP article retrieval/repair/decoding and AceStream engine/playback.
 
 Evidence and exact limits: [optional sources validation](docs/OPTIONAL-SOURCES-VALIDATION.md). Earlier milestones above describe the versions tested at those times.
+
+- [x] Preserve incoming native anime/EasyNews integrations with compatible-account gates, anime-only scoping, one EasyNews owner, and native manifest/schema acceptance.
+- [ ] Measure incremental cached coverage and latency for optional Anime Tosho/nekoBT/TsukiHime; validate paid EasyNews search and playback.

@@ -117,3 +117,44 @@ recovery and deadline cancellation.
 
 Sootio remains a sequential fallback only when primary cached results are absent.
 It does not run Torrentio, Comet, Zilean or StremThru recursively.
+
+## Fresh-run routing fixture isolation
+
+The first Linux run of source `494102c` passed zero-restart startup, 21 endpoints,
+and all optional-service/NNTP checks, then failed a repeated episode response in
+the routing fixture. The exact immutable AIOStreams image passed that same test
+locally; the failure was intermittent, not reproduced as a service restart.
+
+Real IMDb episode IDs made the supposedly deterministic fixture invoke external
+metadata work. The routing gate now uses synthetic episode IDs, explicitly turns
+off metadata-dependent/background features, and retains all warm/concurrent
+response and exact upstream call-count assertions. Failures report only counts,
+timings and error categories. This isolates routing; it does not establish the
+cause of the earlier intermittent failure or certify external metadata uptime.
+Real-title Torrentio discovery and official provider cache checks remain separate
+from this fixture and from unverified paid decoding.
+
+## Incoming anime and EasyNews additions
+
+Commit `cff5b30` arrived during acceptance. Its native addons are retained with
+routing safeguards: Anime Tosho, nekoBT and TsukiHime are opt-in through the setup
+page (`ENABLE_ANIME_SOURCES=true`), anime-only, single-instance, and limited to
+compatible configured services. Without a compatible account they stay disabled.
+TsukiHime may use the configured NNTP route; the other two require torrent/debrid
+services. Extra AnimeTosho/SubsPlease definitions are not seeded again in Prowlarr.
+Existing Prowlarr user configurations are preserved.
+
+EasyNews uses one native `easynews-search` preset, restricted to the EasyNews
+account itself. It is not also injected into Sootio, and an EasyNews-only account
+does not enable unsupported Comet/Torrentio routes. Configure `EASYNEWS_USER`
+and `EASYNEWS_PASSWORD` in the private environment file; these are not generic
+NNTP credentials. Pagination remains off. Actual EasyNews searches and paid
+access have not been validated.
+
+Three disposable native-profile checks passed against the exact published
+AIOStreams image: anime presets with a compatible fixture account, direct
+EasyNews with fixture account details, and disabled unsupported presets without
+accounts. Generated manifests were checked; no stream searches were made with
+fixture credentials. Tests retain the native rate limits and pace profile API
+requests accordingly. Coverage/latency comparisons for these new anime sources
+remain outstanding, which is why they are not enabled by default.

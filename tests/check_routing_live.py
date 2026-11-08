@@ -56,6 +56,10 @@ try:
         for owner in ('primary','fallback')]
     config={'addonName':'Private routing fixture','presets':presets,'formatter':{'id':'tamtaro'},'sortCriteria':{'global':[]},
             'accessKey':os.environ['ADDON_PASSWORD'],
+            'precacheNextEpisode':False,'preloadStreams':{'enabled':False},'enableSeadex':False,
+            'titleMatching':{'enabled':False},'yearMatching':{'enabled':False},
+            'seasonEpisodeMatching':{'enabled':False},'episodeTitleMatching':{'enabled':False},
+            'remuxDb':{'enabled':False},
             'proxy':{'id':'builtin','enabled':False},
             'groups':{'enabled':True,'behaviour':'sequential','onConditionFailure':'stop',
                       'groupings':[{'addons':['primary'],'condition':'true'},
@@ -78,12 +82,18 @@ try:
     def fetch(ident,kind='movie'):
         start=time.monotonic();value=request(prefix+'/stream/'+kind+'/'+ident+'.json')
         result={'seconds':round(time.monotonic()-start,3),'streams':sum(bool(s.get('url')) for s in value.get('streams',[]))}
-        if not result['streams']:result['messages']=[s.get('description',s.get('title',s.get('name'))) for s in value.get('streams',[])]
+        if not result['streams']:
+            # Classify fixture failures without logging links, install tokens or bodies.
+            messages=' '.join(str(s.get('description',s.get('title',s.get('name','')))) for s in value.get('streams',[])).lower()
+            result['errors']={name:any(term in messages for term in terms) for name,terms in {
+                'rateLimited':('rate limit','too many'), 'metadata':('metadata','cinemeta','imdb'),
+                'timeout':('timeout','timed out','aborted'), 'connection':('fetch failed','econn','unreachable')}.items()}
         return result
     for kind,ident,expected in [('movie','fixture-cached',{'primary':1,'fallback':0}),
                                ('movie','fixture-empty',{'primary':1,'fallback':1}),
-                               ('series','tt0944947:2:2',{'primary':1,'fallback':0}),
-                               ('series','tt0903747:2:2',{'primary':1,'fallback':1}),
+                               # Synthetic IDs deliberately avoid external metadata/cache state.
+                               ('series','fixture-series-cached:2:2',{'primary':1,'fallback':0}),
+                               ('series','fixture-series-empty:2:2',{'primary':1,'fallback':1}),
                                ('movie','fixture-unavailable',{'primary':1,'fallback':1})]:
         # Keep the upstream's default 10 requests / 15 s protection enabled.
         time.sleep(16)
@@ -94,7 +104,7 @@ try:
         assert cold['streams']>0,(ident,cold)
         warm=fetch(ident,kind)
         with ThreadPoolExecutor(max_workers=4) as pool:concurrent=list(pool.map(lambda _:fetch(ident,kind),range(4)))
-        assert warm['streams']>0 and all(item['streams']>0 for item in concurrent), 'Repeated fixture response lost streams'
+        assert warm['streams']>0 and all(item['streams']>0 for item in concurrent), ('Repeated fixture response lost streams',ident,warm,concurrent)
         with lock:after={name:calls.count(name) for name in expected}
         assert after==expected,('Repeated upstream fixture calls',after)
         report.append({'case':kind+' '+ident,'cold':cold,'warm':warm,'concurrent4':concurrent,'upstreamCalls':after})

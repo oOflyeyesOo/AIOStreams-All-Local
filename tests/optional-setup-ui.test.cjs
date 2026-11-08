@@ -54,3 +54,11 @@ test('Usenet-only user can disable it without being forced to add a debrid key',
   assert.equal(payload.USENET_ENABLED,'false');assert.equal('USENET_PASS' in payload,false);
   assert.equal(env.calls.filter(c=>c.path==='/api/setup').length,1);
 });
+
+test('native anime switch reloads and is saved with the selected account',async()=>{
+  const env=form({ENABLE_ANIME_SOURCES:'true',USENET_ENABLED:'false',configuredKeys:['PROVIDER_KEY']});
+  await vm.runInContext('loadSettings()',env.context);
+  assert.equal(env.nodes.get('enable-anime-sources').checked,true);
+  await env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
+  assert.equal(env.calls.find(c=>c.path==='/api/save-env').payload.ENABLE_ANIME_SOURCES,'true');
+});

@@ -111,6 +111,7 @@ jobs:
           fi
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_OPTIONAL_TEST_PROJECT=aio-release portal python3 - < tests/check_optional_live.py
+          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_optional_presets_live.py
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py
           rm release-bundle/fixture.env
       - uses: actions/upload-artifact@v4

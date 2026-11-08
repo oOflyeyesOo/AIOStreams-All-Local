@@ -112,3 +112,12 @@ For returning Stremio Web browsers, accept its user-interface update banner when
 shown. The startup loader versions its app shell, preserves signed-in accounts
 and adds the local aggregator to a guest profile. A browser that previously
 loaded a broken test configuration may need its test-only site data cleared.
+
+### Additional native sources
+
+The setup page can enable Anime Tosho, nekoBT and TsukiHime for anime requests.
+Compatible accounts are selected automatically; unsupported sources stay disabled.
+They are opt-in while incremental coverage and timing acceptance remains pending.
+EasyNews direct search uses `EASYNEWS_USER`/`EASYNEWS_PASSWORD` from the private
+`.env`, and runs once through AIOStreams rather than through Sootio as well.
+Native schemas/manifests passed fixture checks; paid EasyNews access remains unverified.
