@@ -103,6 +103,11 @@ jobs:
           cp .env.example release-bundle/fixture.env
           printf '\nADDON_PASSWORD=package-test-only-password\nBASE_URL=http://127.0.0.1:3001\nAIOMETADATA_HOST=http://127.0.0.1:4005\n' >> release-bundle/fixture.env
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml up -d --wait --wait-timeout 600
+          cid=$(docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml ps -q aiostreams)
+          if [ "$(docker inspect --format '{{.RestartCount}}' "$cid")" != 0 ]; then
+            echo 'AIOStreams restarted during first startup; refusing to publish a masked startup failure.'
+            exit 1
+          fi
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py
           rm release-bundle/fixture.env
