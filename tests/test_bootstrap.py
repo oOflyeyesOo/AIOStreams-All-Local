@@ -152,8 +152,27 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(preset['options']['url'],'http://mediafusion:8000/fixture/manifest.json')
 
     def test_usenet_uses_native_nzb_route_and_skips_torrent_sources_without_debrid(self):
-        with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER_B64':'Zml4dHVyZQ==','USENET_PASS_B64':'Zml4dHVyZQ==','PREMIUMIZE_API_KEY':''}):
-            config=bootstrap.build_default_config(probe_services=False)
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', ''), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'TORBOX_API_KEY', ''), \
+             patch.object(bootstrap, 'ALLDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'DEBRIDLINK_API_KEY', ''), \
+             patch.object(bootstrap, 'EASYNEWS_USER', ''), \
+             patch.object(bootstrap, 'EASYNEWS_PASSWORD', ''), \
+             patch.dict(bootstrap.os.environ, {
+                 'USENET_ENABLED': 'true',
+                 'USENET_HOST': 'news.fixture',
+                 'USENET_USER_B64': 'Zml4dHVyZQ==',
+                 'USENET_PASS_B64': 'Zml4dHVyZQ==',
+                 'PREMIUMIZE_API_KEY': '',
+                 'REALDEBRID_API_KEY': '',
+                 'TORBOX_API_KEY': '',
+                 'ALLDEBRID_API_KEY': '',
+                 'DEBRIDLINK_API_KEY': '',
+                 'EASYNEWS_USER': '',
+                 'EASYNEWS_PASSWORD': '',
+             }):
+            config = bootstrap.build_default_config(probe_services=False)
         self.assertTrue(any(s['id']=='nzbdav' for s in config['services']))
         preset=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
         self.assertEqual(preset['options']['sources'],['usenet']);self.assertEqual(preset['options']['services'],['nzbdav'])

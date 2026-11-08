@@ -168,6 +168,9 @@
             "stream"
           ],
           "mediaTypes": [],
+          "services": [
+            "easynews"
+          ],
           "useMultipleInstances": false
         }
       },

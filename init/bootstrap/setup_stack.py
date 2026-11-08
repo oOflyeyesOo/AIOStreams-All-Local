@@ -884,6 +884,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "timeout": 15000,
                 "resources": ["stream"],
                 "mediaTypes": [],
+                "services": ["easynews"],
                 "useMultipleInstances": False
             }
         },
@@ -1047,6 +1048,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "timeout": 15000,
                 "resources": ["stream"],
                 "mediaTypes": [],
+                "services": ["easynews"],
                 "useMultipleInstances": False
             }
         }
@@ -1111,7 +1113,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 opts["timeout"] = 20000
             validated_presets.append(p)
         elif ptype == "comet":
-            if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
             curr_timeout = int(opts.get("timeout") or 7000)
             if curr_timeout < 20000:
@@ -1133,6 +1135,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
             curr_timeout = int(opts.get("timeout") or 15000)
             opts["timeout"] = curr_timeout
+            opts["services"] = ["easynews"]
             if p["enabled"]:
                 print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
             else:
