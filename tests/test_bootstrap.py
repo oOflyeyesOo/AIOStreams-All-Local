@@ -92,6 +92,12 @@ class BootstrapTests(unittest.TestCase):
             saved_config = request.call_args.kwargs["data"]["config"]
             self.assertNotIn("simklTokenId",saved_config["apiKeys"])
             self.assertNotIn("anilistTokenId",saved_config["apiKeys"])
+            self.assertTrue(saved_config.get("traktWatchTracking"))
+            self.assertTrue(saved_config.get("simklWatchTracking"))
+            self.assertTrue(saved_config.get("anilistWatchTracking"))
+            self.assertTrue(saved_config.get("malWatchTracking"))
+            self.assertEqual(saved_config.get("artProviders", {}).get("anime", {}).get("logo"), "fanart")
+            self.assertEqual(saved_config.get("animeEpisodeDates"), "earliest")
 
     def test_metadata_repeat_setup_preserves_linked_accounts(self):
         existing={"apiKeys":{"simklTokenId":"linked-simkl-record","anilistTokenId":"linked-anilist-record"}}
@@ -290,3 +296,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(path_no_anime.endswith("tamtaro-aiometadata-without-anime.json"))
         path_grabber = bootstrap.resolve_aiometadata_template_path("grabberhawk")
         self.assertTrue(path_grabber.endswith("grabberhawk-aiometadata-config.json"))
+
+    def test_seadex_enabled_in_default_config(self):
+        config = bootstrap.build_default_config(probe_services=False)
+        self.assertTrue(config.get("enableSeadex"))
