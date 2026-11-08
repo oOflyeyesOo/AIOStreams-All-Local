@@ -13,7 +13,7 @@ The interface is one page: keys, setup progress, the main AIOStreams manifest, a
 
 For reproducible deployments, use the [digest-pinned release bundle and recovery guide](docs/IMMUTABLE-RELEASES.md). See the [request ownership map and timed routing results](docs/ROUTING-VALIDATION.md) for tested paths and limits.
 
-[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42433774822/artifacts/13598986164) for management-app deployment. This replacement release fixes the first-start authentication migration crash and passed a fresh Linux install with zero AIOStreams restarts. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
+[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet/MediaFusion setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
 
 ---
 

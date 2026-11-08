@@ -1,6 +1,6 @@
 # Release validation — 2026-11-07
 
-Status: **not ready for final publication**. Original production stack remains unchanged; live tests use project `aio-release` and separate data/ports.
+Initial baseline (superseded; see current release below): **not ready for final publication**. Original production stack remains unchanged; live tests use project `aio-release` and separate data/ports.
 
 - Copilot roadmap retained in `docs/COPILOT-ROADMAP.md`; merged release gates in `ROADMAP.md`.
 - Controller/bootstrap and generated manager deployment restored; package builds and apply-from-portal acceptance remain outstanding.
@@ -109,3 +109,28 @@ and SQL data. All 22 endpoints passed after recovery. Disposable test services w
 stopped afterward; the retained installation and original archive were left intact.
 Detailed Linux timings and call counts are in
 [the machine-readable release report](validation/2026-11-07-linux-release.json).
+
+## Current verified release — 2026-11-08
+
+Source `1bfec7b543b6a9197d3a9eedb19a40b1f040c01f` passed the full fresh Linux
+release gate. All nine manager images and the appliance image published; 123
+Python tests, 12 browser checks and nine Sootio fixture tests passed. Startup had
+zero AIOStreams restarts, and all 21 default endpoints passed.
+
+The same pinned deployment passed saved Usenet credentials with special
+characters, actual fixture NNTP authentication (seven successes, zero rejections),
+Newznab repeat setup without duplicates, MediaFusion on/off, managed provider and
+indexer disabling, and three native optional preset/schema/manifest cases.
+Strict routing passed cached, empty and unavailable primary responses for movie
+and synthetic episode requests, warm/repeated responses, and four simultaneous
+cold viewers making one upstream request with no unnecessary fallback call.
+
+Use the [current tested Compose bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027).
+Artifact digest: `sha256:09c6c9f1ef296f610f0e40f4675f86272d0ac87af271900d0eb60591fe980b3d`.
+[Machine-readable evidence](validation/2026-11-08-linux-release.json) records
+counts and timings; [source comparison and limits](OPTIONAL-SOURCES-VALIDATION.md)
+explains the earlier intermittent external-ID fixture failure and its isolation.
+Paid NNTP/EasyNews and AceStream playback remain unverified. Optional native anime
+coverage/timings and ARM/NAS deployment remain separate acceptance gates.
+Retained installation/archive were preserved; development/source/reachable Git
+key checks were clean, including encoded-key alignment checks.

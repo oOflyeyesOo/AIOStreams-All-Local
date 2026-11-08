@@ -4,7 +4,7 @@
 
 | Resource | Owner and path | Duplicate-work policy |
 |---|---|---|
-| Streams | Player → AIOStreams → native Comet and MediaFusion adapters; Debrid Search library | One combined player manifest |
+| Streams | Player → AIOStreams → native Comet/Torrentio; optional MediaFusion; Debrid Search library | One combined player manifest |
 | Indexer searches | Comet → search-broker → Prowlarr → indexers/FlareSolverr | Identical in-flight requests share one result; bounded concurrency/cache |
 | DMM hash discovery | Comet → Zilean | MediaFusion Prowlarr/Zilean scraping and Sootio Zilean scraping disabled by default |
 | Extra stream coverage | AIOStreams → Sootio | Sequential fallback only when primary results have no cached streams |
@@ -13,7 +13,7 @@
 | Artwork | AIOMetadata → Posters+ `/poster?stremio_id=…` | Explicit render key; portal password is not reused |
 | Library | AIOStreams → Debrid Search | Catalog and stream resources only |
 | Transport | AIOStreams built-in proxy; optional StremThru/MediaFlow | A second player-installed stream aggregator is not required |
-| Usenet | Optional NZBDav/InfiniDysk path | Enabled credentials/infrastructure required; not live-tested here |
+| Usenet | AIOStreams → native Prowlarr (Usenet only) → InfiniDysk | Fixture configuration/NNTP login verified; paid decoding unverified |
 
 Installing both the combined manifest and its optional standalone metadata manifest
 can duplicate catalogs. The page now says so. Public scrapers behind different
