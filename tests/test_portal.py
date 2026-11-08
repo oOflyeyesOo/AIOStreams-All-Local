@@ -228,11 +228,15 @@ class PortalTests(unittest.TestCase):
 
     def test_static_symlink_cannot_expose_env(self):
         link = self.root / "assets/leak.png"
-        link.symlink_to(self.root / ".env")
+        try:
+            link.symlink_to(self.root / ".env")
+        except OSError:
+            self.skipTest("Symlinks require elevated privileges on Windows")
         try:
             self.assertEqual(self.request("/assets/leak.png")[0], 404)
         finally:
-            link.unlink()
+            if link.is_symlink() or link.exists():
+                link.unlink()
 
     def test_api_requires_authentication(self):
         for path in ("/api/env", "/api/status", "/api/logs", "/api/manifest-info", "/api/templates", "/api/setup-status", "/api/integrations"):
@@ -385,6 +389,26 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(headers["Content-Type"], "application/gzip")
         self.assertIn("attachment", headers["Content-Disposition"])
         self.assertEqual(body, b"\x1f\x8b\x08mock_gzip_data")
+
+    def test_export_aiometadata_serves_json(self):
+        status, body, headers = self.request("/api/export-aiometadata", auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertIn("aio-local-aiometadata-profile.json", headers["Content-Disposition"])
+        data = json.loads(body)
+        self.assertTrue(isinstance(data, dict))
+
+    def test_aiometadata_template_saved_and_returned_in_env(self):
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {"AIOMETADATA_TEMPLATE": "tamtaro-aiometadata-without-anime.json"},
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 200)
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "tamtaro-aiometadata-without-anime.json")
 
 
 if __name__ == "__main__":

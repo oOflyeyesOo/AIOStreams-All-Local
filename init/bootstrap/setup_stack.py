@@ -218,6 +218,26 @@ DATA_ROOT = resolve_path("data", "/data")
 TEMPLATE_PATH = resolve_path("templates/builtin/all-local-selfhosted.json", "/templates/builtin/all-local-selfhosted.json")
 AIOMETADATA_CONFIG_PATH = resolve_path("templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json", "/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json")
 
+def resolve_aiometadata_template_path(template_name=""):
+    selected = (template_name or os.environ.get("AIOMETADATA_TEMPLATE") or "tamtaro-aiometadata-with-anime.json").strip()
+    if selected in ("with-anime", "anime", "tamtaro-with-anime"):
+        selected = "tamtaro-aiometadata-with-anime.json"
+    elif selected in ("without-anime", "standard", "non-anime", "tamtaro-without-anime"):
+        selected = "tamtaro-aiometadata-without-anime.json"
+    elif selected in ("grabberhawk", "grabberhawk-config"):
+        selected = "grabberhawk-aiometadata-config.json"
+
+    candidates = [
+        selected,
+        resolve_path(f"templates/aiometadata-configs/{selected}", f"/templates/aiometadata-configs/{selected}"),
+        resolve_path(f"templates/{selected}", f"/templates/{selected}"),
+        resolve_path(selected, selected)
+    ]
+    for cand in candidates:
+        if cand and os.path.isfile(cand):
+            return cand
+    return AIOMETADATA_CONFIG_PATH
+
 TARGET_INDEXERS = [
     "1337x",
     "yts",
@@ -521,11 +541,13 @@ def wait_for_aiometadata(max_attempts=30, interval=2):
 
 def setup_aiometadata_tamtaro():
     global TMDB_API_KEY, TVDB_API_KEY, MDBLIST_API_KEY, RPDB_API_KEY, FANART_API_KEY, GEMINI_API_KEY, SIMKL_CLIENT_ID, ANILIST_TOKEN
-    print("[AIOMetadata Setup] Configuring Tamtaro AIOMetadata profile with Posters+ integration...", flush=True)
+    template_path = resolve_aiometadata_template_path()
+    template_name = os.path.basename(template_path)
+    print(f"[AIOMetadata Setup] Configuring Tamtaro AIOMetadata profile ({template_name}) with Posters+ integration...", flush=True)
     config = {}
-    if os.path.exists(AIOMETADATA_CONFIG_PATH):
+    if os.path.exists(template_path):
         try:
-            with open(AIOMETADATA_CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(template_path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
                 config = raw.get("config", raw)
         except Exception as e:
@@ -548,7 +570,10 @@ def setup_aiometadata_tamtaro():
                               data={"password": ADDON_PASSWORD, "addonPassword": ADDON_PASSWORD})
         if not isinstance(loaded, dict) or not loaded.get("success") or not isinstance(loaded.get("config"), dict):
             raise RuntimeError("Existing metadata profile could not be loaded; refusing to overwrite linked accounts.")
-        config = loaded["config"]
+        existing_cfg = loaded["config"]
+        if "catalogs" in config:
+            existing_cfg["catalogs"] = config["catalogs"]
+        config = existing_cfg
 
     # Refresh environment variables
     load_env_file()
@@ -612,6 +637,7 @@ def setup_aiometadata_tamtaro():
         raise RuntimeError("AIOMetadata rejected its configuration. Check its API keys and addon password.")
     if res.get("userUUID"):
         update_env_file("AIOMETADATA_PROFILE_UUID", str(res["userUUID"]))
+    update_env_file("AIOMETADATA_TEMPLATE", template_name)
     manifest_url = f"{AIOMETADATA_URL}/manifest.json"
 
     if isinstance(res, dict):

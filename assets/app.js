@@ -126,6 +126,12 @@ async function loadSettings() {
     }
   }
 
+  const templateSelect = document.getElementById('aiometadata-template');
+  if (templateSelect && env.AIOMETADATA_TEMPLATE) {
+    templateSelect.value = env.AIOMETADATA_TEMPLATE;
+  }
+  updateTemplateDisplay();
+
   for (const [key] of fields) {
     const saved = savedKeys.has(key);
     const input = document.getElementById(key);
@@ -245,7 +251,8 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     USENET_SSL: document.getElementById('usenet-tls').checked ? 'true' : 'false',
     NZB_INDEXER_URL: document.getElementById('nzb-indexer-url').value.trim(),
     BASE_URL: document.getElementById('base-url').value.trim(),
-    AIOMETADATA_HOST: document.getElementById('aiometadata-host')?.value.trim() || ''
+    AIOMETADATA_HOST: document.getElementById('aiometadata-host')?.value.trim() || '',
+    AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json'
   };
   const usenetPassword=document.getElementById('usenet-pass').value;
   if(usenetPassword||!usenetPasswordSaved)payload.USENET_PASS=usenetPassword;
@@ -294,6 +301,53 @@ if (copyAiomBtn) {
     copyToClipboard(currentAiometaManifest, 'AIOMetadata manifest URL copied. Paste it into your player.');
   });
 }
+
+function updateTemplateDisplay() {
+  const select = document.getElementById('aiometadata-template');
+  if (!select) return;
+  const val = select.value || 'tamtaro-aiometadata-with-anime.json';
+  const isAnime = val.includes('with-anime');
+  const href = `/templates/aiometadata-configs/${val}`;
+  const downloadLink = document.getElementById('download-template-json');
+  if (downloadLink) {
+    downloadLink.href = href;
+    downloadLink.download = val;
+  }
+  const manifestLink = document.getElementById('download-aiometa-json');
+  if (manifestLink) {
+    manifestLink.href = href;
+    manifestLink.download = val;
+    manifestLink.textContent = isAnime
+      ? 'Download AIOMetadata anime config JSON ↓'
+      : 'Download AIOMetadata config JSON ↓';
+  }
+  const desc = document.getElementById('template-description');
+  if (desc) {
+    desc.textContent = isAnime
+      ? 'Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.'
+      : val.includes('grabberhawk')
+      ? 'Grabberhawk curated metadata configuration for movies and series.'
+      : 'Standard Tamtaro configuration with TMDB & TVDB catalogs without anime collections.';
+  }
+}
+
+const templateSelectEl = document.getElementById('aiometadata-template');
+if (templateSelectEl) {
+  templateSelectEl.addEventListener('change', updateTemplateDisplay);
+}
+
+document.getElementById('copy-template-json')?.addEventListener('click', async () => {
+  const select = document.getElementById('aiometadata-template');
+  const val = select ? select.value : 'tamtaro-aiometadata-with-anime.json';
+  try {
+    const res = await fetch(`/templates/aiometadata-configs/${val}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    await copyToClipboard(text, `Copied ${val} to clipboard!`);
+  } catch (err) {
+    notify(`Failed to copy JSON: ${err.message}`);
+  }
+});
 
 async function refreshMaintenance() {
   const state = await api('/api/maintenance');
@@ -385,6 +439,15 @@ async function runOperations() {
       const blob = await response.blob();
       const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-optimized-profile.json'; link.click(); URL.revokeObjectURL(link.href);
       output('config-output').textContent = 'Optimized profile downloaded.';
+    } catch (error) { output('config-output').textContent = error.message; }
+  });
+  document.getElementById('export-aiometa-profile')?.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/export-aiometadata');
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      const blob = await response.blob();
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-aiometadata-profile.json'; link.click(); URL.revokeObjectURL(link.href);
+      output('config-output').textContent = 'AIOMetadata profile downloaded.';
     } catch (error) { output('config-output').textContent = error.message; }
   });
   document.getElementById('import-config')?.addEventListener('change', async event => {

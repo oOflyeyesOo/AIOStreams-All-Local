@@ -541,6 +541,55 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             except (OSError, RuntimeError, TypeError, ValueError):
                 self.json_response({"error": "The optimized profile is not available yet."}, 503)
             return
+        if path == "/api/export-aiometadata":
+            try:
+                aiom_base = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
+                env_vars = read_saved_env()
+                profile_uuid = env_vars.get("AIOMETADATA_PROFILE_UUID")
+                addon_pw = env_vars.get("ADDON_PASSWORD", os.environ.get("ADDON_PASSWORD", "admin"))
+                config_data = None
+                if profile_uuid:
+                    try:
+                        req = urllib.request.Request(
+                            f"{aiom_base}/api/config/load/{profile_uuid}",
+                            data=json.dumps({"password": addon_pw, "addonPassword": addon_pw}).encode(),
+                            headers={"Content-Type": "application/json"}
+                        )
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            res = json.load(resp)
+                            if isinstance(res, dict) and res.get("success") and isinstance(res.get("config"), dict):
+                                config_data = res.get("config")
+                    except Exception:
+                        pass
+
+                if not config_data:
+                    tmpl_name = env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json")
+                    tmpl_path = os.path.join(WEB_ROOT, "templates", "aiometadata-configs", tmpl_name)
+                    if not os.path.isfile(tmpl_path):
+                        tmpl_path = os.path.join(WEB_ROOT, "templates", "aiometadata-configs", "tamtaro-aiometadata-with-anime.json")
+                    if not os.path.isfile(tmpl_path):
+                        repo_candidate = Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs" / tmpl_name
+                        if not repo_candidate.is_file():
+                            repo_candidate = Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs" / "tamtaro-aiometadata-with-anime.json"
+                        if repo_candidate.is_file():
+                            tmpl_path = str(repo_candidate)
+                    if os.path.isfile(tmpl_path):
+                        with open(tmpl_path, "r", encoding="utf-8") as f:
+                            raw = json.load(f)
+                            config_data = raw.get("config", raw)
+
+                if not config_data:
+                    raise ValueError("AIOMetadata configuration not ready")
+
+                body = json.dumps(config_data, indent=2).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Disposition", 'attachment; filename="aio-local-aiometadata-profile.json"')
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self.json_response({"error": f"AIOMetadata configuration export failed: {e}"}, 503)
+            return
         if path == "/api/profile-recommendation":
             try:
                 memory_kb = int(next(line.split()[1] for line in open("/proc/meminfo", encoding="ascii") if line.startswith("MemTotal:")))
@@ -743,6 +792,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
+            "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
             "configuredKeys": sorted(key for key, value in env_vars.items()
                                      if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
@@ -868,6 +918,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             keys_to_update = {str(k): str(v).strip() for k, v in data.items() if v is not None}
             if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):
                 raise ValueError('MediaFusion must be enabled (1) or disabled (0)')
+            if keys_to_update.get('AIOMETADATA_TEMPLATE'):
+                tmpl = keys_to_update['AIOMETADATA_TEMPLATE']
+                if not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):
+                    raise ValueError('Invalid AIOMetadata template name')
             if keys_to_update.get('MEDIAFUSION_MANIFEST_URL'):
                 url=urllib.parse.urlsplit(keys_to_update['MEDIAFUSION_MANIFEST_URL'])
                 if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.query or url.fragment or not url.path.endswith('/manifest.json'):

@@ -282,3 +282,11 @@ class BootstrapTests(unittest.TestCase):
     def test_prowlarr_anime_indexers_included(self):
         self.assertIn("subsplease", bootstrap.TARGET_INDEXERS)
         self.assertIn("animetosho-xyz", bootstrap.TARGET_INDEXERS)
+
+    def test_resolve_aiometadata_template_path(self):
+        path_anime = bootstrap.resolve_aiometadata_template_path("with-anime")
+        self.assertTrue(path_anime.endswith("tamtaro-aiometadata-with-anime.json"))
+        path_no_anime = bootstrap.resolve_aiometadata_template_path("without-anime")
+        self.assertTrue(path_no_anime.endswith("tamtaro-aiometadata-without-anime.json"))
+        path_grabber = bootstrap.resolve_aiometadata_template_path("grabberhawk")
+        self.assertTrue(path_grabber.endswith("grabberhawk-aiometadata-config.json"))
