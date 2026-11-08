@@ -41,7 +41,7 @@
 <p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
 </div>
 <div id="metadata-fields" class="field-grid"></div>
-<details class="more-options"><summary>Usenet, subtitles & optional services <span>+</span></summary>
+<details class="more-options"><summary>Usenet, tracking, subtitles & optional services <span>+</span></summary>
 <div class="optional-setup"><h3>MediaFusion · optional</h3><label class="optional-service"><input id="enable-mediafusion" type="checkbox"> Enable MediaFusion</label><p>Additional sources can require their own engines or accounts. Configure AceStream and other extras in MediaFusion, then paste its configured manifest here. Switching off stops its container and retains its data.</p><div id="mediafusion-manifest-fields" class="field-grid"></div></div>
 <div class="optional-setup"><h3>Usenet · optional</h3><label class="optional-service"><input id="enable-usenet" type="checkbox"> Use a Usenet account</label><div class="field-grid">
 <label><span class="field-label">Server hostname</span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
@@ -50,9 +50,10 @@
 <label><span class="field-label">Password</span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
 <label><span class="field-label">Connections</span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
 <label class="optional-service"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption</label>
-</div><p>These settings configure InfiniDysk automatically. Passwords stay hidden when this page reloads. Search also needs an NZB indexer; add a Newznab indexer below or use your existing Prowlarr setup.</p>
-<label><span class="field-label">NZB indexer base address · optional</span><input id="nzb-indexer-url" type="url" placeholder="https://your-indexer.example"></label><div id="usenet-indexer-key-fields" class="field-grid"></div></div>
-<div id="extra-fields" class="field-grid"></div></details>
+</div><p>These settings configure InfiniDysk automatically. Passwords stay hidden when this page reloads. Search also needs an NZB indexer; add AltHUB, AnimeTosho, or any Newznab indexer below, or use your existing Prowlarr setup.</p>
+<label><span class="field-label">NZB indexer base address · optional</span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label><div id="usenet-indexer-key-fields" class="field-grid"></div></div>
+<div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div></div>
+<div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div></details>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
 <button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
 <p class="under-button">Your services, configured together. Setup details stay available below.</p>

@@ -635,6 +635,18 @@ def setup_aiometadata_tamtaro():
     config["castCount"] = 15
     config["animeEpisodeDates"] = "earliest"
     config.setdefault("search", {})["ai_enabled"] = True
+    config["traktWatchTracking"] = True
+    config["simklWatchTracking"] = True
+    config["anilistWatchTracking"] = True
+    config["malWatchTracking"] = True
+    config["mdblistWatchTracking"] = True
+    config["watchTracking"] = {
+        "trakt": {"movie": True, "series": True},
+        "simkl": {"movie": True, "series": True},
+        "anilist": {"movie": True, "series": True},
+        "mal": {"movie": True, "series": True},
+        "mdblist": {"movie": True, "series": True}
+    }
 
     # Register configuration in AIOMetadata
     save_payload = {

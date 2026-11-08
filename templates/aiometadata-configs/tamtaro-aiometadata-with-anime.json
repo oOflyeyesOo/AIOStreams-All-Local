@@ -1692,7 +1692,33 @@
     },
     "mdblistWatchTracking": true,
     "showDisabledCatalogs": false,
-    "animeEpisodeDates": "earliest"
+    "animeEpisodeDates": "earliest",
+    "traktWatchTracking": true,
+    "simklWatchTracking": true,
+    "anilistWatchTracking": true,
+    "malWatchTracking": true,
+    "watchTracking": {
+      "trakt": {
+        "movie": true,
+        "series": true
+      },
+      "simkl": {
+        "movie": true,
+        "series": true
+      },
+      "anilist": {
+        "movie": true,
+        "series": true
+      },
+      "mal": {
+        "movie": true,
+        "series": true
+      },
+      "mdblist": {
+        "movie": true,
+        "series": true
+      }
+    }
   },
   "metadata": {
     "apiKeysExcluded": true,

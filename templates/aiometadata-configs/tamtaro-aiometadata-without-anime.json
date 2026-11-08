@@ -1286,6 +1286,32 @@
     "customArt": {
       "posterUrl": "http://postersplus:8000/poster?stremio_id={id}&type={type}&shape={shape}&access_key=admin",
       "proxy": true
+    },
+    "traktWatchTracking": true,
+    "simklWatchTracking": true,
+    "anilistWatchTracking": true,
+    "malWatchTracking": true,
+    "watchTracking": {
+      "trakt": {
+        "movie": true,
+        "series": true
+      },
+      "simkl": {
+        "movie": true,
+        "series": true
+      },
+      "anilist": {
+        "movie": true,
+        "series": true
+      },
+      "mal": {
+        "movie": true,
+        "series": true
+      },
+      "mdblist": {
+        "movie": true,
+        "series": true
+      }
     }
   },
   "metadata": {

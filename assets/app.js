@@ -3,10 +3,31 @@ const providers = [
   ['TORBOX_API_KEY','TorBox','T'],['ALLDEBRID_API_KEY','AllDebrid','A'],
   ['DEBRIDLINK_API_KEY','Debrid-Link','D'],['EASYDEBRID_API_KEY','EasyDebrid','E']
 ];
-const metadata = [['TMDB_API_KEY','TMDB','T'],['TVDB_API_KEY','TVDB','TV'],['FANART_API_KEY','Fanart.tv','F'],['MDBLIST_API_KEY','MDBList','M']];
-const extras = [['RPDB_API_KEY','Rating posters','RP'],['TRAKT_CLIENT_ID','Trakt client ID','TR'],['TRAKT_CLIENT_SECRET','Trakt client secret','TR'],['SIMKL_CLIENT_ID','Simkl client ID','SK'],['SIMKL_CLIENT_SECRET','Simkl client secret','SK'],['ANILIST_CLIENT_ID','AniList client ID','AL'],['ANILIST_CLIENT_SECRET','AniList client secret','AL'],['SUBDL_API_KEY','SubDL','S'],['SUBSOURCE_API_KEY','SubSource','SS'],['WYZIE_API_KEY','Wyzie','W'],['GEMINI_API_KEY','Gemini','G'],['OFFCLOUD_API_KEY','Offcloud','O'],['SEEDR_API_KEY','Seedr','S']];
-const fields = [...providers,...metadata,...extras];
-const optionalSecrets=[['MEDIAFUSION_MANIFEST_URL','Configured MediaFusion manifest (optional)','MF'],['NZB_INDEXER_API_KEY','NZB indexer API key','NZB']];
+const metadata = [
+  ['TMDB_API_KEY','TMDB','T'],
+  ['TVDB_API_KEY','TVDB','TV'],
+  ['FANART_API_KEY','Fanart.tv (ClearLogos)','F'],
+  ['MDBLIST_API_KEY','MDBList','M'],
+  ['GEMINI_API_KEY','Gemini AI search','G']
+];
+const trackingKeys = [
+  ['TRAKT_CLIENT_ID','Trakt client ID','TR'],
+  ['TRAKT_CLIENT_SECRET','Trakt client secret','TR'],
+  ['SIMKL_CLIENT_ID','Simkl client ID','SK'],
+  ['SIMKL_CLIENT_SECRET','Simkl client secret','SK'],
+  ['ANILIST_CLIENT_ID','AniList client ID','AL'],
+  ['ANILIST_CLIENT_SECRET','AniList client secret','AL']
+];
+const extras = [
+  ['RPDB_API_KEY','Rating posters (RPDB)','RP'],
+  ['SUBDL_API_KEY','SubDL subtitles','S'],
+  ['SUBSOURCE_API_KEY','SubSource subtitles','SS'],
+  ['WYZIE_API_KEY','Wyzie subtitles','W'],
+  ['OFFCLOUD_API_KEY','Offcloud','O'],
+  ['SEEDR_API_KEY','Seedr','S']
+];
+const fields = [...providers,...metadata,...trackingKeys,...extras];
+const optionalSecrets=[['MEDIAFUSION_MANIFEST_URL','Configured MediaFusion manifest (optional)','MF'],['NZB_INDEXER_API_KEY','AltHUB / AnimeTosho / NZB API key','NZB']];
 fields.push(...optionalSecrets);
 let usenetPasswordSaved=false;
 let currentManifest = '';
@@ -68,6 +89,7 @@ function renderFields(id, values) {
 }
 renderFields('provider-fields',providers);
 renderFields('metadata-fields',metadata);
+renderFields('tracking-fields',trackingKeys);
 renderFields('extra-fields',extras);
 renderFields('mediafusion-manifest-fields',[optionalSecrets[0]]);
 renderFields('usenet-indexer-key-fields',[optionalSecrets[1]]);
@@ -156,12 +178,21 @@ async function loadManifest() {
   if (info.aiometadataManifest) {
     currentAiometaManifest = info.aiometadataManifest;
     const tracking = document.getElementById('connect-tracking');
+    const setupTracking = document.getElementById('setup-connect-tracking');
     const configuration = new URL(currentAiometaManifest);
     const profile = configuration.pathname.match(/^\/stremio\/([^/]+)\//);
-    if (tracking && profile) {
+    if (profile) {
       configuration.pathname = `/stremio/${profile[1]}/configure`;
       configuration.search = ''; configuration.hash = '';
-      tracking.href = configuration.toString(); tracking.classList.remove('disabled');
+      const configureUrl = configuration.toString();
+      if (tracking) {
+        tracking.href = configureUrl;
+        tracking.classList.remove('disabled');
+      }
+      if (setupTracking) {
+        setupTracking.href = configureUrl;
+        setupTracking.classList.remove('disabled');
+      }
     }
     const aiomCode = document.getElementById('aiometa-manifest-url');
     if (aiomCode) aiomCode.textContent = currentAiometaManifest;
@@ -455,7 +486,13 @@ async function runOperations() {
     try {
       const data = JSON.parse(await file.text());
       const values = data.values && typeof data.values === 'object' ? data.values : data;
-      for (const key of ['BASE_URL','AIOMETADATA_HOST','COMPOSE_PROFILES','TMDB_API_KEY','REALDEBRID_API_KEY','TORBOX_API_KEY','PREMIUMIZE_API_KEY','ALLDEBRID_API_KEY']) {
+      for (const key of [
+        'BASE_URL','AIOMETADATA_HOST','AIOMETADATA_TEMPLATE','COMPOSE_PROFILES',
+        'TMDB_API_KEY','TVDB_API_KEY','FANART_API_KEY','MDBLIST_API_KEY','GEMINI_API_KEY','RPDB_API_KEY',
+        'REALDEBRID_API_KEY','TORBOX_API_KEY','PREMIUMIZE_API_KEY','ALLDEBRID_API_KEY','DEBRIDLINK_API_KEY','EASYDEBRID_API_KEY',
+        'TRAKT_CLIENT_ID','TRAKT_CLIENT_SECRET','SIMKL_CLIENT_ID','SIMKL_CLIENT_SECRET','ANILIST_CLIENT_ID','ANILIST_CLIENT_SECRET',
+        'SUBDL_API_KEY','SUBSOURCE_API_KEY','WYZIE_API_KEY','NZB_INDEXER_API_KEY','NZB_INDEXER_URL'
+      ]) {
         if (typeof data[key] === 'string') values[key] = data[key];
       }
       const result = await api('/api/config-import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({format:'aio-local-config-v1', values})});

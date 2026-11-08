@@ -102,7 +102,13 @@ services:
       - BASE_URL=${BASE_URL:-}
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+      - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+      - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+      - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+      - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/healthz')\" || exit 1"]
@@ -540,7 +546,13 @@ services:
       - FANART_API_KEY=${FANART_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+      - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+      - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+      - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+      - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+      - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
     command: python3 -u /init/setup_stack.py
     networks:
       - stremio-net
