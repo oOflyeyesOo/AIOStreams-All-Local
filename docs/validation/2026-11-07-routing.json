@@ -555,5 +555,211 @@
         "wallSeconds": 10.215
       }
     ]
+  },
+  "protectedConfigurationRouting": {
+    "scope": "deterministic AIOStreams routing; no external providers",
+    "results": [
+      {
+        "case": "movie fixture-cached",
+        "cold": {
+          "seconds": 0.312,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.017,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.015,
+            "streams": 1
+          },
+          {
+            "seconds": 0.032,
+            "streams": 1
+          },
+          {
+            "seconds": 0.023,
+            "streams": 1
+          },
+          {
+            "seconds": 0.047,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "movie fixture-empty",
+        "cold": {
+          "seconds": 0.344,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.014,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.02,
+            "streams": 1
+          },
+          {
+            "seconds": 0.028,
+            "streams": 1
+          },
+          {
+            "seconds": 0.034,
+            "streams": 1
+          },
+          {
+            "seconds": 0.042,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "series tt0944947:2:2",
+        "cold": {
+          "seconds": 0.825,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.011,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.012,
+            "streams": 1
+          },
+          {
+            "seconds": 0.037,
+            "streams": 1
+          },
+          {
+            "seconds": 0.021,
+            "streams": 1
+          },
+          {
+            "seconds": 0.047,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "series tt0903747:2:2",
+        "cold": {
+          "seconds": 0.577,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.008,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.013,
+            "streams": 1
+          },
+          {
+            "seconds": 0.018,
+            "streams": 1
+          },
+          {
+            "seconds": 0.023,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "movie fixture-unavailable",
+        "cold": {
+          "seconds": 0.338,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.008,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.009,
+            "streams": 1
+          },
+          {
+            "seconds": 0.014,
+            "streams": 1
+          },
+          {
+            "seconds": 0.022,
+            "streams": 1
+          },
+          {
+            "seconds": 0.027,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "simultaneous cold viewers",
+        "concurrent4": [
+          {
+            "seconds": 0.146,
+            "streams": 1
+          },
+          {
+            "seconds": 0.148,
+            "streams": 1
+          },
+          {
+            "seconds": 0.145,
+            "streams": 1
+          },
+          {
+            "seconds": 0.147,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      }
+    ],
+    "configurationWriteGateVerified": true
+  },
+  "startupFix": {
+    "cause": "Legacy password migration conflicts with environment-controlled api.authRequired",
+    "configurationAccessKeyExplicit": true,
+    "freshDatabaseHealthy": true,
+    "freshDatabaseRestarts": 0,
+    "upgradePassed": true,
+    "rollbackPassed": true,
+    "failedUpgradeRecoveryPassed": true,
+    "postRecoveryEndpointChecksPassed": 22
   }
 }

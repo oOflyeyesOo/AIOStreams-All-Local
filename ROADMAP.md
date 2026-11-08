@@ -13,6 +13,7 @@ Copilot's original suggestions are retained in [docs/COPILOT-ROADMAP.md](docs/CO
 - [x] Live fixture PostgreSQL backup/delete/restore, SQLite snapshots, Prowlarr backup coverage, fresh backup downloads and safe cache cleanup.
 - [x] Update failure handling in Bash and PowerShell; 106 Python tests, eight browser checks and source release CI passing.
 - [x] Corrected OAuth client wiring and preservation of saved account links on repeated setup.
+- [x] Reproduced and fixed first-start password migration failure; explicit configuration access keys, rejected unauthorized writes and a zero-restart release gate.
 - [x] Supplied keys removed from development copies, current release files and reachable Git history/tags. Original installation and original backup remain unchanged by explicit request.
 
 These checks do not establish every external integration as working. Real OAuth consent/token refresh, an authenticated tunnel, other debrid providers, NNTP and ARM/NAS compatibility remain unverified. Endpoint health is separate from functional playback.

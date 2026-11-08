@@ -48,6 +48,15 @@ primary call and zero fallback calls. Broker regression tests independently cove
 eight simultaneous identical searches → one upstream call, credential isolation,
 failure cooldown, admission capacity and cache byte/entry bounds.
 
+The final protected-configuration release repeated these checks on a fresh Linux
+runner. Cached-primary movie and episode requests took 0.382/0.622 s initially and
+0.029/0.006 s warm. Empty-primary movie/episode cases took 0.336/0.573 s. Four
+simultaneous cold viewers each returned in 0.139 s with exactly one primary call
+and zero fallback calls. Repeated warm/concurrent cases made no additional fixture
+calls. Writes without a configuration access key were rejected, and the server
+started without a restart. See [the Linux report](validation/2026-11-07-linux-release.json).
+These remain fixture-addon timings, not paid-provider cold-search guarantees.
+
 The broker's default upstream socket timeout is 8 s and client wait budget 10 s;
 failed requests have a 120 s cooldown. It cannot cancel work already running inside
 Prowlarr. Different Torznab search forms are different requests and are not merged.

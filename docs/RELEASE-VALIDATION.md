@@ -87,3 +87,25 @@ was rejected. Regression coverage also verifies that startup summaries expose on
 allowlisted status/error flags, not raw logs, URLs or environment values. The current
 unit suite has 106 tests. Post-fix routing, upgrade/recovery and fresh Linux bundle
 acceptance are the release gates; use the replacement bundle once those pass.
+
+## Verified replacement release
+
+Revision `5fce852b3a0078060fc27cfdbff40cdd1a62885b` passed the replacement release
+gate on a fresh Linux runner: zero AIOStreams restarts, 22/22 endpoint checks,
+configuration-write protection, movie/episode fallback and exact concurrent call
+counts. Its regression workflow passed 106 Python tests and eight browser checks;
+all nine manager images published successfully. The appliance image with the same
+application fix published from `e6f09a8`.
+
+Use the [tested replacement Compose bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42433774822/artifacts/13598986164),
+not the earlier superseded bundle. Artifact digest:
+`sha256:fa6097e54222f4e92a7c004746573abc73f580338a04f2cb2ab4d784c23281ae`.
+The downloadable archive contains `compose.release.yml` and `release.lock.json`.
+It is retained for 90 days; save your installed copy.
+
+The post-fix local upgrade test also passed upgrade from the previous write mode,
+snapshot rollback and injected failed-upgrade recovery, preserving profile identity
+and SQL data. All 22 endpoints passed after recovery. Disposable test services were
+stopped afterward; the retained installation and original archive were left intact.
+Detailed Linux timings and call counts are in
+[the machine-readable release report](validation/2026-11-07-linux-release.json).

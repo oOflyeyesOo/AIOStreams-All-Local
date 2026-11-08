@@ -1,0 +1,202 @@
+{
+  "source": "5fce852b3a0078060fc27cfdbff40cdd1a62885b",
+  "runId": 42433774822,
+  "artifactId": 13598986164,
+  "artifactDigest": "sha256:fa6097e54222f4e92a7c004746573abc73f580338a04f2cb2ab4d784c23281ae",
+  "zeroRestartGatePassed": true,
+  "routing": {
+    "scope": "deterministic AIOStreams routing; no external providers",
+    "results": [
+      {
+        "case": "movie fixture-cached",
+        "cold": {
+          "seconds": 0.382,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.029,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.031,
+            "streams": 1
+          },
+          {
+            "seconds": 0.054,
+            "streams": 1
+          },
+          {
+            "seconds": 0.092,
+            "streams": 1
+          },
+          {
+            "seconds": 0.07,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "movie fixture-empty",
+        "cold": {
+          "seconds": 0.336,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.009,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.008,
+            "streams": 1
+          },
+          {
+            "seconds": 0.025,
+            "streams": 1
+          },
+          {
+            "seconds": 0.039,
+            "streams": 1
+          },
+          {
+            "seconds": 0.05,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "series tt0944947:2:2",
+        "cold": {
+          "seconds": 0.622,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.006,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.011,
+            "streams": 1
+          },
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.014,
+            "streams": 1
+          },
+          {
+            "seconds": 0.018,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "series tt0903747:2:2",
+        "cold": {
+          "seconds": 0.573,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.007,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.017,
+            "streams": 1
+          },
+          {
+            "seconds": 0.012,
+            "streams": 1
+          },
+          {
+            "seconds": 0.021,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "movie fixture-unavailable",
+        "cold": {
+          "seconds": 0.344,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.006,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.02,
+            "streams": 1
+          },
+          {
+            "seconds": 0.013,
+            "streams": 1
+          },
+          {
+            "seconds": 0.023,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "simultaneous cold viewers",
+        "concurrent4": [
+          {
+            "seconds": 0.139,
+            "streams": 1
+          },
+          {
+            "seconds": 0.139,
+            "streams": 1
+          },
+          {
+            "seconds": 0.139,
+            "streams": 1
+          },
+          {
+            "seconds": 0.139,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      }
+    ]
+  }
+}
