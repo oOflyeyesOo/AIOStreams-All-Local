@@ -781,9 +781,9 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         {
             "type": "torrentio",
             "instanceId": "torrentio-local",
-            "enabled": False,
+            "enabled": True,
             "options": {
-                "name": "Torrentio",
+                "name": "KnightCrawler / Torrentio",
                 "timeout": 18000,
                 "resources": ["stream"],
                 "providers": [],
@@ -927,7 +927,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         pid = p.get("instanceId", "")
         opts = p.setdefault("options", {})
         if ptype == "torrentio":
-            p["enabled"] = False
+            opts["name"] = opts.get("name") or "KnightCrawler / Torrentio"
+            if os.environ.get("KNIGHTCRAWLER_URL"):
+                opts["url"] = os.environ.get("KNIGHTCRAWLER_URL")
+            enable_kc = os.environ.get("ENABLE_KNIGHTCRAWLER", os.environ.get("ENABLE_TORRENTIO", "true")).lower() != "false"
+            p["enabled"] = enable_kc
             validated_presets.append(p)
         elif ptype == "mediafusion":
             opts["useCachedResultsOnly"] = True
@@ -1077,6 +1081,30 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config["syncedExcludedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json"]
     config["syncedRankedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json"]
     config["enableSeadex"] = True
+
+    # Activate AIOStreams upstream features
+    config.setdefault("precacheNextEpisode", True)
+    config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["torrent", "usenet"]})
+    config.setdefault("remuxDb", {"enabled": True})
+    config.setdefault("titleMatching", {"enabled": True, "mode": "contains", "similarityThreshold": 0.85})
+    config.setdefault("seasonEpisodeMatching", {"enabled": True, "strict": False})
+    config.setdefault("episodeTitleMatching", {"enabled": True, "similarityThreshold": 0.8})
+    config.setdefault("yearMatching", {"enabled": True, "tolerance": 1})
+    config.setdefault("languageInference", {"enabled": True, "sources": ["title", "episodeTitle"]})
+    config.setdefault("failover", {
+        "enabled": True,
+        "contentTypes": ["debrid", "usenet"],
+        "allowCrossType": True,
+        "maxAttempts": 3,
+        "includeExternalFailover": True,
+        "precacheFailover": True,
+    })
+    if "deduplicator" in config and isinstance(config["deduplicator"], dict):
+        config["deduplicator"].setdefault("merge", {
+            "enabled": True,
+            "failoverVariants": True,
+            "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched"],
+        })
 
     # Inject metadata API keys into AIOStreams user configuration
     global TMDB_API_KEY, TVDB_API_KEY

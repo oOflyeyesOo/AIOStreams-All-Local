@@ -148,7 +148,8 @@ def test_comet():
             playback_url = sample_stream.get("url")
 
         # Test playback byte stream on comet playback URL
-        play_req = urllib.request.Request(playback_url, headers={"Range": "bytes=0-1023"})
+        headers = {"Range": "bytes=0-1023", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        play_req = urllib.request.Request(playback_url, headers=headers)
         with urllib.request.urlopen(play_req, timeout=20) as play_resp:
             block = play_resp.read(1024)
             record("6. Comet Fast Scraper & Streamer", True, f"Manifest OK, {len(streams)} streams found, 206 playback probed ({len(block)} bytes)")
@@ -350,7 +351,8 @@ def test_aiostreams_and_playback():
         candidate = playable_streams[0]
         c_url = candidate["url"]
         internal_target = c_url.replace("https://aio.yourdomain.com", "http://aiostreams:3000")
-        play_req = urllib.request.Request(internal_target, headers={"Range": "bytes=0-1023"})
+        headers = {"Range": "bytes=0-1023", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        play_req = urllib.request.Request(internal_target, headers=headers)
         with urllib.request.urlopen(play_req, timeout=30) as play_resp:
             status = play_resp.status
             content_type = play_resp.headers.get("Content-Type")
