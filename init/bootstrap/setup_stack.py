@@ -251,7 +251,8 @@ TARGET_INDEXERS = [
     "nyaasi",
     "tokyotosho",
     "subsplease",
-    "animetosho-xyz"
+    "animetosho-xyz",
+    "nekobt"
 ]
 
 def make_request(url, method="GET", data=None, headers=None, timeout=12):
@@ -385,6 +386,27 @@ def setup_prowlarr_indexers():
             res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=indexer_payload, headers=headers)
             if isinstance(res, dict) and "id" in res:
                 print(f"[Prowlarr Setup] ✓ Successfully provisioned public indexer: {matched_schema.get('name')}", flush=True)
+                added_count += 1
+
+    # Ensure Zilean local DMM Torznab indexer is provisioned for instant debrid cache hits
+    if not any("zilean" in d for d in existing_definitions):
+        torznab_schema = next((s for s in schemas if s.get("implementation") == "Torznab"), None)
+        if torznab_schema:
+            z_payload = dict(torznab_schema)
+            z_payload["name"] = "Zilean DMM (Local)"
+            z_payload["enable"] = True
+            z_payload["priority"] = 1
+            z_payload["appProfileId"] = 1
+            for f in z_payload.get("fields", []):
+                if f.get("name") == "baseUrl":
+                    f["value"] = "http://zilean:8181/torznab"
+                elif f.get("name") == "apiPath":
+                    f["value"] = "/api"
+                elif f.get("name") == "apiKey":
+                    f["value"] = PROWLARR_API_KEY
+            res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=z_payload, headers=headers)
+            if isinstance(res, dict) and "id" in res:
+                print("[Prowlarr Setup] ✓ Successfully provisioned Zilean DMM local Torznab indexer.", flush=True)
                 added_count += 1
 
     print(f"[Prowlarr Setup] Prowlarr indexer provisioning complete. Added {added_count} new indexers.", flush=True)

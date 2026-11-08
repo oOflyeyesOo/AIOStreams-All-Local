@@ -150,6 +150,7 @@ services:
       - CONFIG_ACCESS_KEY=${ADDON_PASSWORD:-admin}
       - AIOSTREAMS_AUTH_REQUIRED=true
       - DATABASE_URI=sqlite:///data/db.sqlite
+      - REDIS_URI=redis://shared-redis:6379/6
       - ALLOW_PRIVATE_URLS=true
       - ALIASED_CONFIGURATIONS=${ALIASED_CONFIGURATIONS:-}
       - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
@@ -971,6 +972,9 @@ services:
       - AIOSTREAMS_URL=http://aiostreams:3000
       - AIOSTREAMS_AUTH_USERNAME=admin
       - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
+      - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+      - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+      - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - STREMIO_URL=http://aiostreams:3000
       - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
