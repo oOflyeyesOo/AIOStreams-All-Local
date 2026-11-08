@@ -612,17 +612,29 @@ def setup_aiometadata_tamtaro():
     # Account token-record IDs are created by AIOMetadata OAuth, never client IDs
     # or raw access tokens. Keep existing linked records loaded above.
 
-    # Configure Posters+ Rating Poster Provider
+    # Configure Posters+ Rating Poster Provider with multi-shape support
     config["usePosterProxy"] = True
     config["posterRatingProvider"] = "customArt"
     poster_key = os.environ.get("POSTERSPLUS_ACCESS_KEY", "")
-    poster_url = f"{POSTERSPLUS_URL}/poster?stremio_id={{id}}"
+    poster_url = f"{POSTERSPLUS_URL}/poster?stremio_id={{id}}&type={{type}}&shape={{shape}}"
     if poster_key:
         poster_url += '&access_key=' + urllib.parse.quote(poster_key, safe='')
     config["customPosterUrl"] = poster_url
     config["enableRatingPostersForLibrary"] = True
     config.setdefault("customArt", {})["posterUrl"] = poster_url
     config["customArt"]["proxy"] = True
+
+    # Configure art providers with Fanart.tv ClearLogos & backdrops
+    art_providers = config.setdefault("artProviders", {})
+    for kind in ("movie", "series", "anime"):
+        kind_cfg = art_providers.setdefault(kind, {})
+        kind_cfg["logo"] = "fanart"
+        kind_cfg["background"] = "fanart"
+        kind_cfg["poster"] = "custom"
+
+    config["castCount"] = 15
+    config["animeEpisodeDates"] = "earliest"
+    config.setdefault("search", {})["ai_enabled"] = True
 
     # Register configuration in AIOMetadata
     save_payload = {

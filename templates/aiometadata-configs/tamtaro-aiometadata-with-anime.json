@@ -7,7 +7,7 @@
     "blurThumbs": false,
     "showPrefix": false,
     "showMetaProviderAttribution": false,
-    "castCount": 10,
+    "castCount": 15,
     "displayAgeRating": false,
     "sfw": true,
     "hideUnreleasedDigital": true,
@@ -21,28 +21,28 @@
     "artProviders": {
       "movie": {
         "poster": "custom",
-        "background": "meta",
-        "logo": "meta"
+        "background": "fanart",
+        "logo": "fanart"
       },
       "series": {
         "poster": "custom",
-        "background": "meta",
-        "logo": "meta"
+        "background": "fanart",
+        "logo": "fanart"
       },
       "anime": {
         "poster": "custom",
-        "background": "meta",
-        "logo": "meta"
+        "background": "fanart",
+        "logo": "fanart"
       },
       "englishArtOnly": false
     },
     "customArt": {
-      "posterUrl": "http://postersplus:8000/poster/{id}",
+      "posterUrl": "http://postersplus:8000/poster?stremio_id={id}&type={type}&shape={shape}&access_key=admin",
       "proxy": true
     },
     "usePosterProxy": true,
     "posterRatingProvider": "customArt",
-    "customPosterUrl": "http://postersplus:8000/poster/{id}",
+    "customPosterUrl": "http://postersplus:8000/poster?stremio_id={id}&type={type}&shape={shape}&access_key=admin",
     "enableRatingPostersForLibrary": true,
     "tvdbSeasonType": "default",
     "mal": {
@@ -1691,7 +1691,8 @@
       "series": "series"
     },
     "mdblistWatchTracking": true,
-    "showDisabledCatalogs": false
+    "showDisabledCatalogs": false,
+    "animeEpisodeDates": "earliest"
   },
   "metadata": {
     "apiKeysExcluded": true,

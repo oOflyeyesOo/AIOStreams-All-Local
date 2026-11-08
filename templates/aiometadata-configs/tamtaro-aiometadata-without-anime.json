@@ -7,7 +7,7 @@
     "blurThumbs": false,
     "showPrefix": false,
     "showMetaProviderAttribution": false,
-    "castCount": 10,
+    "castCount": 15,
     "displayAgeRating": false,
     "sfw": true,
     "hideUnreleasedDigital": true,
@@ -20,19 +20,19 @@
     },
     "artProviders": {
       "movie": {
-        "poster": "meta",
-        "background": "meta",
-        "logo": "meta"
+        "poster": "custom",
+        "background": "fanart",
+        "logo": "fanart"
       },
       "series": {
-        "poster": "meta",
-        "background": "meta",
-        "logo": "meta"
+        "poster": "custom",
+        "background": "fanart",
+        "logo": "fanart"
       },
       "anime": {
-        "poster": "meta",
-        "background": "imdb",
-        "logo": "imdb"
+        "poster": "custom",
+        "background": "fanart",
+        "logo": "fanart"
       },
       "englishArtOnly": false
     },
@@ -1277,7 +1277,16 @@
       "series": "series"
     },
     "mdblistWatchTracking": true,
-    "hideUnreleasedDigitalSearch": false
+    "hideUnreleasedDigitalSearch": false,
+    "animeEpisodeDates": "earliest",
+    "usePosterProxy": true,
+    "posterRatingProvider": "customArt",
+    "customPosterUrl": "http://postersplus:8000/poster?stremio_id={id}&type={type}&shape={shape}&access_key=admin",
+    "enableRatingPostersForLibrary": true,
+    "customArt": {
+      "posterUrl": "http://postersplus:8000/poster?stremio_id={id}&type={type}&shape={shape}&access_key=admin",
+      "proxy": true
+    }
   },
   "metadata": {
     "apiKeysExcluded": true,
