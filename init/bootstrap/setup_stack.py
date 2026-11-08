@@ -196,6 +196,8 @@ DEBRIDLINK_API_KEY = os.environ.get("DEBRIDLINK_API_KEY", "")
 EASYDEBRID_API_KEY = os.environ.get("EASYDEBRID_API_KEY", "")
 OFFCLOUD_API_KEY = os.environ.get("OFFCLOUD_API_KEY", "")
 SEEDR_API_KEY = os.environ.get("SEEDR_API_KEY", "")
+EASYNEWS_USER = os.environ.get("EASYNEWS_USER", "")
+EASYNEWS_PASSWORD = os.environ.get("EASYNEWS_PASSWORD", "")
 USENET_HOST = os.environ.get("USENET_HOST", "")
 USENET_PORT = os.environ.get("USENET_PORT", "563")
 USENET_USER = os.environ.get("USENET_USER", "")
@@ -227,7 +229,9 @@ TARGET_INDEXERS = [
     "badass-torrents",
     "torrentdownload",
     "nyaasi",
-    "tokyotosho"
+    "tokyotosho",
+    "subsplease",
+    "animetosho-xyz"
 ]
 
 def make_request(url, method="GET", data=None, headers=None, timeout=12):
@@ -754,6 +758,15 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "apiKey": SEEDR_API_KEY
             }
         })
+    if EASYNEWS_USER and EASYNEWS_PASSWORD:
+        services.append({
+            "id": "easynews",
+            "enabled": True,
+            "credentials": {
+                "username": EASYNEWS_USER,
+                "password": EASYNEWS_PASSWORD
+            }
+        })
 
     presets = base_config.get("presets", [
         {
@@ -823,6 +836,54 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "timeout": 18000,
                 "resources": ["stream"],
                 "providers": [],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "anime-tosho-new",
+            "instanceId": "anime-tosho-new",
+            "enabled": True,
+            "options": {
+                "name": "Anime Tosho",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "tsukihime",
+            "instanceId": "tsukihime-scraper",
+            "enabled": True,
+            "options": {
+                "name": "TsukiHime",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": ["anime"],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "neko-bt",
+            "instanceId": "neko-bt-scraper",
+            "enabled": True,
+            "options": {
+                "name": "nekoBT",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "easynews-search",
+            "instanceId": "easynews-search",
+            "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
+            "options": {
+                "name": "Easynews Search",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
                 "useMultipleInstances": False
             }
         },
@@ -899,7 +960,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             'name':'Usenet (Prowlarr → InfiniDysk)','prowlarrUrl':PROWLARR_URL,'prowlarrApiKey':PROWLARR_API_KEY,
             'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':20000}})
     sootio_url = f"{SOOTIO_URL}/manifest.json"
-    if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY:
+    if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY or (EASYNEWS_USER and EASYNEWS_PASSWORD):
         debrid_services = []
         if REALDEBRID_API_KEY:
             debrid_services.append({"provider": "RealDebrid", "apiKey": REALDEBRID_API_KEY})
@@ -909,11 +970,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             debrid_services.append({"provider": "TorBox", "apiKey": TORBOX_API_KEY})
         if ALLDEBRID_API_KEY:
             debrid_services.append({"provider": "AllDebrid", "apiKey": ALLDEBRID_API_KEY})
+        if EASYNEWS_USER and EASYNEWS_PASSWORD:
+            debrid_services.append({"provider": "Easynews", "username": EASYNEWS_USER, "password": EASYNEWS_PASSWORD})
         if debrid_services:
             sootio_cfg = {
                 "DebridServices": debrid_services,
                 "DebridProvider": debrid_services[0]["provider"],
-                "DebridApiKey": debrid_services[0]["apiKey"],
+                "DebridApiKey": debrid_services[0].get("apiKey", debrid_services[0].get("password", "")),
                 "Languages": ["en"],
                 "Resolutions": ["4k", "1080p", "720p"],
                 "ShowCatalog": False,
@@ -936,6 +999,61 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "useMultipleInstances": False
             }
         })
+
+    # Ensure anime & usenet presets are guaranteed to be present
+    anime_and_usenet = [
+        {
+            "type": "anime-tosho-new",
+            "instanceId": "anime-tosho-new",
+            "enabled": True,
+            "options": {
+                "name": "Anime Tosho",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "tsukihime",
+            "instanceId": "tsukihime-scraper",
+            "enabled": True,
+            "options": {
+                "name": "TsukiHime",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": ["anime"],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "neko-bt",
+            "instanceId": "neko-bt-scraper",
+            "enabled": True,
+            "options": {
+                "name": "nekoBT",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
+                "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "easynews-search",
+            "instanceId": "easynews-search",
+            "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
+            "options": {
+                "name": "Easynews Search",
+                "timeout": 15000,
+                "resources": ["stream"],
+                "mediaTypes": [],
+                "useMultipleInstances": False
+            }
+        }
+    ]
+    for target in anime_and_usenet:
+        if not any(p.get("type") == target["type"] for p in presets):
+            presets.append(target)
 
     subtitle_config = {"languages": ["eng"]}
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
@@ -1010,6 +1128,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             curr_timeout = int(opts.get("timeout") or 7000)
             if curr_timeout < 18000:
                 opts["timeout"] = 18000
+            validated_presets.append(p)
+        elif ptype == "easynews-search":
+            p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
+            curr_timeout = int(opts.get("timeout") or 15000)
+            opts["timeout"] = curr_timeout
+            if p["enabled"]:
+                print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
+            else:
+                print("[AIOStreams Setup] ℹ️ Easynews credentials not provided; preset disabled.", flush=True)
+            validated_presets.append(p)
+        elif ptype in ("anime-tosho-new", "tsukihime", "neko-bt"):
+            p["enabled"] = True
+            curr_timeout = int(opts.get("timeout") or 15000)
+            opts["timeout"] = curr_timeout
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.

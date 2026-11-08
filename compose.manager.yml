@@ -224,6 +224,8 @@ services:
     - RPDB_API_KEY=${RPDB_API_KEY}
     - FANART_API_KEY=${FANART_API_KEY}
     - FETCH_TRAKT_ALIASES=true
+    - EASYNEWS_USER=${EASYNEWS_USER:-}
+    - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
     - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY}\nrealdebrid.apiKey=${REALDEBRID_API_KEY}\nalldebrid.apiKey=${ALLDEBRID_API_KEY}\ntorbox.apiKey=${TORBOX_API_KEY}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
     - TEMPLATE_URLS=${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}
     - TEMPLATE_REFRESH_INTERVAL=${TEMPLATE_REFRESH_INTERVAL:-3600}
@@ -401,6 +403,8 @@ services:
     - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
     - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
     - DEBRID_API_KEY=${PREMIUMIZE_API_KEY}
+    - EASYNEWS_USER=${EASYNEWS_USER:-}
+    - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
     volumes:
     - sootio-data:/app/data
     networks:
@@ -558,6 +562,8 @@ services:
     - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
     - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
     - SEEDR_API_KEY=${SEEDR_API_KEY}
+    - EASYNEWS_USER=${EASYNEWS_USER:-}
+    - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
     - USENET_HOST=${USENET_HOST}
     - USENET_PORT=${USENET_PORT:-563}
     - USENET_USER=${USENET_USER}

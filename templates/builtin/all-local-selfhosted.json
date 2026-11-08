@@ -15,7 +15,8 @@
       "alldebrid",
       "debridlink",
       "easydebrid",
-      "nzbdav"
+      "nzbdav",
+      "easynews"
     ]
   },
   "config": {
@@ -109,6 +110,64 @@
             "stream"
           ],
           "providers": [],
+          "useMultipleInstances": false
+        }
+      },
+      {
+        "type": "anime-tosho-new",
+        "instanceId": "anime-tosho-new",
+        "enabled": true,
+        "options": {
+          "name": "Anime Tosho",
+          "timeout": 15000,
+          "resources": [
+            "stream"
+          ],
+          "mediaTypes": [],
+          "useMultipleInstances": false
+        }
+      },
+      {
+        "type": "tsukihime",
+        "instanceId": "tsukihime-scraper",
+        "enabled": true,
+        "options": {
+          "name": "TsukiHime",
+          "timeout": 15000,
+          "resources": [
+            "stream"
+          ],
+          "mediaTypes": [
+            "anime"
+          ],
+          "useMultipleInstances": false
+        }
+      },
+      {
+        "type": "neko-bt",
+        "instanceId": "neko-bt-scraper",
+        "enabled": true,
+        "options": {
+          "name": "nekoBT",
+          "timeout": 15000,
+          "resources": [
+            "stream"
+          ],
+          "mediaTypes": [],
+          "useMultipleInstances": false
+        }
+      },
+      {
+        "type": "easynews-search",
+        "instanceId": "easynews-search",
+        "enabled": false,
+        "options": {
+          "name": "Easynews Search",
+          "timeout": 15000,
+          "resources": [
+            "stream"
+          ],
+          "mediaTypes": [],
           "useMultipleInstances": false
         }
       },

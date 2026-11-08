@@ -152,7 +152,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(preset['options']['url'],'http://mediafusion:8000/fixture/manifest.json')
 
     def test_usenet_uses_native_nzb_route_and_skips_torrent_sources_without_debrid(self):
-        with patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER_B64':'Zml4dHVyZQ==','USENET_PASS_B64':'Zml4dHVyZQ=='}):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER_B64':'Zml4dHVyZQ==','USENET_PASS_B64':'Zml4dHVyZQ==','PREMIUMIZE_API_KEY':''}):
             config=bootstrap.build_default_config(probe_services=False)
         self.assertTrue(any(s['id']=='nzbdav' for s in config['services']))
         preset=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
@@ -235,3 +235,31 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap, "TVDB_API_KEY", "optional-tvdb-key"):
             config = bootstrap.build_default_config()
         self.assertNotEqual(config.get("tvdbApiKey"), "optional-tvdb-key")
+
+    def test_anime_and_usenet_presets_present_in_default_config(self):
+        with patch.object(bootstrap, "EASYNEWS_USER", ""), patch.object(bootstrap, "EASYNEWS_PASSWORD", ""):
+            config = bootstrap.build_default_config(probe_services=False)
+            presets = {p["instanceId"]: p for p in config.get("presets", [])}
+            self.assertIn("anime-tosho-new", presets)
+            self.assertTrue(presets["anime-tosho-new"]["enabled"])
+            self.assertIn("tsukihime-scraper", presets)
+            self.assertTrue(presets["tsukihime-scraper"]["enabled"])
+            self.assertIn("neko-bt-scraper", presets)
+            self.assertTrue(presets["neko-bt-scraper"]["enabled"])
+            self.assertIn("easynews-search", presets)
+            self.assertFalse(presets["easynews-search"]["enabled"])
+
+    def test_easynews_configuration_activates_service_and_preset(self):
+        with patch.object(bootstrap, "EASYNEWS_USER", "mockuser"), patch.object(bootstrap, "EASYNEWS_PASSWORD", "mockpass"):
+            config = bootstrap.build_default_config(probe_services=False)
+            easynews_service = next((s for s in config.get("services", []) if s["id"] == "easynews"), None)
+            self.assertIsNotNone(easynews_service)
+            self.assertEqual(easynews_service["credentials"]["username"], "mockuser")
+            self.assertEqual(easynews_service["credentials"]["password"], "mockpass")
+            easynews_preset = next((p for p in config.get("presets", []) if p["type"] == "easynews-search"), None)
+            self.assertIsNotNone(easynews_preset)
+            self.assertTrue(easynews_preset["enabled"])
+
+    def test_prowlarr_anime_indexers_included(self):
+        self.assertIn("subsplease", bootstrap.TARGET_INDEXERS)
+        self.assertIn("animetosho-xyz", bootstrap.TARGET_INDEXERS)
