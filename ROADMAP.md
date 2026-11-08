@@ -97,3 +97,15 @@ These checks do not establish every external integration as working. Real OAuth 
 5. Keep one generated manager definition aligned with source Compose; validate both in CI.
 
 **Current acceptance:** [immutable release and recovery](docs/IMMUTABLE-RELEASES.md), [timed routing and limits](docs/ROUTING-VALIDATION.md). Finish the unchecked operator/authentication and cold-load gates before claiming milestones 1/2/4 universally complete. Continue OAuth/tunnel testing with dedicated accounts.
+
+## Current source and optional-integration acceptance
+
+- [x] Native Torrentio comparison: four titles added 92/76/60/68 provider-cached hashes beyond Comet; no separate KnightCrawler service added.
+- [x] Native addon parsing and new feature settings validated in an isolated AIOStreams profile; TMDB-dependent registration bug fixed.
+- [x] Background prefetch opt-in; one native Torrentio route and bounded Sootio fallback.
+- [x] Optional MediaFusion container/preset switch; configured-manifest input for external integrations.
+- [x] Usenet form configures actual InfiniDysk headless provider settings and a Usenet-only Prowlarr preset.
+- [x] Live fixture NNTP login, special-character credential preservation, Newznab repeat setup, service on/off and managed indexer disable.
+- [ ] Real paid NNTP article retrieval/repair/decoding and AceStream engine/playback.
+
+Evidence and exact limits: [optional sources validation](docs/OPTIONAL-SOURCES-VALIDATION.md). Earlier milestones above describe the versions tested at those times.

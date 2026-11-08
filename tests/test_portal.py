@@ -17,6 +17,17 @@ spec.loader.exec_module(portal)
 
 
 class PortalTests(unittest.TestCase):
+    def test_usenet_password_is_saved_privately_and_not_returned_by_env(self):
+        status,_,_=self.request('/api/save-env','POST',{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER':'fixture-user','USENET_PASS':'fixture$private\'"'},auth=True)
+        self.assertEqual(status,200)
+        status,body,_=self.request('/api/env',auth=True)
+        self.assertEqual(status,200);self.assertNotIn('fixture$private',body.decode())
+        result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
+
+    def test_optional_mediafusion_scale_is_limited_to_off_or_on(self):
+        status,_,_=self.request('/api/save-env','POST',{'MEDIAFUSION_REPLICAS':'10'},auth=True)
+        self.assertEqual(status,400)
+
     def test_integration_probes_use_container_ports(self):
         self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 18)
         expected = {

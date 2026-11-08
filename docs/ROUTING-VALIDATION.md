@@ -114,3 +114,7 @@ Remaining gates: true cold anime normalization, unavailable real indexers, memor
 pressure, cancellation, authenticated tunnel and other paid-provider/NNTP accounts.
 See [the roadmap](../ROADMAP.md); do not interpret these results as universal
 duplicate-free traffic or every integration being end-to-end verified.
+
+## Optional-source follow-up
+
+The current default adds native Torrentio, makes MediaFusion opt-in, and uses a Usenet-only native Prowlarr preset when configured. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.

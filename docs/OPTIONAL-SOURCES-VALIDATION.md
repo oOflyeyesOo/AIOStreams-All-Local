@@ -1,0 +1,119 @@
+# Optional sources and Usenet validation — 2026-11-07
+
+## Torrentio and KnightCrawler
+
+Gemini's commit `2faeaf6` enabled the native `torrentio` preset and renamed it
+“KnightCrawler / Torrentio.” It did not add a KnightCrawler container. Without
+`KNIGHTCRAWLER_URL`, the installed native adapter uses `https://torrentio.strem.fun`.
+The name is now accurate: Torrentio, or KnightCrawler (custom) for an override.
+
+Read-only comparisons used the retained installation without changing its files
+or profile. External discovery requests contained no provider credentials.
+Premiumize cache checks went only to its official API; Comet used its existing
+local configuration. Only counts and timings were retained.
+
+| Title | Torrentio hashes | Absent from Comet | Also marked cached by Premiumize | Observed direct response |
+|---|---:|---:|---:|---:|
+| Dune: Part Two | 169 | 106 | 92 | 0.029 s |
+| Game of Thrones S2E2 | 85 | 85 | 76 | 0.029 s |
+| Inception | 99 | 80 | 60 | 0.026 s |
+| Breaking Bad S1E1 | 76 | 75 | 68 | 0.030 s |
+
+The fourth column counts hashes both absent from Comet and marked cached. These
+are a four-title snapshot, not a universal coverage claim. Shared upstream caches
+were not flushed; the response times are not cold-search measurements. Hash
+availability does not prove the correct episode/file, language, entitlement or
+successful decoding.
+
+The suggested public `https://knightcrawler.elfhosted.com` endpoint returned
+HTTP 200 HTML instead of addon JSON for its manifest and all four searches.
+There is no measured benefit to deploying a separate KnightCrawler service here.
+
+Keep one native Torrentio preset in AIOStreams. `providers: []` uses the adapter's
+default source selection. Returned results included sources such as ThePirateBay,
+1337x, Rutracker, Rutor, TorrentGalaxy, MagnetDL and RARBG; these labels describe
+Torrentio results, not newly deployed local scrapers. Some overlap with Prowlarr
+indexers is expected. Torrentio stays disabled inside Sootio and MediaFusion.
+Do not add a second copy through Comet or another aggregator. Hash deduplication
+removes duplicate results; global external-site request deduplication is not
+established.
+
+`ENABLE_TORRENTIO=false` disables the native preset. The legacy
+`ENABLE_KNIGHTCRAWLER` switch remains a fallback if the canonical setting is
+absent. A custom `KNIGHTCRAWLER_URL` replaces the endpoint; it never creates a
+second preset. Usenet-only configurations omit it entirely.
+
+An isolated, credential-free native AIOStreams profile also passed movie/episode
+discovery: 168/79 P2P candidates in 1.798/0.786 seconds. The native schema retained
+cache-and-play, remux database, language inference, episode matching and sequential
+failover settings. Paid playback was not exercised by this comparison.
+
+Gemini's matching defaults exposed a registration bug: title/year matching
+requires TMDB. Bootstrap now disables the dependent features without a TMDB key.
+Next-episode prefetch is opt-in (`AIO_PRECACHE_NEXT_EPISODE=true`), and failover
+uses one attempt at a time to avoid hidden parallel provider calls.
+
+## MediaFusion
+
+Default: off (`MEDIAFUSION_REPLICAS=0`). The portal switch starts/stops the
+container, retains its storage, updates the AIOStreams preset, and excludes it
+from enabled-service health totals while off.
+
+The retained instance's torrent-stream table had zero rows. Its cached-only
+native profile returned no candidates for the two comparison titles. It used
+about 24.5 MiB at the sampled time; its 512 MiB limit was not actual usage.
+
+MediaFusion remains useful as an opt-in integration. A configured manifest URL
+passes its custom settings through the native adapter. This is needed for extras
+such as AceStream that the normal native adapter disables. Required external
+engines/accounts remain the operator's responsibility; AceStream playback has
+not been validated. The integration is stream-only to avoid duplicate catalogs.
+
+## Usenet setup
+
+The single-page form accepts server, port, username, password, TLS and connection
+count, plus an optional Newznab URL/API key. Connect my stack supplies the current
+InfiniDysk headless JSON schema and creates one native AIOStreams
+`Prowlarr → InfiniDysk` Usenet route. Comet's installed indexer manager filters
+Prowlarr indexers to `protocol == torrent`; the native Usenet route selects only
+Usenet sources. This does not create a second torrent-search route.
+
+Credentials are stored in the private local environment file. Base64 encoding
+protects Compose syntax; it is not encryption. Passwords and configured manifest
+URLs are not returned by the portal settings API. Protect the installation and
+backup files. Enabling the form makes it authoritative over InfiniDysk's provider
+list; unmanaged installations retain their existing JSON/UI configuration.
+
+The real packaged controller, InfiniDysk and Prowlarr passed a local NNTP/Newznab
+fixture test:
+
+- Passwords containing dollar signs, quotes and `#` survived both Compose passes;
+  InfiniDysk authenticated against the fixture (three successes, zero rejections).
+- Reapplying without retyping the password preserved it and created no duplicate
+  Newznab indexer. Managed address changes update the existing indexer in place.
+- MediaFusion switched on, reached healthy state, and switched off again.
+- Disabling Usenet emptied the effective provider list, disabled the managed NZB
+  indexer, omitted its native route and retained the saved credentials.
+- Default enabled-service checks passed 21/21. This includes TCP-only probes.
+
+This verifies configuration, authentication and indexer provisioning. It does not
+verify paid NNTP, TLS against a real provider, article retrieval, repair,
+decompression or Usenet media decoding. Those remain acceptance gates.
+
+## Sootio
+
+The original public-source stream handler took about 30.17 seconds per movie and
+episode and returned no fresh results. BTDig exhausted five failed page requests;
+MagnetDL returned HTML/redirects where JSON was expected.
+
+The bounded wrapper preserves five healthy BTDig pages, ends after a completely
+failed batch, enforces real curl deadlines and backs off failed origins for 120
+seconds. Results in the same unavailable-source conditions: movie 2.969 seconds
+(0.849 warm), episode 2.987 (0.858 warm), zero remaining child processes. Warm
+queries issued no new curl requests. These zero-versus-zero samples do not prove
+healthy-source coverage. Nine real-curl/vendor fixture tests separately verify
+valid JSON, page-five discoveries, surviving-source results, coalescing, cooldown
+recovery and deadline cancellation.
+
+Sootio remains a sequential fallback only when primary cached results are absent.
+It does not run Torrentio, Comet, Zilean or StremThru recursively.

@@ -22,11 +22,22 @@
 <input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help">Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.</p>
 <label class="field-label" for="aiometadata-host" style="margin-top:14px">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
 <input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help">Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.</p>
-<div class="section-divider"><span>Streaming provider</span><span class="optional">CHOOSE AT LEAST ONE</span></div>
+<div class="section-divider"><span>Debrid provider</span><span class="optional">OR USE USENET BELOW</span></div>
 <div id="provider-fields" class="field-grid"></div>
 <div class="section-divider"><span>Metadata & artwork</span><span class="optional">RECOMMENDED</span></div>
 <div id="metadata-fields" class="field-grid"></div>
-<details class="more-options"><summary>Subtitles, lists & extra services <span>+</span></summary><div id="extra-fields" class="field-grid"></div></details>
+<details class="more-options"><summary>Usenet, subtitles & optional services <span>+</span></summary>
+<div class="optional-setup"><h3>MediaFusion · optional</h3><label class="optional-service"><input id="enable-mediafusion" type="checkbox"> Enable MediaFusion</label><p>Additional sources can require their own engines or accounts. Configure AceStream and other extras in MediaFusion, then paste its configured manifest here. Switching off stops its container and retains its data.</p><div id="mediafusion-manifest-fields" class="field-grid"></div></div>
+<div class="optional-setup"><h3>Usenet · optional</h3><label class="optional-service"><input id="enable-usenet" type="checkbox"> Use a Usenet account</label><div class="field-grid">
+<label><span class="field-label">Server hostname</span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
+<label><span class="field-label">Port</span><input id="usenet-port" type="number" min="1" max="65535" value="563"></label>
+<label><span class="field-label">Username</span><input id="usenet-user" autocomplete="off"></label>
+<label><span class="field-label">Password</span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
+<label><span class="field-label">Connections</span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
+<label class="optional-service"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption</label>
+</div><p>These settings configure InfiniDysk automatically. Passwords stay hidden when this page reloads. Search also needs an NZB indexer; add a Newznab indexer below or use your existing Prowlarr setup.</p>
+<label><span class="field-label">NZB indexer base address · optional</span><input id="nzb-indexer-url" type="url" placeholder="https://your-indexer.example"></label><div id="usenet-indexer-key-fields" class="field-grid"></div></div>
+<div id="extra-fields" class="field-grid"></div></details>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
 <button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
 <p class="under-button">Your services, configured together. Setup details stay available below.</p>

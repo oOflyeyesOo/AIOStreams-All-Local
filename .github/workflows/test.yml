@@ -36,6 +36,8 @@ jobs:
         run: python3 -m tests.check_integrations
       - name: Portal and failure regression tests
         run: docker compose -p aio-tests -f compose.test.yml run --rm tests
+      - name: Bounded Sootio requests and retained source results
+        run: docker compose -p aio-tests -f compose.test.yml run --build --rm sootio-tests
       - name: PostgreSQL first and repeat initialization
         run: docker compose -p aio-tests -f compose.test.yml run --rm database-test
       - name: Web player first-visit settings

@@ -30,7 +30,7 @@ def seed(source, destination, environment):
     # Manager settings remain authoritative; provider keys are edited in the UI.
     # Reject dotenv syntax in these settings instead of changing its meaning.
     managed_keys = {key for key in environment if key.startswith('PORT_')}
-    for key in managed_keys | set(('ADDON_PASSWORD', 'AIO_RELEASE_LOCK_B64', 'AIO_IMAGE_TAG', 'AIO_IMAGE_PREFIX', 'PORT_PORTAL', 'INTERNAL_BIND_IP', 'BASE_URL', 'AIOMETADATA_HOST', 'DOCKER_SOCKET')):
+    for key in managed_keys | set(('MEDIAFUSION_REPLICAS', 'ADDON_PASSWORD', 'AIO_RELEASE_LOCK_B64', 'AIO_IMAGE_TAG', 'AIO_IMAGE_PREFIX', 'PORT_PORTAL', 'INTERNAL_BIND_IP', 'BASE_URL', 'AIOMETADATA_HOST', 'DOCKER_SOCKET')):
         value = environment.get(key)
         if value:
             if any(char in value for char in ('\n', '\r', '$', '"', "'", '#')):

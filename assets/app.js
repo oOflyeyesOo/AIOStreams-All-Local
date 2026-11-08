@@ -6,6 +6,9 @@ const providers = [
 const metadata = [['TMDB_API_KEY','TMDB','T'],['TVDB_API_KEY','TVDB','TV'],['FANART_API_KEY','Fanart.tv','F'],['MDBLIST_API_KEY','MDBList','M']];
 const extras = [['RPDB_API_KEY','Rating posters','RP'],['TRAKT_CLIENT_ID','Trakt client ID','TR'],['TRAKT_CLIENT_SECRET','Trakt client secret','TR'],['SIMKL_CLIENT_ID','Simkl client ID','SK'],['SIMKL_CLIENT_SECRET','Simkl client secret','SK'],['ANILIST_CLIENT_ID','AniList client ID','AL'],['ANILIST_CLIENT_SECRET','AniList client secret','AL'],['SUBDL_API_KEY','SubDL','S'],['SUBSOURCE_API_KEY','SubSource','SS'],['WYZIE_API_KEY','Wyzie','W'],['GEMINI_API_KEY','Gemini','G'],['OFFCLOUD_API_KEY','Offcloud','O'],['SEEDR_API_KEY','Seedr','S']];
 const fields = [...providers,...metadata,...extras];
+const optionalSecrets=[['MEDIAFUSION_MANIFEST_URL','Configured MediaFusion manifest (optional)','MF'],['NZB_INDEXER_API_KEY','NZB indexer API key','NZB']];
+fields.push(...optionalSecrets);
+let usenetPasswordSaved=false;
 let currentManifest = '';
 let currentAiometaManifest = '';
 let pollTimer;
@@ -54,18 +57,20 @@ function renderFields(id, values) {
     remove.addEventListener('click',event=>{
       event.preventDefault();
       savedKeys.delete(key); saved.textContent = ''; remove.hidden = true;
-      input.value = ''; input.placeholder = 'Paste API key';
+      input.value = ''; input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
     });
     title.append(remove);
     const input = document.createElement('input');
     input.id = key; input.name = key; input.type = 'password';
-    input.placeholder = 'Paste API key'; input.autocomplete = 'off'; input.spellcheck = false;
+    input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key'; input.autocomplete = 'off'; input.spellcheck = false;
     wrapper.append(title,input); target.append(wrapper);
   }
 }
 renderFields('provider-fields',providers);
 renderFields('metadata-fields',metadata);
 renderFields('extra-fields',extras);
+renderFields('mediafusion-manifest-fields',[optionalSecrets[0]]);
+renderFields('usenet-indexer-key-fields',[optionalSecrets[1]]);
 
 async function api(path, options, attempt=0) {
   try {
@@ -97,6 +102,13 @@ function setProgress(title,message,running=false) {
 }
 async function loadSettings() {
   const env = await api('/api/env');
+  document.getElementById('enable-mediafusion').checked = env.MEDIAFUSION_REPLICAS === '1';
+  document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
+  for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
+  document.getElementById('usenet-tls').checked=env.USENET_SSL!=='false';
+  usenetPasswordSaved=!!env.USENET_PASSWORD_SAVED;
+  document.getElementById('usenet-pass').value='';
+  document.getElementById('usenet-pass').placeholder=usenetPasswordSaved?'Saved · enter to replace':'Usenet password';
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
   const detectedServer = new URL(location.origin);
@@ -118,7 +130,7 @@ async function loadSettings() {
     const saved = savedKeys.has(key);
     const input = document.getElementById(key);
     input.value = '';
-    input.placeholder = saved ? 'Saved · enter to replace' : 'Paste API key';
+    input.placeholder = saved ? 'Saved · enter to replace' : key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
     document.getElementById(`${key}-saved`).textContent = saved ? 'SAVED' : '';
     document.getElementById(`${key}-remove`).hidden = !saved;
   }
@@ -167,12 +179,14 @@ async function refreshServices() {
     const content = document.createElement('div');
     const name = document.createElement('strong'); name.textContent = service.name;
     const group = document.createElement('small'); group.textContent = service.group;
-    const status = document.createElement('span'); status.className = `service-state${service.reachable?'':' offline'}`;
-    status.title = service.reachable ? 'Accepting connections' : 'Not reachable yet';
+    const status = document.createElement('span'); status.className = `service-state${service.enabled===false?' optional':service.reachable?'':' offline'}`;
+    status.textContent=service.enabled===false?'Off':'';
+    status.title = service.enabled === false ? 'Optional off' : service.reachable ? 'Accepting connections' : 'Not reachable yet';
     status.setAttribute('aria-label',status.title);
     content.append(name,group); card.append(icon,content,status); grid.append(card);
   }
-  document.getElementById('services-summary').textContent = `${result.integrations.filter(item=>item.reachable).length} of ${result.integrations.length} services reachable`;
+  const active=result.integrations.filter(item=>item.enabled!==false);
+  document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
 }
 
 async function pollSetup() {
@@ -222,14 +236,24 @@ if (baseUrlInput && aiomInput) {
 document.getElementById('setup-form').addEventListener('submit',async event=>{
   event.preventDefault();
   const payload = {
+    MEDIAFUSION_REPLICAS: document.getElementById('enable-mediafusion').checked ? '1' : '0',
+    USENET_ENABLED: document.getElementById('enable-usenet').checked ? 'true' : 'false',
+    USENET_HOST: document.getElementById('usenet-host').value.trim(),
+    USENET_PORT: document.getElementById('usenet-port').value,
+    USENET_USER: document.getElementById('usenet-user').value,
+    USENET_CONNECTIONS: document.getElementById('usenet-connections').value,
+    USENET_SSL: document.getElementById('usenet-tls').checked ? 'true' : 'false',
+    NZB_INDEXER_URL: document.getElementById('nzb-indexer-url').value.trim(),
     BASE_URL: document.getElementById('base-url').value.trim(),
     AIOMETADATA_HOST: document.getElementById('aiometadata-host')?.value.trim() || ''
   };
+  const usenetPassword=document.getElementById('usenet-pass').value;
+  if(usenetPassword||!usenetPasswordSaved)payload.USENET_PASS=usenetPassword;
   for (const [key] of fields) {
     const value = document.getElementById(key).value.trim();
     if (value || !savedKeys.has(key)) payload[key] = value;
   }
-  if (!providers.some(([key])=>payload[key] || savedKeys.has(key))) { notify('Add at least one streaming provider key.'); return; }
+  if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved&&payload.MEDIAFUSION_REPLICAS!=='1') { notify('Add a provider key, enable Usenet or configure MediaFusion.'); return; }
   const button = document.getElementById('setup-button'); button.disabled = true;
   setProgress('Saving your configuration','Connecting local services and checking your keys.',true);
   try {

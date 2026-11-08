@@ -1,0 +1,219 @@
+{
+  "scope": "public discovery; local Comet comparison; cache checks only against official Premiumize API; no configuration changes or media decoding",
+  "sources": {
+    "torrentio": {
+      "http": 200,
+      "seconds": 0.153,
+      "id": "com.stremio.torrentio.addon",
+      "name": "Torrentio"
+    },
+    "knightcrawler": {
+      "http": 200,
+      "contentType": "text/html; charset=UTF-8",
+      "seconds": 0.377,
+      "errorType": "SyntaxError",
+      "id": null,
+      "name": null
+    }
+  },
+  "cases": [
+    {
+      "case": "movie",
+      "id": "tt15239678",
+      "sources": {
+        "torrentio": {
+          "http": 200,
+          "seconds": 0.029,
+          "candidates": 170,
+          "hashes": 169,
+          "providers": {
+            "TorrentGalaxy": 40,
+            "Rutracker": 16,
+            "ThePirateBay": 29,
+            "ilCorSaRoNeRo": 10,
+            "MagnetDL": 7,
+            "1337x": 16,
+            "Torrent9": 9,
+            "Rutor": 28,
+            "Cinecalidad": 3,
+            "YTS": 5,
+            "BestTorrents": 2,
+            "MejorTorrent": 2,
+            "Comando": 2,
+            "EXT": 1
+          }
+        },
+        "knightcrawler": {
+          "http": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "seconds": 0.103,
+          "errorType": "SyntaxError",
+          "candidates": 0,
+          "hashes": 0
+        },
+        "comet": {
+          "http": 200,
+          "seconds": 0.304,
+          "candidates": 278,
+          "hashes": 139
+        }
+      },
+      "knightcrawlerHashesAbsentFromComet": 0,
+      "torrentioHashesAbsentFromComet": 106,
+      "knightcrawlerHashesAbsentFromTorrentio": 0,
+      "cachedHashes": {
+        "torrentio": 154,
+        "knightcrawler": 0,
+        "comet": 106
+      },
+      "torrentioCachedHashesAbsentFromComet": 92
+    },
+    {
+      "case": "series",
+      "id": "tt0944947:2:2",
+      "sources": {
+        "torrentio": {
+          "http": 200,
+          "seconds": 0.029,
+          "candidates": 85,
+          "hashes": 85,
+          "providers": {
+            "Rutracker": 7,
+            "1337x": 16,
+            "TorrentGalaxy": 4,
+            "Torrent9": 6,
+            "Rutor": 11,
+            "RARBG": 5,
+            "ilCorSaRoNeRo": 3,
+            "ThePirateBay": 21,
+            "EXT": 2,
+            "MagnetDL": 5,
+            "Comando": 4,
+            "Wolfmax4k": 1
+          }
+        },
+        "knightcrawler": {
+          "http": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "seconds": 0.093,
+          "errorType": "SyntaxError",
+          "candidates": 0,
+          "hashes": 0
+        },
+        "comet": {
+          "http": 200,
+          "seconds": 0.785,
+          "candidates": 2,
+          "hashes": 1
+        }
+      },
+      "knightcrawlerHashesAbsentFromComet": 0,
+      "torrentioHashesAbsentFromComet": 85,
+      "knightcrawlerHashesAbsentFromTorrentio": 0,
+      "cachedHashes": {
+        "torrentio": 76,
+        "knightcrawler": 0,
+        "comet": 0
+      },
+      "torrentioCachedHashesAbsentFromComet": 76
+    },
+    {
+      "case": "movie",
+      "id": "tt1375666",
+      "sources": {
+        "torrentio": {
+          "http": 200,
+          "seconds": 0.026,
+          "candidates": 99,
+          "hashes": 99,
+          "providers": {
+            "1337x": 20,
+            "ThePirateBay": 26,
+            "Rutor": 7,
+            "ilCorSaRoNeRo": 2,
+            "Rutracker": 11,
+            "RARBG": 8,
+            "Torrent9": 6,
+            "TorrentGalaxy": 11,
+            "EXT": 3,
+            "YTS": 1,
+            "MagnetDL": 3,
+            "Cinecalidad": 1
+          }
+        },
+        "knightcrawler": {
+          "http": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "seconds": 0.087,
+          "errorType": "SyntaxError",
+          "candidates": 0,
+          "hashes": 0
+        },
+        "comet": {
+          "http": 200,
+          "seconds": 0.245,
+          "candidates": 126,
+          "hashes": 63
+        }
+      },
+      "knightcrawlerHashesAbsentFromComet": 0,
+      "torrentioHashesAbsentFromComet": 80,
+      "knightcrawlerHashesAbsentFromTorrentio": 0,
+      "cachedHashes": {
+        "torrentio": 79,
+        "knightcrawler": 0,
+        "comet": 36
+      },
+      "torrentioCachedHashesAbsentFromComet": 60
+    },
+    {
+      "case": "series",
+      "id": "tt0903747:1:1",
+      "sources": {
+        "torrentio": {
+          "http": 200,
+          "seconds": 0.03,
+          "candidates": 77,
+          "hashes": 76,
+          "providers": {
+            "ThePirateBay": 17,
+            "Rutracker": 10,
+            "1337x": 14,
+            "Comando": 1,
+            "EXT": 2,
+            "RARBG": 3,
+            "TorrentGalaxy": 5,
+            "Rutor": 11,
+            "ilCorSaRoNeRo": 2,
+            "MagnetDL": 6,
+            "Torrent9": 4,
+            "BestTorrents": 2
+          }
+        },
+        "knightcrawler": {
+          "http": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "seconds": 0.092,
+          "errorType": "SyntaxError",
+          "candidates": 0,
+          "hashes": 0
+        },
+        "comet": {
+          "http": 200,
+          "seconds": 0.251,
+          "candidates": 4,
+          "hashes": 2
+        }
+      },
+      "knightcrawlerHashesAbsentFromComet": 0,
+      "torrentioHashesAbsentFromComet": 75,
+      "knightcrawlerHashesAbsentFromTorrentio": 0,
+      "cachedHashes": {
+        "torrentio": 69,
+        "knightcrawler": 0,
+        "comet": 2
+      },
+      "torrentioCachedHashesAbsentFromComet": 68
+    }
+  ]
+}

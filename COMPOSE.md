@@ -41,7 +41,7 @@ docker compose run --rm stack-bootstrap
 
 Configuration values containing
 quotes, dollar signs or line breaks must be edited directly in `.env` using
-Compose's dotenv syntax; the portal rejects these values rather than allowing
+Compose's dotenv syntax; Usenet username/password fields handle quotes and dollar signs safely; other portal fields reject these values rather than allowing
 newline/interpolation injection. The old dashboard URL redirects
 to the new setup screen.
 
@@ -51,11 +51,13 @@ Public indexers are seeded into Prowlarr when reachable. External indexer uptime
 Cloudflare challenges and rate limits can affect results. Provider credentials
 alone do not guarantee a paid account has the required entitlement.
 
-InfiniDysk accepts a single INFINIDYSK_USENET_PROVIDERS JSON object. The example
-format is in `.env.example`. Leave it blank to configure providers through its UI.
-The legacy USENET_HOST/USER/PASS fields do not configure its current headless
-schema. Usenet playback needs a provider and NZB indexers; it was not end-to-end
-tested in this environment.
+MediaFusion is off by default. Enable it on the setup page, optionally supplying a configured manifest for its extra integrations. The switch starts or stops its container and retains its data. Required external engines/accounts are not installed automatically.
+
+For Usenet, enter the server, port, username, password, TLS and connection count on the setup page. Add a Newznab base URL/API key, or use your existing Prowlarr indexers. Connect my stack configures InfiniDysk and one Usenet-only native AIOStreams route automatically. Passwords stay hidden on reload; leaving the saved-password field blank preserves it. Disabling Usenet stops its managed provider connections and indexer polling while retaining credentials. The form replaces InfiniDysk's provider list when enabled. Unmanaged JSON/UI settings remain supported.
+
+Native Torrentio is enabled for debrid configurations and is not repeated inside Sootio or MediaFusion. Set `ENABLE_TORRENTIO=false` to omit it. `KNIGHTCRAWLER_URL` optionally replaces its endpoint; it does not add a container. Background next-episode searches are opt-in through `AIO_PRECACHE_NEXT_EPISODE=true`.
+
+[Measured source coverage and fixture NNTP acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) distinguish authentication/indexer tests from unverified paid article playback.
 
 Zilean's initial DMM import and AIOMetadata's initial caches create CPU, disk and
 network load. Zilean limits are configurable in `.env`. Measure the host before
@@ -95,8 +97,7 @@ After the stack is running:
 docker compose --profile test run --rm stack-check
 ```
 
-This checks HTTP/manifest endpoints for nine services and TCP availability for
-fourteen others. TCP reachability is not an application or playback guarantee.
+The default stack checks 21 internal endpoints (22 with MediaFusion enabled). TCP reachability is not an application or playback guarantee.
 The optional check_playback.py probe requests at most 1 KB of a returned stream
 and never prints credential-bearing links. It is a diagnostic, not a decoder test.
 

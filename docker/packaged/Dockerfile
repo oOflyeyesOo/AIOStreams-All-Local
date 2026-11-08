@@ -15,6 +15,7 @@ FROM docker:29-cli AS controller
 RUN apk add --no-cache python3
 COPY docker/controller/controller.py /controller.py
 COPY tools/release_manager.py /tools/release_manager.py
+COPY tools/usenet_config.py /tools/usenet_config.py
 ENTRYPOINT ["python3", "-u", "/controller.py"]
 
 FROM ghcr.io/viren070/aiostreams:latest AS aiostreams
@@ -22,6 +23,9 @@ COPY docker/aiostreams/entrypoint.sh /entrypoint.sh
 COPY templates/builtin /app/resources/templates
 
 FROM midnightignite1/sootio-stremio-addon:latest AS sootio
+COPY docker/sootio/bounded-curl.mjs /app/lib/util/bounded-curl.mjs
+COPY docker/sootio/patch-scrapers.mjs /tmp/aio-patch-scrapers.mjs
+RUN node /tmp/aio-patch-scrapers.mjs && rm /tmp/aio-patch-scrapers.mjs
 COPY docker/sootio/configuration.js /app/lib/util/configuration.js
 COPY docker/sootio/landingTemplate.js /app/lib/util/landingTemplate.js
 

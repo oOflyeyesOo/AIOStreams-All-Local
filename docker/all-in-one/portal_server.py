@@ -43,6 +43,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
+from tools.usenet_config import form_updates, public_settings
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
@@ -111,12 +112,14 @@ def launch_setup():
 def probe_integration(item):
     import socket
     name, host, port, group = item
+    if host == 'mediafusion' and read_saved_env().get('MEDIAFUSION_REPLICAS','0') != '1':
+        return {'name':name,'group':group,'reachable':False,'enabled':False}
     try:
         with socket.create_connection((host, port), timeout=1.5):
             reachable = True
     except OSError:
         reachable = False
-    return {"name": name, "group": group, "reachable": reachable}
+    return {"name": name, "group": group, "reachable": reachable,"enabled":True}
 
 
 def read_saved_env():
@@ -176,7 +179,7 @@ def diagnostics_snapshot():
     checks.append({
         "name": "integrations",
         "status": "ready" if reachable else "attention",
-        "detail": f"{reachable}/{len(integrations)} application services reachable",
+        "detail": f"{reachable}/{sum(item.get('enabled',True) for item in integrations)} enabled application services reachable",
     })
     return {
         "checks": checks,
@@ -233,14 +236,15 @@ def config_export():
     values = {
         "BASE_URL": env_vars.get("BASE_URL", ""),
         "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
+        "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
     }
     return {
         "format": "aio-local-config-v1",
         "baseUrl": env_vars.get("BASE_URL", ""),
         "profile": env_vars.get("COMPOSE_PROFILES", "all"),
         "values": values,
-        "configuredKeys": sorted(key for key, value in env_vars.items() if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key)),
-        "secrets": {key: bool(value) for key, value in env_vars.items() if re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key)},
+        "configuredKeys": sorted(key for key, value in env_vars.items() if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)),
+        "secrets": {key: bool(value) for key, value in env_vars.items() if re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)},
     }
 
 
@@ -646,7 +650,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
                     self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
                     return
-                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
+                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "MEDIAFUSION_REPLICAS", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
                 supplied = payload["values"]
                 unknown = sorted(key for key in supplied if key not in allowed)
                 if unknown:
@@ -663,6 +667,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
                 updates = supplied
+                if updates.get('MEDIAFUSION_REPLICAS','0') not in ('0','1'):
+                    raise ValueError('Invalid optional-service state')
                 save_env_updates(updates)
                 self.json_response({"success": True, "updated": sorted(updates)})
             except (json.JSONDecodeError, TypeError, OSError, ValueError):
@@ -733,10 +739,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
         aiom_val = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST") or derive_aiometadata_host(base_val)
         resp_env = {
+            **public_settings(env_vars),
+            "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
             "configuredKeys": sorted(key for key, value in env_vars.items()
-                                     if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID", key))
+                                     if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
 
         resp = {
@@ -849,6 +857,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             data = json.loads(body) if body else {}
             if not isinstance(data, dict):
                 raise ValueError("Configuration must be a JSON object")
+            data=form_updates(data,read_saved_env())
             for key, value in data.items():
                 if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
                     raise ValueError("Invalid environment variable name")
@@ -857,6 +866,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("Values must be single-line scalars without quotes or dollar interpolation")
 
             keys_to_update = {str(k): str(v).strip() for k, v in data.items() if v is not None}
+            if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):
+                raise ValueError('MediaFusion must be enabled (1) or disabled (0)')
+            if keys_to_update.get('MEDIAFUSION_MANIFEST_URL'):
+                url=urllib.parse.urlsplit(keys_to_update['MEDIAFUSION_MANIFEST_URL'])
+                if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.query or url.fragment or not url.path.endswith('/manifest.json'):
+                    raise ValueError('Enter a configured MediaFusion HTTP(S) manifest URL')
             if "BASE_URL" in keys_to_update:
                 keys_to_update["BASE_URL"] = normalize_base_url(keys_to_update["BASE_URL"])
                 existing = {}

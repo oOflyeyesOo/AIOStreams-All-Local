@@ -53,7 +53,7 @@ def print(*values, **kwargs):
     """Keep provider keys and install tokens out of bootstrap container logs."""
     message = kwargs.pop("sep", " ").join(str(value) for value in values)
     for name, value in os.environ.items():
-        if len(value) >= 6 and any(part in name for part in ("KEY", "PASSWORD", "TOKEN", "ENCRYPTED")):
+        if len(value) >= 6 and any(part in name for part in ("KEY", "PASSWORD", "TOKEN", "ENCRYPTED", "MANIFEST_URL", "USENET_PASS", "USENET_USER")):
             message = message.replace(value, "[REDACTED]")
     message = re.sub(r"(/stremio/)[^/\s]+/[^/\s]+", r"\1[REDACTED]", message)
     builtins.print(message, **kwargs)
@@ -366,6 +366,39 @@ def setup_prowlarr_indexers():
     print(f"[Prowlarr Setup] Prowlarr indexer provisioning complete. Added {added_count} new indexers.", flush=True)
 
 # ==============================================================================
+def setup_usenet_indexer():
+    base=os.environ.get('NZB_INDEXER_URL','').rstrip('/')
+    key=os.environ.get('NZB_INDEXER_API_KEY','')
+    active=os.environ.get('USENET_ENABLED','false')=='true'
+    if active and (not base or not key):
+        return
+    headers={'X-Api-Key':PROWLARR_API_KEY}
+    existing=make_request(f'{PROWLARR_URL}/api/v1/indexer',headers=headers)
+    if not isinstance(existing,list):raise RuntimeError('Prowlarr indexer inventory is unavailable')
+    owned=next((item for item in existing if item.get('implementation')=='Newznab' and item.get('name')=='AIO Local Usenet'),None)
+    if not active:
+        if owned and owned.get('enable'):
+            payload=dict(owned,enable=False)
+            result=make_request(f"{PROWLARR_URL}/api/v1/indexer/{owned['id']}",method='PUT',headers=headers,data=payload)
+            if not isinstance(result,dict) or not result.get('id'):raise RuntimeError('Prowlarr could not disable the managed NZB indexer')
+        return
+    prior=owned or next((item for item in existing if item.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and str(f.get('value','')).rstrip('/')==base for f in item.get('fields',[]))),None)
+    schemas=make_request(f'{PROWLARR_URL}/api/v1/indexer/schema',headers=headers)
+    schema=next((item for item in schemas if item.get('implementation')=='Newznab'),None) if isinstance(schemas,list) else None
+    if not schema:raise RuntimeError('Prowlarr Newznab support is unavailable')
+    import copy
+    payload=copy.deepcopy(prior or schema)
+    payload.update(name=prior.get('name') if prior else 'AIO Local Usenet',enable=True,appProfileId=payload.get('appProfileId') or 1)
+    for field in payload.get('fields',[]):
+        if field.get('name')=='baseUrl':field['value']=base
+        elif field.get('name')=='apiKey':field['value']=key
+    if not prior:payload.pop('id',None)
+    path=f"{PROWLARR_URL}/api/v1/indexer"+(f"/{prior['id']}" if prior else '')
+    result=make_request(path,method='PUT' if prior else 'POST',headers=headers,data=payload,timeout=30)
+    if not isinstance(result,dict) or not result.get('id'):raise RuntimeError('Prowlarr could not validate the NZB indexer; check its address and key')
+    print('[Usenet Setup] NZB indexer configured in Prowlarr.',flush=True)
+
+
 # 2. MEDIAFUSION DEFAULT ACCOUNT PROVISIONING
 # ==============================================================================
 def wait_for_mediafusion(max_attempts=15, interval=2):
@@ -652,7 +685,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             }
         }
     ]
-    if not all(os.environ.get(key) for key in ("USENET_HOST", "USENET_USER", "USENET_PASS")):
+    usenet_active=(os.environ.get('USENET_ENABLED','true')!='false' and os.environ.get('USENET_HOST')
+                   and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
+                   and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
+    if not usenet_active:
         services = []
     if PREMIUMIZE_API_KEY:
         services.insert(0, {
@@ -783,7 +819,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "instanceId": "torrentio-local",
             "enabled": True,
             "options": {
-                "name": "KnightCrawler / Torrentio",
+                "name": "Torrentio",
                 "timeout": 18000,
                 "resources": ["stream"],
                 "providers": [],
@@ -858,6 +894,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     ])
 
     # Dynamic Sootio Manifest with Debrid credentials
+    if usenet_active:
+        presets.append({'type':'prowlarr','instanceId':'prowlarr-usenet','enabled':True,'options':{
+            'name':'Usenet (Prowlarr → InfiniDysk)','prowlarrUrl':PROWLARR_URL,'prowlarrApiKey':PROWLARR_API_KEY,
+            'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':20000}})
     sootio_url = f"{SOOTIO_URL}/manifest.json"
     if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY:
         debrid_services = []
@@ -927,13 +967,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         pid = p.get("instanceId", "")
         opts = p.setdefault("options", {})
         if ptype == "torrentio":
-            opts["name"] = opts.get("name") or "KnightCrawler / Torrentio"
+            if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
+                continue
+            opts["name"] = "Torrentio"
             if os.environ.get("KNIGHTCRAWLER_URL"):
                 opts["url"] = os.environ.get("KNIGHTCRAWLER_URL")
-            enable_kc = os.environ.get("ENABLE_KNIGHTCRAWLER", os.environ.get("ENABLE_TORRENTIO", "true")).lower() != "false"
+                opts["name"] = "KnightCrawler (custom)"
+            enable_kc = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
             p["enabled"] = enable_kc
             validated_presets.append(p)
         elif ptype == "mediafusion":
+            if os.environ.get('MEDIAFUSION_REPLICAS','0') != '1':
+                continue
+            if os.environ.get('MEDIAFUSION_MANIFEST_URL'):
+                opts['url']=os.environ['MEDIAFUSION_MANIFEST_URL']
             opts["useCachedResultsOnly"] = True
             if reachable(f"{MEDIAFUSION_URL}/manifest.json", timeout=1.0):
                 p["enabled"] = True
@@ -946,6 +993,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 opts["timeout"] = 20000
             validated_presets.append(p)
         elif ptype == "comet":
+            if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
+                continue
             curr_timeout = int(opts.get("timeout") or 7000)
             if curr_timeout < 20000:
                 opts["timeout"] = 20000
@@ -967,6 +1016,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             # AIOStreams fetches manifests on startup/save and rejects the entire profile
             # with USER_INVALID_CONFIG if any custom manifest cannot be retrieved.
             if pid == "sootio-local" or ("sootio" in pid):
+                if not any(s.get('enabled') and s.get('id') in ('premiumize','realdebrid','alldebrid','torbox','debridlink') for s in services):
+                    continue
                 opts["manifestUrl"] = sootio_url
                 opts["resources"] = ["stream"]
                 curr_timeout = int(opts.get("timeout") or 7000)
@@ -1083,7 +1134,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config["enableSeadex"] = True
 
     # Activate AIOStreams upstream features
-    config.setdefault("precacheNextEpisode", True)
+    # Background prefetch adds another episode search; keep it explicitly opt-in.
+    config["precacheNextEpisode"] = os.environ.get('AIO_PRECACHE_NEXT_EPISODE','false') == 'true'
+    config.pop('precacheSelector',None)
+    config.pop('precacheCondition',None)
+    config.pop('alwaysPrecache',None)
     config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["torrent", "usenet"]})
     config.setdefault("remuxDb", {"enabled": True})
     config.setdefault("titleMatching", {"enabled": True, "mode": "contains", "similarityThreshold": 0.85})
@@ -1115,6 +1170,18 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
 
     if TMDB_API_KEY:
         config["tmdbApiKey"] = TMDB_API_KEY
+        for feature in ('titleMatching','yearMatching'):
+            config[feature]['enabled']=True
+    else:
+        for feature in ('titleMatching','yearMatching','digitalReleaseFilter'):
+            if isinstance(config.get(feature),dict):
+                config[feature]['enabled']=False
+        if isinstance(config.get('bitrate'),dict):
+            config['bitrate']['useMetadataRuntime']=False
+    # Failover remains sequential; prefetch must not create hidden extra calls.
+    if isinstance(config.get('failover'),dict):
+        config['failover']['parallel']=1
+        config['failover']['precacheFailover']=config['precacheNextEpisode']
     # TVDB is consumed by AIOMetadata. Do not make AIOStreams registration
     # depend on an optional TVDB endpoint or key being reachable.
 
@@ -1517,13 +1584,15 @@ def main():
             setup_prowlarr_auth()
             setup_prowlarr_flaresolverr()
             setup_prowlarr_indexers()
+            setup_usenet_indexer()
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)
 
     # 2. MediaFusion
     try:
-        wait_for_mediafusion()
-        setup_mediafusion_admin()
+        if os.environ.get('MEDIAFUSION_REPLICAS','0') == '1':
+            wait_for_mediafusion()
+            setup_mediafusion_admin()
     except Exception as e:
         print(f"[MediaFusion Setup] Error: {e}", flush=True)
 

@@ -1,10 +1,25 @@
 services:
+  sootio-tests:
+    build:
+      context: .
+      dockerfile: docker/sootio/Dockerfile
+    working_dir: /src
+    volumes:
+      - ./:/src:ro
+    command: ["node", "--test", "tests/sootio-performance.test.mjs"]
+    environment:
+      - BTDIG_ENABLED=true
+      - MAGNETDL_ENABLED=true
+      - ZILEAN_ENABLED=false
+      - COMET_ENABLED=false
+      - TORRENTIO_ENABLED=false
+      - STREMTHRU_ENABLED=false
   browser-tests:
     image: node:22-alpine
     working_dir: /app
     volumes:
       - ./:/app:ro
-    command: node --test tests/browser-bootstrap.test.cjs tests/maintenance-ui.test.cjs
+    command: node --test tests/browser-bootstrap.test.cjs tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs
 
   providers:
     image: python:3.11-alpine

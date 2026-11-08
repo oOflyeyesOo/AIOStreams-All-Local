@@ -136,13 +136,66 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(any(p['instanceId']=='aiometadata-local' for p in config['presets']))
 
     def test_sootio_is_sequential_fallback_not_parallel_default(self):
-        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"fallback"}):
+        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"fallback"}), patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'):
             config=bootstrap.build_default_config(probe_services=False)
         self.assertEqual(config['groups']['behaviour'],'sequential')
         self.assertEqual(config['groups']['groupings'][1]['addons'],['sootio-local'])
         self.assertEqual(config['groups']['groupings'][1]['condition'],'count(cached(totalStreams)) == 0')
         anime=next(p for p in config['presets'] if p['instanceId']=='anime-kitsu-local')
         self.assertEqual(anime['options']['resources'],['catalog','meta'])
+
+    def test_mediafusion_is_opt_in_and_can_use_a_configured_manifest(self):
+        with patch.dict(bootstrap.os.environ,{'MEDIAFUSION_REPLICAS':'0'}):
+            self.assertFalse(any(p['type']=='mediafusion' for p in bootstrap.build_default_config(probe_services=False)['presets']))
+        with patch.dict(bootstrap.os.environ,{'MEDIAFUSION_REPLICAS':'1','MEDIAFUSION_MANIFEST_URL':'http://mediafusion:8000/fixture/manifest.json'}):
+            preset=next(p for p in bootstrap.build_default_config(probe_services=False)['presets'] if p['type']=='mediafusion')
+            self.assertEqual(preset['options']['url'],'http://mediafusion:8000/fixture/manifest.json')
+
+    def test_usenet_uses_native_nzb_route_and_skips_torrent_sources_without_debrid(self):
+        with patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER_B64':'Zml4dHVyZQ==','USENET_PASS_B64':'Zml4dHVyZQ=='}):
+            config=bootstrap.build_default_config(probe_services=False)
+        self.assertTrue(any(s['id']=='nzbdav' for s in config['services']))
+        preset=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
+        self.assertEqual(preset['options']['sources'],['usenet']);self.assertEqual(preset['options']['services'],['nzbdav'])
+        self.assertFalse(any(p['type']=='comet' or p['instanceId']=='sootio-local' for p in config['presets']))
+        self.assertFalse(any(p['type']=='torrentio' for p in config['presets']))
+
+    def test_no_metadata_key_does_not_enable_features_that_block_registration(self):
+        with patch.object(bootstrap,'TMDB_API_KEY',''),patch.object(bootstrap,'load_env_file'),patch.dict(bootstrap.os.environ,{'TMDB_API_KEY':''}):
+            config=bootstrap.build_default_config(probe_services=False)
+        self.assertFalse(config['titleMatching']['enabled'])
+        self.assertFalse(config['yearMatching']['enabled'])
+        self.assertFalse(config['precacheNextEpisode'])
+        self.assertFalse(config['failover']['precacheFailover'])
+        self.assertEqual(config['failover']['parallel'],1)
+        with patch.object(bootstrap,'TMDB_API_KEY','fixture-metadata-key'):
+            configured=bootstrap.build_default_config(probe_services=False)
+        self.assertTrue(configured['titleMatching']['enabled'])
+        self.assertTrue(configured['yearMatching']['enabled'])
+
+    def test_torrentio_uses_one_native_preset_with_explicit_custom_override(self):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'true','KNIGHTCRAWLER_URL':''}):
+            config=bootstrap.build_default_config(probe_services=False)
+        presets=[p for p in config['presets'] if p['type']=='torrentio']
+        self.assertEqual(len(presets),1);self.assertTrue(presets[0]['enabled']);self.assertEqual(presets[0]['options']['name'],'Torrentio')
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'false','KNIGHTCRAWLER_URL':'https://fixture.invalid'}):
+            config=bootstrap.build_default_config(probe_services=False)
+        preset=next(p for p in config['presets'] if p['type']=='torrentio')
+        self.assertFalse(preset['enabled']);self.assertEqual(preset['options']['url'],'https://fixture.invalid')
+
+    def test_managed_nzb_indexer_changes_address_in_place_and_can_be_disabled(self):
+        existing={'id':73,'implementation':'Newznab','name':'AIO Local Usenet','enable':True,'fields':[{'name':'baseUrl','value':'http://old.fixture'},{'name':'apiKey','value':'fixture-old'}]}
+        writes=[]
+        def request(url,method='GET',data=None,**kwargs):
+            if method=='PUT':writes.append((url,data));return {'id':73}
+            return [existing]
+        with patch.object(bootstrap,'make_request',side_effect=request),patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'true','NZB_INDEXER_URL':'https://new.fixture','NZB_INDEXER_API_KEY':'fixture-new'}):
+            bootstrap.setup_usenet_indexer()
+        self.assertEqual(len(writes),1);self.assertTrue(writes[0][0].endswith('/73'))
+        self.assertEqual(writes[0][1]['fields'][0]['value'],'https://new.fixture')
+        with patch.object(bootstrap,'make_request',side_effect=request),patch.dict(bootstrap.os.environ,{'USENET_ENABLED':'false'}):
+            bootstrap.setup_usenet_indexer()
+        self.assertFalse(writes[-1][1]['enable'])
 
     def test_configuration_writes_supply_the_explicit_access_key(self):
         with patch.object(bootstrap,'ADDON_PASSWORD','fixture-config-access'):

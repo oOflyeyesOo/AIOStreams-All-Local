@@ -1,6 +1,7 @@
 """Read-only internal endpoint checks; run via docker compose --profile test run --rm stack-check."""
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 import socket
 import sys
 import urllib.request
@@ -19,6 +20,8 @@ HTTP_CHECKS = {
     "prowlarr": ("http://prowlarr:9696/ping", False),
     "stremio-web": ("http://stremio-web:8080/", False),
 }
+if os.environ.get('MEDIAFUSION_REPLICAS','0') != '1':
+    HTTP_CHECKS.pop('mediafusion',None)
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
     host: TCP_PORTS[host] for host in (
         "stremthru", "mediaflow", "flaresolverr", "subsense", "debrid-search",

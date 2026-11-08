@@ -35,6 +35,7 @@ jobs:
           python3 scripts/generate_manager_compose.py --check
           docker compose --env-file .env.example -f compose.manager.yml config --quiet
           docker compose -p aio-tests -f compose.test.yml run --rm tests
+          docker compose -p aio-tests -f compose.test.yml run --build --rm sootio-tests
   publish:
     needs: verify
     runs-on: ubuntu-latest
@@ -109,6 +110,7 @@ jobs:
             exit 1
           fi
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
+          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_OPTIONAL_TEST_PROJECT=aio-release portal python3 - < tests/check_optional_live.py
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py
           rm release-bundle/fixture.env
       - uses: actions/upload-artifact@v4

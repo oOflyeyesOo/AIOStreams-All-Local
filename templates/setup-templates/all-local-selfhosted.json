@@ -51,7 +51,7 @@
       {
         "type": "mediafusion",
         "instanceId": "mediafusion-local",
-        "enabled": true,
+        "enabled": false,
         "options": {
           "name": "MediaFusion (Local)",
           "url": "http://mediafusion:8000",
@@ -103,7 +103,7 @@
         "instanceId": "torrentio-local",
         "enabled": true,
         "options": {
-          "name": "KnightCrawler / Torrentio",
+          "name": "Torrentio",
           "timeout": 18000,
           "resources": [
             "stream"
@@ -305,7 +305,7 @@
     ],
     "tmdbApiKey": "",
     "tvdbApiKey": "",
-    "precacheNextEpisode": true,
+    "precacheNextEpisode": false,
     "cacheAndPlay": {
       "enabled": true,
       "streamTypes": [
@@ -317,7 +317,7 @@
       "enabled": true
     },
     "titleMatching": {
-      "enabled": true,
+      "enabled": false,
       "mode": "contains",
       "similarityThreshold": 0.85
     },
@@ -330,7 +330,7 @@
       "similarityThreshold": 0.8
     },
     "yearMatching": {
-      "enabled": true,
+      "enabled": false,
       "tolerance": 1
     },
     "languageInference": {
@@ -349,7 +349,8 @@
       "allowCrossType": true,
       "maxAttempts": 3,
       "includeExternalFailover": true,
-      "precacheFailover": true
+      "precacheFailover": false,
+      "parallel": 1
     }
   }
 }

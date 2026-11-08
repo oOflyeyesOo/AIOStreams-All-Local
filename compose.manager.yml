@@ -49,6 +49,8 @@ services:
     volumes:
     - aiostreams-data:/app/data/aiostreams:ro
     command: python3 /check_stack.py
+    environment:
+    - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
     networks:
     - stremio-net
   controller:
@@ -128,6 +130,7 @@ services:
     - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+    - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
     - AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}
     - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
     - PORT_PORTAL=${PORT_PORTAL:-8088}
@@ -288,6 +291,7 @@ services:
     - stremio-net
   mediafusion:
     image: mhdzumair/mediafusion:latest
+    scale: ${MEDIAFUSION_REPLICAS:-0}
     restart: unless-stopped
     logging:
       driver: json-file
@@ -347,7 +351,6 @@ services:
       shared-redis:
         condition: service_started
   sootio:
-    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-sootio:${AIO_IMAGE_TAG:-latest}
     restart: unless-stopped
     logging:
       driver: json-file
@@ -385,7 +388,11 @@ services:
     - FLARESOLVERR_MAX_CONCURRENT=2
     - TORRENT_1337X_ENABLED=false
     - BTDIG_ENABLED=true
+    - BTDIG_MAX_PAGES=${SOOTIO_BTDIG_MAX_PAGES:-5}
     - MAGNETDL_ENABLED=true
+    - SOOTIO_CURL_TIMEOUT_MS=${SOOTIO_CURL_TIMEOUT_MS:-5000}
+    - SOOTIO_CONNECT_TIMEOUT_MS=${SOOTIO_CONNECT_TIMEOUT_MS:-2000}
+    - SOOTIO_SOURCE_COOLDOWN_MS=${SOOTIO_SOURCE_COOLDOWN_MS:-120000}
     - DEFAULT_DEBRID_SERVICE=${DEFAULT_DEBRID_SERVICE:-Premiumize}
     - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
     - RD_API_KEY=${REALDEBRID_API_KEY}
@@ -401,6 +408,7 @@ services:
     depends_on:
     - zilean
     - flaresolverr
+    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-sootio:${AIO_IMAGE_TAG:-latest}
   zilean:
     image: ipromknight/zilean:latest
     restart: unless-stopped
@@ -529,6 +537,7 @@ services:
     - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
     - FLARESOLVERR_URL=http://flaresolverr:8191
     - MEDIAFUSION_URL=http://mediafusion:8000
+    - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
     - COMET_URL=http://comet:8000
     - SOOTIO_URL=http://sootio:55771
     - SOOTIO_MODE=${SOOTIO_MODE:-fallback}
@@ -708,6 +717,7 @@ services:
     - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696
     - NZBDAV_CONFIG__PROWLARR__API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
     - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true
+    - NZBDAV_CONFIG__USENET__PROVIDERS=${INFINIDYSK_USENET_PROVIDERS:-}
     - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15
     healthcheck:
       test:
