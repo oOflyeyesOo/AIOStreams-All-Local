@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 
 assert os.environ.get('ADDON_PASSWORD') == 'package-test-only-password', 'Fixture deployment required'
+ORIGIN=os.environ.get('AIO_ROUTING_TEST_ORIGIN','http://aiostreams:3000').rstrip('/')
 calls=[]
 lock=threading.Lock()
 
@@ -44,7 +45,6 @@ def request(url,payload=None,method=None,auth=None):
         with urllib.request.urlopen(urllib.request.Request(url,data=data,headers=headers,method=method),timeout=40) as r:
             return json.load(r)
     except urllib.error.HTTPError as error:
-        if not users:print(error.read(4000).decode())  # Fixture registration only; contains no credentials.
         raise
 
 server=http.server.ThreadingHTTPServer(('0.0.0.0',18881),Fixture)
@@ -55,15 +55,26 @@ try:
         'name':owner,'manifestUrl':'http://portal:18881/'+owner+'/manifest.json','resources':['stream'],'timeout':5000}}
         for owner in ('primary','fallback')]
     config={'addonName':'Private routing fixture','presets':presets,'formatter':{'id':'tamtaro'},'sortCriteria':{'global':[]},
+            'accessKey':os.environ['ADDON_PASSWORD'],
             'proxy':{'id':'builtin','enabled':False},
             'groups':{'enabled':True,'behaviour':'sequential','onConditionFailure':'stop',
                       'groupings':[{'addons':['primary'],'condition':'true'},
                                    {'addons':['fallback'],'condition':'count(cached(totalStreams)) == 0'}]}}
-    result=request('http://aiostreams:3000/api/v1/user',{'config':config,'password':'routing-fixture-only'})
+    denied=dict(config);denied.pop('accessKey')
+    try:
+        unexpected=request(ORIGIN+'/api/v1/user',{'config':denied,'password':'routing-fixture-only'})
+    except urllib.error.HTTPError as error:
+        message=json.load(error)
+        assert message.get('error',{}).get('code')=='ADDON_PASSWORD_INVALID', 'Unexpected config-write rejection'
+    else:
+        users.append(base64.b64encode((unexpected['data']['uuid']+':routing-fixture-only').encode()).decode())
+        raise AssertionError('Configuration write accepted without its access key')
+    print('PASS: configuration writes require an access key',flush=True)
+    result=request(ORIGIN+'/api/v1/user',{'config':config,'password':'routing-fixture-only'})
     assert result.get('success'), 'Fixture profile creation failed'
     user=result['data'];uid=user['uuid'];token=user.get('encryptedPassword') or user.get('encrypted_password')
     auth=base64.b64encode((uid+':routing-fixture-only').encode()).decode();users.append(auth)
-    prefix='http://aiostreams:3000/stremio/'+uid+'/'+token
+    prefix=ORIGIN+'/stremio/'+uid+'/'+token
     def fetch(ident,kind='movie'):
         start=time.monotonic();value=request(prefix+'/stream/'+kind+'/'+ident+'.json')
         result={'seconds':round(time.monotonic()-start,3),'streams':sum(bool(s.get('url')) for s in value.get('streams',[]))}
@@ -97,5 +108,5 @@ try:
     report.append({'case':'simultaneous cold viewers','concurrent4':concurrent,'upstreamCalls':observed})
     print(json.dumps({'scope':'deterministic AIOStreams routing; no external providers','results':report},indent=2))
 finally:
-    for auth in users:request('http://aiostreams:3000/api/v1/user',method='DELETE',auth=auth)
+    for auth in users:request(ORIGIN+'/api/v1/user',method='DELETE',auth=auth)
     server.shutdown();server.server_close()

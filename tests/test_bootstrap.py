@@ -144,6 +144,11 @@ class BootstrapTests(unittest.TestCase):
         anime=next(p for p in config['presets'] if p['instanceId']=='anime-kitsu-local')
         self.assertEqual(anime['options']['resources'],['catalog','meta'])
 
+    def test_configuration_writes_supply_the_explicit_access_key(self):
+        with patch.object(bootstrap,'ADDON_PASSWORD','fixture-config-access'):
+            config=bootstrap.build_default_config(probe_services=False)
+        self.assertEqual(config['accessKey'],'fixture-config-access')
+
     def test_unreachable_custom_addons_omitted_from_presets_in_core_profile(self):
         # In core profile, debrid-search, sootio, etc. are not running.
         # Ensure build_default_config omits unreachable custom addons so AIOStreams

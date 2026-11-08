@@ -1,7 +1,7 @@
 # AIO Local
 
 [![Microservices](https://img.shields.io/badge/microservices-18%20active-success?logo=server&logoColor=white)](#-what-is-integrated)
-[![Regression Tests](https://img.shields.io/badge/regression%20tests-104%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
+[![Regression Tests](https://img.shields.io/badge/regression%20tests-106%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -254,4 +254,4 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
 
 
-Current validation: 104 Python regression tests and eight browser checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.
+Current validation: 106 Python regression tests and eight browser checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.

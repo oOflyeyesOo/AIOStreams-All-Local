@@ -24,6 +24,11 @@ Keep any host settings in a Git-ignored `operator.env`, with the same project na
 ports and portal password as the installed stack. Saved provider keys stay in its
 configuration volume and are reapplied by the controller.
 
+Current AIOStreams uses an explicit configuration access key, derived from the
+portal password. Bootstrap supplies it for configuration writes. Change the password
+through the deployment settings and reapply setup before making further profile
+changes; existing media URLs are not a substitute for configuration-write access.
+
 ```sh
 docker compose -f compose.tools.yml run --build --rm release-tools preview releases/current/release.lock.json releases/next/release.lock.json
 

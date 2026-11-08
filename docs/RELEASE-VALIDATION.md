@@ -46,7 +46,7 @@ endpoint checks, and exercised cached/empty/failed primary sources plus warm and
 concurrent viewers in the real AIOStreams server. Four simultaneous cold fixture
 requests returned in 164–165 ms with one primary call and no fallback call.
 
-The resulting [immutable release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42408369625/artifacts/13588980591)
+The earlier [immutable release bundle (superseded)](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42408369625/artifacts/13588980591)
 contains `compose.release.yml` and `release.lock.json`; it expires after 90 days.
 The artifact digest is `sha256:953f8eaa959b56a5b240858a2cc8527b0686a0fb5d7619371a48cc81a516b4f5`.
 Retain the installed bundle. [Recovery instructions](IMMUTABLE-RELEASES.md) explain
@@ -71,3 +71,19 @@ Real OAuth lifecycle, authenticated public access, other paid providers/NNTP,
 true cold anime normalization, host pressure and cancellation of work already
 running inside Prowlarr remain unverified. Current results do not establish globally
 duplicate-free external requests or universal migration compatibility.
+
+## First-start authentication migration finding
+
+Repeated fresh installs exposed a deterministic upstream migration error: with
+legacy `ADDON_PASSWORD` set and `AIOSTREAMS_AUTH_REQUIRED=false`, the server persisted
+a configuration key, then attempted to change an environment-controlled setting
+and exited. A restart could mask the defect because the key was already stored.
+The earlier successful run therefore did not establish a clean first start.
+
+The stack now supplies `CONFIG_ACCESS_KEY` explicitly, enables the configuration-write
+gate, and supplies `accessKey` in bootstrap profile writes. A fresh isolated database
+started healthy with zero restarts; an unauthenticated fixture configuration write
+was rejected. Regression coverage also verifies that startup summaries expose only
+allowlisted status/error flags, not raw logs, URLs or environment values. The current
+unit suite has 106 tests. Post-fix routing, upgrade/recovery and fresh Linux bundle
+acceptance are the release gates; use the replacement bundle once those pass.

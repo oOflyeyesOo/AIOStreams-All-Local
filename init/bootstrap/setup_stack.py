@@ -1043,6 +1043,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"
+    config["accessKey"] = ADDON_PASSWORD
     config["addonDescription"] = "Unified all-in-one local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers."
     config["services"] = services
     config["presets"] = validated_presets
