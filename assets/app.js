@@ -152,6 +152,10 @@ async function loadSettings() {
   if (templateSelect && env.AIOMETADATA_TEMPLATE) {
     templateSelect.value = env.AIOMETADATA_TEMPLATE;
   }
+  const webhookInput = document.getElementById('discord-webhook-url');
+  if (webhookInput && env.DISCORD_WEBHOOK_URL) {
+    webhookInput.value = env.DISCORD_WEBHOOK_URL;
+  }
   updateTemplateDisplay();
 
   for (const [key] of fields) {
@@ -283,7 +287,8 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     NZB_INDEXER_URL: document.getElementById('nzb-indexer-url').value.trim(),
     BASE_URL: document.getElementById('base-url').value.trim(),
     AIOMETADATA_HOST: document.getElementById('aiometadata-host')?.value.trim() || '',
-    AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json'
+    AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json',
+    DISCORD_WEBHOOK_URL: document.getElementById('discord-webhook-url')?.value.trim() || ''
   };
   const usenetPassword=document.getElementById('usenet-pass').value;
   if(usenetPassword||!usenetPasswordSaved)payload.USENET_PASS=usenetPassword;
@@ -377,6 +382,26 @@ document.getElementById('copy-template-json')?.addEventListener('click', async (
     await copyToClipboard(text, `Copied ${val} to clipboard!`);
   } catch (err) {
     notify(`Failed to copy JSON: ${err.message}`);
+  }
+});
+
+document.getElementById('test-webhook-btn')?.addEventListener('click', async () => {
+  const input = document.getElementById('discord-webhook-url');
+  const url = input?.value.trim();
+  if (!url) {
+    notify('Enter a Discord or Apprise webhook URL first.');
+    return;
+  }
+  notify('Dispatching test alert...');
+  try {
+    const res = await api('/api/webhook-test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url })
+    });
+    notify(res.message || 'Webhook alert delivered! 🎉');
+  } catch (err) {
+    notify(`Webhook test failed: ${err.message}`);
   }
 });
 

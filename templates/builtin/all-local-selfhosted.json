@@ -367,7 +367,7 @@
     ],
     "tmdbApiKey": "",
     "tvdbApiKey": "",
-    "precacheNextEpisode": false,
+    "precacheNextEpisode": true,
     "cacheAndPlay": {
       "enabled": true,
       "streamTypes": [
@@ -411,7 +411,7 @@
       "allowCrossType": true,
       "maxAttempts": 3,
       "includeExternalFailover": true,
-      "precacheFailover": false,
+      "precacheFailover": true,
       "parallel": 1
     }
   }

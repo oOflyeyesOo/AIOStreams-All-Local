@@ -410,6 +410,31 @@ class PortalTests(unittest.TestCase):
         data = json.loads(body)
         self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "tamtaro-aiometadata-without-anime.json")
 
+    def test_aniskip_endpoint_cors_and_skip_times(self):
+        status, _, headers = self.request("/api/aniskip?id=tt9335498&season=1&episode=1", method="OPTIONS")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
+
+        with patch.object(portal, "resolve_mal_id", return_value=38000), \
+             patch.object(portal, "get_aniskip_times", return_value={
+                 "found": True,
+                 "results": [{"skipType": "op", "interval": {"startTime": 5, "endTime": 95}}]
+             }):
+            status, body, headers = self.request("/api/aniskip?id=tt9335498:1:1", method="GET")
+            self.assertEqual(status, 200)
+            self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
+            data = json.loads(body)
+            self.assertTrue(data.get("found"))
+            self.assertEqual(data.get("malId"), 38000)
+            self.assertEqual(len(data.get("results")), 1)
+
+    def test_webhook_test_endpoint(self):
+        with patch.object(portal, "dispatch_webhook_notification", return_value=(True, "Delivered")):
+            status, body, _ = self.request("/api/webhook-test", "POST", {"url": "https://discord.com/api/webhooks/mock"}, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+
 
 if __name__ == "__main__":
     unittest.main()

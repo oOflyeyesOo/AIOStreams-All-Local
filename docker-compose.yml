@@ -110,6 +110,7 @@ services:
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/healthz')\" || exit 1"]
       interval: 10s
@@ -151,6 +152,7 @@ services:
       - AIOSTREAMS_AUTH_REQUIRED=true
       - DATABASE_URI=sqlite:///data/db.sqlite
       - REDIS_URI=redis://shared-redis:6379/6
+      - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
       - ALLOW_PRIVATE_URLS=true
       - ALIASED_CONFIGURATIONS=${ALIASED_CONFIGURATIONS:-}
       - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
@@ -510,6 +512,7 @@ services:
     environment:
       - PROWLARR_URL=http://prowlarr:9696
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
+      - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
       - FLARESOLVERR_URL=http://flaresolverr:8191
       - MEDIAFUSION_URL=http://mediafusion:8000
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}

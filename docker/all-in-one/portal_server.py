@@ -24,6 +24,7 @@ import tempfile
 import threading
 import ipaddress
 import socket
+import sqlite3
 import http.client
 import platform
 from concurrent.futures import ThreadPoolExecutor
@@ -387,6 +388,94 @@ def public_service_urls(base_url):
         urls["AIOMETADATA_HOST"] = derive_aiometadata_host(base_url)
     return urls
 
+
+ANISKIP_CACHE = {}
+ANIME_ID_MAP_CACHE = {}
+
+def resolve_mal_id(raw_id, season=1):
+    cache_key = (raw_id, int(season))
+    if cache_key in ANIME_ID_MAP_CACHE:
+        return ANIME_ID_MAP_CACHE[cache_key]
+
+    db_path = os.path.join(WEB_ROOT, "data", "postersplus", "anime_ids.db")
+    if not os.path.isfile(db_path):
+        return None
+    try:
+        clean_path = os.path.abspath(db_path).replace("\\", "/")
+        if not clean_path.startswith("/"):
+            clean_path = "/" + clean_path
+        uri_path = f"file:{clean_path}?immutable=1"
+        conn = sqlite3.connect(uri_path, uri=True)
+        cur = conn.cursor()
+        if raw_id.startswith("kitsu:"):
+            k_id = int(raw_id.split(":")[1])
+            cur.execute("SELECT mal_id FROM anime_mal_map WHERE kitsu_id = ?", (k_id,))
+            row = cur.fetchone()
+            mal_id = row[0] if row else None
+            ANIME_ID_MAP_CACHE[cache_key] = mal_id
+            return mal_id
+
+        cur.execute("SELECT namespace, anime_id FROM anime_id_map WHERE imdb_id = ? AND season = ?", (raw_id, int(season)))
+        row = cur.fetchone()
+        if not row:
+            cur.execute("SELECT namespace, anime_id FROM anime_id_map WHERE imdb_id = ?", (raw_id,))
+            row = cur.fetchone()
+        if not row:
+            return None
+
+        ns, aid = row[0], row[1]
+        if ns == "kitsu":
+            cur.execute("SELECT mal_id FROM anime_mal_map WHERE kitsu_id = ?", (aid,))
+        elif ns == "anilist":
+            cur.execute("SELECT mal_id FROM anime_mal_map WHERE anilist_id = ?", (aid,))
+        res = cur.fetchone()
+        mal_id = res[0] if res else None
+        ANIME_ID_MAP_CACHE[cache_key] = mal_id
+        return mal_id
+    except Exception:
+        return None
+
+def get_aniskip_times(mal_id, episode=1, duration=0):
+    cache_key = (mal_id, int(episode))
+    now = time.monotonic()
+    if cache_key in ANISKIP_CACHE:
+        stamp, data = ANISKIP_CACHE[cache_key]
+        if now - stamp < 86400:
+            return data
+
+    url = f"https://api.aniskip.com/v2/skip-times/{mal_id}/{episode}?types[]=op&types[]=ed&types[]=mixed-op&types[]=mixed-ed&types[]=recap&episodeLength={int(duration)}"
+    req = urllib.request.Request(url, headers={"User-Agent": "AIO-Local-Stack/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode())
+            ANISKIP_CACHE[cache_key] = (now, data)
+            return data
+    except Exception:
+        res = {"found": False}
+        ANISKIP_CACHE[cache_key] = (now, res)
+        return res
+
+def dispatch_webhook_notification(webhook_url, title, message, url=None):
+    if not webhook_url:
+        return False, "No webhook URL provided"
+    try:
+        payload = {
+            "content": f"**[AIO Simulcast Alert]** {title}\n{message}" + (f"\nWatch: {url}" if url else ""),
+            "embeds": [{
+                "title": title,
+                "description": message,
+                "url": url or "http://localhost:8082",
+                "color": 15115627,
+                "footer": {"text": "AIO Local • Simulcast Alerts"}
+            }]
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json", "User-Agent": "AIO-Stack-Notifier/1.0"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            return True, f"Delivered (HTTP {resp.status})"
+    except Exception as e:
+        return False, str(e)
+
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_ROOT, **kwargs)
@@ -450,6 +539,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         return super().send_head()
 
     def do_OPTIONS(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path in ("/api/aniskip", "/aniskip"):
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+            return
         if not self.request_origin_is_local():
             self.send_error(403, "Cross-origin requests are not allowed")
             return
@@ -459,6 +557,53 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         url_parts = urllib.parse.urlparse(self.path)
         path = url_parts.path
+
+        if path in ("/api/aniskip", "/aniskip"):
+            query = urllib.parse.parse_qs(url_parts.query)
+            raw_id = (query.get("id") or [""])[0].strip()
+            season = int((query.get("season") or ["1"])[0] or 1)
+            episode = int((query.get("episode") or ["1"])[0] or 1)
+            try:
+                duration = float((query.get("duration") or ["0"])[0] or 0)
+            except ValueError:
+                duration = 0
+
+            if ":" in raw_id:
+                parts = raw_id.split(":")
+                if raw_id.startswith("kitsu:"):
+                    raw_id = f"kitsu:{parts[1]}"
+                    if len(parts) >= 3:
+                        try:
+                            episode = int(parts[2])
+                        except ValueError:
+                            pass
+                else:
+                    raw_id = parts[0]
+                    if len(parts) >= 3:
+                        try:
+                            season = int(parts[1])
+                            episode = int(parts[2])
+                        except ValueError:
+                            pass
+
+            mal_id = resolve_mal_id(raw_id, season)
+            if not mal_id:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"found": False, "reason": "No anime ID mapping"}).encode())
+                return
+
+            skip_data = get_aniskip_times(mal_id, episode, duration)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            resp = dict(skip_data)
+            resp["malId"] = mal_id
+            self.wfile.write(json.dumps(resp).encode())
+            return
 
         if path == "/healthz":
             self.json_response({"status": "ok", "service": "portal"})
@@ -669,6 +814,19 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         if not self.request_origin_is_local():
             self.send_error(403, "Cross-origin configuration changes are not allowed")
+            return
+        if path == "/api/webhook-test":
+            try:
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0)
+                payload = json.loads(body.decode("utf-8")) if body else {}
+                url = payload.get("url") or read_saved_env().get("DISCORD_WEBHOOK_URL", "")
+                if not url:
+                    self.json_response({"success": False, "error": "No webhook URL provided"}, 400)
+                    return
+                success, msg = dispatch_webhook_notification(url, "Simulcast Alert Test", "Your AIO Local Simulcast Airing Alert webhook is active and verified! 🎉")
+                self.json_response({"success": success, "message": msg}, 200 if success else 400)
+            except Exception as e:
+                self.json_response({"success": False, "error": str(e)}, 500)
             return
         if path == "/api/setup":
             try:
