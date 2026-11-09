@@ -124,6 +124,8 @@ function setProgress(title,message,running=false) {
 }
 async function loadSettings() {
   const env = await api('/api/env');
+  const schedSelect = document.getElementById('backup-schedule-select');
+  if (schedSelect && env.BACKUP_SCHEDULE) schedSelect.value = env.BACKUP_SCHEDULE;
   document.getElementById('enable-mediafusion').checked = env.MEDIAFUSION_REPLICAS === '1';
   document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
   for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
@@ -175,6 +177,8 @@ async function loadManifest() {
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
     document.getElementById('copy-manifest').disabled = false;
+    const installBtn = document.getElementById('btn-install-stremio');
+    if (installBtn) installBtn.disabled = false;
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
@@ -325,6 +329,31 @@ async function copyToClipboard(text, successMsg) {
     try { copied = document.execCommand('copy'); } finally { textarea.remove(); }
     notify(copied ? successMsg : 'Select the URL above and copy it.');
   }
+}
+
+const btnInstallStremio = document.getElementById('btn-install-stremio');
+if (btnInstallStremio) {
+  btnInstallStremio.addEventListener('click', () => {
+    if (!currentManifest) return;
+    const stremioUrl = currentManifest.replace(/^https?:/, 'stremio:');
+    copyToClipboard(currentManifest, 'Launching Stremio... (Manifest URL copied to clipboard as fallback)');
+    window.location.href = stremioUrl;
+  });
+}
+
+const backupSched = document.getElementById('backup-schedule-select');
+if (backupSched) {
+  backupSched.addEventListener('change', async () => {
+    const val = backupSched.value;
+    try {
+      const res = await api('/api/save-env', { method: 'POST', body: JSON.stringify({ BACKUP_SCHEDULE: val }) });
+      if (res && res.success) {
+        showToast(`Automated backup schedule set to: ${val}`);
+      }
+    } catch (e) {
+      showToast('Failed to update backup schedule');
+    }
+  });
 }
 
 document.getElementById('copy-manifest').addEventListener('click', () => {

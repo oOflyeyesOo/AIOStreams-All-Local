@@ -977,6 +977,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
             "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
+            "BACKUP_SCHEDULE": env_vars.get("BACKUP_SCHEDULE", "daily"),
             "configuredKeys": sorted(key for key, value in env_vars.items()
                                      if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
