@@ -178,6 +178,7 @@ services:
       - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
+      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews"]
       - ENCRYPT_STREMTHRU_URLS=false
       - ENCRYPT_MEDIAFLOW_URLS=false
 
@@ -531,6 +532,8 @@ services:
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
       - POSTERSPLUS_URL=http://postersplus:8000
       - POSTERSPLUS_ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-}
+      - STREMTHRU_URL=http://stremthru:8080
+      - MEDIAFLOW_URL=http://mediaflow:8888
       - BASE_URL=${BASE_URL:-http://localhost:3001}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}

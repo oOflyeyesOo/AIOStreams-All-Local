@@ -255,6 +255,16 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap, "BASE_URL", "https://aio.example.test"):
             config = bootstrap.build_default_config()
         self.assertTrue(config["proxy"]["enabled"])
+        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews"])
+
+    def test_stremthru_store_preset_configured_with_debrid(self):
+        with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "mock-prem-key"):
+            config = bootstrap.build_default_config(probe_services=False)
+            store_preset = next((p for p in config.get("presets", []) if p["type"] == "stremthruStore"), None)
+            self.assertIsNotNone(store_preset)
+            self.assertTrue(store_preset["enabled"])
+            self.assertEqual(store_preset["instanceId"], "stremthru-store-local")
+            self.assertIn("catalog", store_preset["options"]["resources"])
 
     def test_optional_tvdb_key_does_not_block_aiostreams_config(self):
         with patch.object(bootstrap, "TVDB_API_KEY", "optional-tvdb-key"):

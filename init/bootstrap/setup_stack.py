@@ -130,6 +130,8 @@ SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
 STREMIO_WEB_URL = os.environ.get("STREMIO_WEB_URL", "http://stremio-web:8080").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
+STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
+MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "http://mediaflow:8888").rstrip("/")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000").rstrip("/")
 MEDIAFUSION_HOST_URL = os.environ.get("MEDIAFUSION_HOST_URL", "").rstrip("/")
 
@@ -945,12 +947,27 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": False,
             "options": {
                 "name": "StremThru Torz (Local)",
-                "url": "http://stremthru:8080/stremio/torz/",
+                "url": f"{STREMTHRU_URL}/stremio/torz/",
                 "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "includeP2P": False,
                 "useMultipleInstances": False
+            }
+        },
+        {
+            "type": "stremthruStore",
+            "instanceId": "stremthru-store-local",
+            "enabled": True,
+            "options": {
+                "name": "StremThru Store (Local)",
+                "url": f"{STREMTHRU_URL}/stremio/store/",
+                "timeout": 8000,
+                "resources": ["catalog", "meta", "stream"],
+                "mediaTypes": [],
+                "hideStreams": False,
+                "webDl": False,
+                "usenet": False
             }
         },
         {
@@ -1183,6 +1200,24 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         if not any(p.get("type") == target["type"] for p in presets):
             presets.append(target)
 
+    if any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+        if not any(p.get("type") == "stremthruStore" for p in presets):
+            presets.append({
+                "type": "stremthruStore",
+                "instanceId": "stremthru-store-local",
+                "enabled": True,
+                "options": {
+                    "name": "StremThru Store (Local)",
+                    "url": f"{STREMTHRU_URL}/stremio/store/",
+                    "timeout": 8000,
+                    "resources": ["catalog", "meta", "stream"],
+                    "mediaTypes": [],
+                    "hideStreams": False,
+                    "webDl": False,
+                    "usenet": False
+                }
+            })
+
     subtitle_config = {"languages": ["eng"]}
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
         if os.environ.get(env_key):
@@ -1252,6 +1287,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 validated_presets.append(p)
             else:
                 print("[AIOStreams Setup] ℹ️ Comet not active in current profile; preset disabled.", flush=True)
+        elif ptype == "stremthruStore":
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                continue
+            curr_timeout = int(opts.get("timeout") or 8000)
+            if curr_timeout > 8000 or curr_timeout < 5000:
+                opts["timeout"] = 8000
+            if reachable(f"{STREMTHRU_URL}/stremio/store/manifest.json", timeout=1.0):
+                p["enabled"] = True
+                print("[AIOStreams Setup] ✓ StremThru Store (Debrid Cloud Library) is online and active.", flush=True)
+                validated_presets.append(p)
+            else:
+                p["enabled"] = False
+                print("[AIOStreams Setup] ℹ️ StremThru Store not active in current profile; preset disabled.", flush=True)
+                validated_presets.append(p)
         elif ptype in ("knaben", "stremthruTorz"):
             p["enabled"] = False
             curr_timeout = int(opts.get("timeout") or 7000)
@@ -1355,7 +1404,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         "id": existing_proxy.get("id") or "builtin",
         "enabled": proxy_is_public,
         "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
-        "credentials": proxy_creds
+        "credentials": proxy_creds,
+        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews"]
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"
