@@ -184,6 +184,9 @@ class PortalTests(unittest.TestCase):
         cls.auth_env.stop()
         cls.temp.cleanup()
 
+    def setUp(self):
+        portal.AUTH_FAILURES.clear()
+
     def request(self, path, method="GET", data=None, auth=False, headers=None):
         request_headers = dict(headers or {})
         if auth:
@@ -434,6 +437,47 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(status, 200)
             data = json.loads(body)
             self.assertTrue(data.get("success"))
+
+    def test_health_stats_endpoint(self):
+        self.assertEqual(self.request("/api/health-stats", auth=False)[0], 401)
+        with patch("tools.resources.get_stack_resources", return_value={"success": True, "container_count": 22, "containers": []}), \
+             patch("tools.backup.get_backup_telemetry", return_value={"count": 2, "total_size_mb": 15.4}), \
+             patch("tools.watchdog.get_watchdog_telemetry", return_value={"status": "active", "healthy_count": 14, "total_services": 14, "last_probe": "2026-11-09T00:00:00Z"}):
+            status, body, _ = self.request("/api/health-stats", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+            self.assertEqual(data["resources"]["container_count"], 22)
+            self.assertEqual(data["backup"]["count"], 2)
+            self.assertEqual(data["watchdog"]["healthy_count"], 14)
+
+    def test_watchdog_endpoint(self):
+        self.assertEqual(self.request("/api/watchdog", auth=False)[0], 401)
+        with patch("tools.watchdog.get_watchdog_telemetry", return_value={"status": "active", "overall": "healthy"}):
+            status, body, _ = self.request("/api/watchdog", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("overall"), "healthy")
+
+        with patch("tools.watchdog.probe_all_services", return_value={"overall_status": "healthy", "healthy_count": 14, "total_services": 14}):
+            status, body, _ = self.request("/api/watchdog", "POST", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("healthy_count"), 14)
+
+    def test_backups_list_and_prune_endpoints(self):
+        self.assertEqual(self.request("/api/backups", auth=False)[0], 401)
+        with patch("tools.backup.get_backup_telemetry", return_value={"count": 3, "total_size_mb": 25.0}):
+            status, body, _ = self.request("/api/backups", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("count"), 3)
+
+        with patch("tools.backup.prune_backups", return_value={"retained": ["a", "b"], "pruned": ["c"], "keep_last": 2}):
+            status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": 2}, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(len(data.get("pruned")), 1)
 
 
 if __name__ == "__main__":

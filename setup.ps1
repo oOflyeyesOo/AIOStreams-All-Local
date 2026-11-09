@@ -20,6 +20,9 @@ param (
     [switch]$Backup,
     [switch]$Restore,
     [string]$Archive = "",
+    [switch]$Prune,
+    [int]$KeepLast = 5,
+    [switch]$Watchdog,
     [switch]$Test,
     [switch]$Benchmark,
     [switch]$BuildAppliance,
@@ -483,6 +486,27 @@ function Invoke-CleanCache {
     }
 }
 
+function Invoke-Watchdog {
+    Write-Header "Running Self-Healing Watchdog Probe"
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        & python tools/watchdog.py --check-once
+    } else {
+        docker exec aio-portal python3 /app/tools/watchdog.py --check-once
+    }
+}
+
+function Invoke-PruneBackups {
+    param([int]$Keep = 5)
+    Write-Header "Pruning Old Stack Backups (Retaining last $Keep)"
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        & python tools/backup.py --prune $Keep
+    } else {
+        docker exec aio-portal python3 /app/tools/backup.py --prune $Keep
+    }
+}
+
 function Show-StackResources {
     Write-Header "AIO Local Live Container Resource Monitor"
     $py = Get-Command python -ErrorAction SilentlyContinue
@@ -504,17 +528,19 @@ function Show-Menu {
     Write-Host " 5) View Stack Status & Health (docker compose ps)"
     Write-Host " 6) Stop Stack (docker compose down)"
     Write-Host " 7) Update Stack & Pull Latest Images (docker compose pull)"
-    Write-Host " 8) Create Full Stack Backup (.tar.gz archive)"
+    Write-Host " 8) Create Full Stack Backup (Auto-Prune to 5)"
     Write-Host " 9) Restore Stack from Backup Archive"
-    Write-Host " 10) Run Automated 23-Service E2E Verification Suite" -ForegroundColor Yellow
-    Write-Host " 11) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
-    Write-Host " 12) View Stremio Manifest & Service URLs"
-    Write-Host " 13) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
-    Write-Host " 14) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)" -ForegroundColor Cyan
-    Write-Host " 15) Live Container Resource Monitor (Real-time RAM & CPU stats)" -ForegroundColor Cyan
+    Write-Host " 10) Prune Old Backups (Keep Last 5)"
+    Write-Host " 11) Run Self-Healing Watchdog Health Probe"
+    Write-Host " 12) Run Automated 23-Service E2E Verification Suite" -ForegroundColor Yellow
+    Write-Host " 13) Run Pathway & Speed Benchmark Suite" -ForegroundColor Yellow
+    Write-Host " 14) View Stremio Manifest & Service URLs"
+    Write-Host " 15) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+    Write-Host " 16) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)" -ForegroundColor Cyan
+    Write-Host " 17) Live Container Resource Monitor (Real-time RAM & CPU stats)" -ForegroundColor Cyan
     Write-Host " 0) Exit"
     Write-Host ""
-    $choice = Read-Host "Select an option [1-15, 0]"
+    $choice = Read-Host "Select an option [1-17, 0]"
 
     switch ($choice) {
         "1" { Open-SetupPortal -ListenPort $Port; pause }
@@ -526,12 +552,14 @@ function Show-Menu {
         "7" { Invoke-Update; pause }
         "8" { Invoke-Backup; pause }
         "9" { Invoke-Restore; pause }
-        "10" { Invoke-Tests; pause }
-        "11" { Invoke-Benchmarks; pause }
-        "12" { Show-StremioLinks; pause }
-        "13" { Build-AllInOneImage; pause }
-        "14" { Invoke-CleanCache; pause }
-        "15" { Show-StackResources; pause }
+        "10" { Invoke-PruneBackups -Keep $KeepLast; pause }
+        "11" { Invoke-Watchdog; pause }
+        "12" { Invoke-Tests; pause }
+        "13" { Invoke-Benchmarks; pause }
+        "14" { Show-StremioLinks; pause }
+        "15" { Build-AllInOneImage; pause }
+        "16" { Invoke-CleanCache; pause }
+        "17" { Show-StackResources; pause }
         "0" { exit }
         default { Write-Warn "Invalid choice." }
     }
@@ -556,6 +584,10 @@ if ($Portal -or $Serve) {
     Invoke-Backup
 } elseif ($Restore) {
     Invoke-Restore -ArchivePath $Archive
+} elseif ($Prune) {
+    Invoke-PruneBackups -Keep $KeepLast
+} elseif ($Watchdog) {
+    Invoke-Watchdog
 } elseif ($Test) {
     Invoke-Tests
 } elseif ($Benchmark) {

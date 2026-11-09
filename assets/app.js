@@ -527,8 +527,111 @@ async function runOperations() {
   });
 }
 
+let healthInterval = null;
+
+async function refreshHealthTelemetry() {
+  try {
+    const data = await api('/api/health-stats');
+    if (!data || !data.success) return;
+
+    const res = data.resources || {};
+    const wd = data.watchdog || {};
+    const bk = data.backup || {};
+
+    const countEl = document.getElementById('health-fleet-count');
+    if (countEl) countEl.textContent = `${res.container_count || 0} Containers`;
+
+    const memEl = document.getElementById('health-mem-used');
+    if (memEl) memEl.textContent = `${res.total_mem_gb || 0} GB`;
+
+    const memSubEl = document.getElementById('health-mem-host');
+    if (memSubEl) memSubEl.textContent = `of ${res.host_limit_gb || 0} GB Host (${res.host_mem_percent || 0}%)`;
+
+    const memFill = document.getElementById('health-mem-fill');
+    if (memFill) memFill.style.width = `${Math.min(res.host_mem_percent || 0, 100)}%`;
+
+    const cpuEl = document.getElementById('health-cpu-load');
+    if (cpuEl) cpuEl.textContent = `${res.total_cpu_percent || 0}%`;
+
+    const wdEl = document.getElementById('health-watchdog-state');
+    if (wdEl) {
+      wdEl.textContent = `${wd.healthy_count || 0} / ${wd.total_services || 0} Online`;
+      wdEl.className = wd.overall === 'healthy' ? 'stat-val text-green' : 'stat-val text-amber';
+    }
+
+    const bkEl = document.getElementById('health-backup-summary');
+    if (bkEl) bkEl.textContent = `${bk.count || 0} Backups (${bk.total_size_mb || 0} MB) · Retaining 5`;
+
+    const tbody = document.getElementById('telemetry-table-body');
+    if (tbody && Array.isArray(res.containers)) {
+      tbody.innerHTML = '';
+      res.containers.forEach(c => {
+        const tr = document.createElement('tr');
+        const cpuClass = c.cpu_percent > 60 ? 'text-red' : (c.cpu_percent > 20 ? 'text-amber' : 'text-green');
+        tr.innerHTML = `
+          <td><strong>${c.name}</strong></td>
+          <td class="${cpuClass}"><strong>${c.cpu_percent}%</strong></td>
+          <td>${c.mem_used_mb} MB <span class="muted">/ ${c.mem_limit_mb} MB</span></td>
+          <td>${c.mem_percent}%</td>
+          <td class="muted">${c.net_io}</td>
+          <td><span class="badge-healthy">● RUNNING</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (err) {
+    console.error('Failed to refresh health telemetry:', err);
+  }
+}
+
+function initHealthTelemetry() {
+  document.getElementById('refresh-health')?.addEventListener('click', () => {
+    refreshHealthTelemetry().then(() => notify('Stack health updated ↻'));
+  });
+
+  document.getElementById('run-watchdog-probe')?.addEventListener('click', async () => {
+    try {
+      notify('Running watchdog probe across 14 service endpoints…');
+      const probeRes = await api('/api/watchdog', { method: 'POST' });
+      notify(`Watchdog probe complete: ${probeRes.healthy_count || 0}/${probeRes.total_services || 0} services healthy!`);
+      await refreshHealthTelemetry();
+    } catch (e) {
+      notify(`Watchdog probe failed: ${e.message}`);
+    }
+  });
+
+  document.getElementById('btn-prune-backups')?.addEventListener('click', async () => {
+    try {
+      const res = await api('/api/backups/prune', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_last: 5 })
+      });
+      const prunedCount = res.pruned ? res.pruned.length : 0;
+      notify(`Backup retention: kept ${res.retained?.length || 0}, deleted ${prunedCount} old archive(s).`);
+      await refreshHealthTelemetry();
+    } catch (e) {
+      notify(`Prune failed: ${e.message}`);
+    }
+  });
+
+  const select = document.getElementById('auto-refresh-select');
+  if (select) {
+    const updateInterval = () => {
+      if (healthInterval) clearInterval(healthInterval);
+      const val = parseInt(select.value, 10);
+      if (val > 0) {
+        healthInterval = setInterval(refreshHealthTelemetry, val);
+      }
+    };
+    select.addEventListener('change', updateInterval);
+    updateInterval();
+  }
+}
+
 runOperations();
-Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup(),refreshMaintenance()]).then(results=>{
+initHealthTelemetry();
+Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup(),refreshMaintenance(),refreshHealthTelemetry()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);
 });

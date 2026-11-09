@@ -384,6 +384,33 @@ show_resources() {
     fi
 }
 
+run_watchdog() {
+    write_header "Running Self-Healing Watchdog Probe"
+    if command -v python3 &>/dev/null; then
+        python3 tools/watchdog.py --check-once
+    else
+        docker exec aio-portal python3 /app/tools/watchdog.py --check-once
+    fi
+}
+
+run_watchdog_daemon() {
+    write_header "Starting Self-Healing Watchdog Background Daemon"
+    if command -v python3 &>/dev/null; then
+        python3 tools/watchdog.py --daemon
+    else
+        docker exec -d aio-portal python3 /app/tools/watchdog.py --daemon
+    fi
+}
+
+prune_backups_cli() {
+    write_header "Pruning Old Stack Backups (Retaining last 5)"
+    if command -v python3 &>/dev/null; then
+        python3 tools/backup.py --prune "${1:-5}"
+    else
+        docker exec aio-portal python3 /app/tools/backup.py --prune "${1:-5}"
+    fi
+}
+
 case "$1" in
     wizard)      cli_wizard ;;
     check)       check_prerequisites ;;
@@ -394,6 +421,9 @@ case "$1" in
     benchmark)   run_benchmarks ;;
     backup)      backup_stack ;;
     restore)     restore_stack "$2" ;;
+    prune)       prune_backups_cli "$2" ;;
+    watchdog)    run_watchdog ;;
+    daemon)      run_watchdog_daemon ;;
     update)      update_stack ;;
     clean-cache) clean_cache "$2" ;;
     resources)   show_resources "$2" ;;
@@ -411,16 +441,18 @@ case "$1" in
             echo -e " 4) View Stack Status (docker compose ps)"
             echo -e " 5) Stop Stack (docker compose down)"
             echo -e " 6) Update Stack & Pull Latest Images (docker compose pull)"
-            echo -e " 7) Create Full Stack Backup (.tar.gz archive)"
+            echo -e " 7) Create Full Stack Backup (Auto-Prune to 5)"
             echo -e " 8) Restore Stack from Backup Archive"
-            echo -e " 9) Run Automated 23-Service E2E Verification Suite"
-            echo -e " 10) Run Pathway & Speed Benchmark Suite"
-            echo -e " 11) View Stremio Manifest & Service URLs"
-            echo -e " 12) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
-            echo -e " 13) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)"
-            echo -e " 14) Live Container Resource Monitor (Real-time RAM & CPU stats)"
+            echo -e " 9) Prune Old Backups (Keep Last 5)"
+            echo -e " 10) Run Self-Healing Watchdog Health Probe"
+            echo -e " 11) Run Automated 23-Service E2E Verification Suite"
+            echo -e " 12) Run Pathway & Speed Benchmark Suite"
+            echo -e " 13) View Stremio Manifest & Service URLs"
+            echo -e " 14) Build All-In-One Appliance Docker Package (ghcr.io/ooflyeyesoo/aiostreams-aio)"
+            echo -e " 15) Clean Ephemeral Caches & Scraper Dumps (Recover GBs of disk)"
+            echo -e " 16) Live Container Resource Monitor (Real-time RAM & CPU stats)"
             echo -e " 0) Exit"
-            read -p "Select option [1-14, 0]: " opt
+            read -p "Select option [1-16, 0]: " opt
             case "$opt" in
                 1) cli_wizard ;;
                 2) check_prerequisites ;;
@@ -430,12 +462,14 @@ case "$1" in
                 6) update_stack ;;
                 7) backup_stack ;;
                 8) restore_stack ;;
-                9) run_tests ;;
-                10) run_benchmarks ;;
-                11) show_links ;;
-                12) build_appliance ;;
-                13) clean_cache ;;
-                14) show_resources ;;
+                9) prune_backups_cli ;;
+                10) run_watchdog ;;
+                11) run_tests ;;
+                12) run_benchmarks ;;
+                13) show_links ;;
+                14) build_appliance ;;
+                15) clean_cache ;;
+                16) show_resources ;;
                 0) exit 0 ;;
                 *) echo "Invalid option." ;;
             esac

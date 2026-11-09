@@ -42,6 +42,8 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 EXCLUDE_PATTERNS = {
     "hashlists",
     "cache",
+    "poster-cache",
+    "logs",
     "imdb",
     "anime-database",
     "id-mappings",
@@ -81,13 +83,20 @@ def postgres_container():
 
 def copy_consistent(source, destination):
     source, destination = Path(source), Path(destination)
-    with source.open("rb") as handle:
-        is_sqlite = handle.read(16) == b"SQLite format 3\x00"
-    if is_sqlite:
-        with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as db:
-            with sqlite3.connect(destination) as output:
-                db.backup(output)
-        return str(destination)
+    try:
+        with source.open("rb") as handle:
+            is_sqlite = handle.read(16) == b"SQLite format 3\x00"
+        if is_sqlite:
+            try:
+                uri = source.resolve().as_uri() + "?mode=ro&immutable=1"
+                with sqlite3.connect(uri, uri=True) as db:
+                    with sqlite3.connect(str(destination)) as output:
+                        db.backup(output)
+                return str(destination)
+            except Exception:
+                pass
+    except Exception:
+        pass
     return shutil.copy2(source, destination)
 
 
@@ -133,7 +142,7 @@ def restore_postgres(dump_file: Path) -> bool:
         return False
 
 
-def create_backup(output_dir: Path = None, root: Path = None, include_cache: bool = False) -> Path:
+def create_backup(output_dir: Path = None, root: Path = None, include_cache: bool = False, keep_last: int = 5) -> Path:
     """Create a compressed .tar.gz backup archive."""
     if root is None:
         root = get_project_root()
@@ -227,7 +236,73 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
         with os.fdopen(descriptor,'w',encoding='utf-8') as output:json.dump(status,output)
         os.replace(pending,archive_path.with_suffix(archive_path.suffix+'.json'))
     finally:Path(pending).unlink(missing_ok=True)
+    if keep_last > 0:
+        pruned_info = prune_backups(output_dir, keep_last=keep_last, root=root)
+        if pruned_info.get("pruned"):
+            print(f"  [i] Auto-pruned {len(pruned_info['pruned'])} older backup(s) (retaining last {keep_last}).", flush=True)
     return archive_path
+
+
+def prune_backups(output_dir: Path = None, keep_last: int = 5, root: Path = None) -> dict:
+    """Prune older backups beyond keep_last, removing both the .tar.gz and .json metadata sidecars."""
+    if output_dir is None:
+        if root is None:
+            root = get_project_root()
+        output_dir = root / "backups"
+    output_dir = Path(output_dir)
+    if not output_dir.is_dir():
+        return {"retained": [], "pruned": [], "keep_last": keep_last, "total_on_disk": 0}
+
+    archives = sorted(output_dir.glob("aio-backup-*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+    retained = []
+    pruned = []
+
+    for i, archive in enumerate(archives):
+        if i < keep_last:
+            retained.append(archive.name)
+        else:
+            pruned.append(archive.name)
+            archive.unlink(missing_ok=True)
+            sidecar = archive.with_suffix(archive.suffix + ".json")
+            sidecar.unlink(missing_ok=True)
+
+    return {
+        "retained": retained,
+        "pruned": pruned,
+        "keep_last": keep_last,
+        "total_on_disk": len(retained)
+    }
+
+
+def get_backup_telemetry(output_dir: Path = None, root: Path = None) -> dict:
+    """Get high-level telemetry on backups for the portal and status displays."""
+    if output_dir is None:
+        if root is None:
+            root = get_project_root()
+        output_dir = root / "backups"
+    output_dir = Path(output_dir)
+    if not output_dir.is_dir():
+        return {"count": 0, "total_size_mb": 0.0, "latest": None, "archives": []}
+
+    archives = sorted(output_dir.glob("aio-backup-*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+    total_bytes = 0
+    items = []
+    for arch in archives:
+        sz = arch.stat().st_size
+        total_bytes += sz
+        mtime = datetime.fromtimestamp(arch.stat().st_mtime, timezone.utc).isoformat()
+        items.append({
+            "name": arch.name,
+            "size_mb": round(sz / (1024 * 1024), 2),
+            "mtime": mtime
+        })
+
+    return {
+        "count": len(items),
+        "total_size_mb": round(total_bytes / (1024 * 1024), 2),
+        "latest": items[0] if items else None,
+        "archives": items
+    }
 
 
 def latest_backup_status(directory):
@@ -340,16 +415,19 @@ def main():
     group.add_argument("--backup", action="store_true", help="Create a clean, lightweight stack backup")
     group.add_argument("--restore", type=str, metavar="ARCHIVE_FILE", help="Restore stack from a backup archive")
     group.add_argument("--list", action="store_true", help="List existing backups in backups/ folder")
+    group.add_argument("--prune", type=int, nargs="?", const=5, metavar="KEEP_N", help="Prune older backups keeping last N (default: 5)")
+    group.add_argument("--status", action="store_true", help="Show backup telemetry and retention status")
+    parser.add_argument("--keep-last", type=int, default=5, help="Number of backups to keep during auto-prune (default: 5, 0 to disable)")
     parser.add_argument("--include-cache", action="store_true", help="Include heavy proxy scrape caches (e.g. stremthru.db)")
     parser.add_argument("--output-dir", type=str, default=None, help="Directory to save the backup")
 
     args = parser.parse_args()
     root = get_project_root()
+    out_dir = Path(args.output_dir) if args.output_dir else root / "backups"
 
     if args.backup:
         print(f"[i] Backing up AIO Local Stack from {root}...", flush=True)
-        out_dir = Path(args.output_dir) if args.output_dir else root / "backups"
-        archive = create_backup(out_dir, root, include_cache=args.include_cache)
+        archive = create_backup(out_dir, root, include_cache=args.include_cache, keep_last=args.keep_last)
         size_mb = archive.stat().st_size / (1024 * 1024)
         print(f"[✓] Backup created successfully:\n    {archive} ({size_mb:.2f} MB)", flush=True)
 
@@ -364,6 +442,24 @@ def main():
 
     elif args.list:
         list_backups(root)
+
+    elif args.prune is not None:
+        keep = int(args.prune)
+        print(f"[i] Pruning backups in {out_dir} (retaining last {keep})...", flush=True)
+        result = prune_backups(out_dir, keep_last=keep, root=root)
+        print(f"[✓] Prune completed. {len(result['retained'])} retained, {len(result['pruned'])} deleted.", flush=True)
+        for p in result['pruned']:
+            print(f"    - Deleted: {p}")
+
+    elif args.status:
+        telemetry = get_backup_telemetry(out_dir, root)
+        print("\nAIO Stack Backup Telemetry:")
+        print("-" * 55)
+        print(f"  Total Backups on Disk : {telemetry['count']}")
+        print(f"  Total Backup Footprint: {telemetry['total_size_mb']:.2f} MB")
+        if telemetry['latest']:
+            print(f"  Latest Archive        : {telemetry['latest']['name']} ({telemetry['latest']['size_mb']} MB)")
+        print("-" * 55)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import subprocess
 import hmac
 import pathlib
 from pathlib import Path
+from datetime import datetime, timezone
 import shutil
 import time
 import re
@@ -515,6 +516,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return True
         recent.append(now)
         AUTH_FAILURES[client] = recent
+        if self.command == "POST":
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length > 0:
+                try:
+                    self.rfile.read(min(length, 65536))
+                except Exception:
+                    pass
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="AIOStreams Portal"')
         self.end_headers()
@@ -801,6 +809,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/resources":
             self.handle_api_resources()
             return
+        elif path == "/api/health-stats":
+            self.handle_api_health_stats()
+            return
+        elif path == "/api/watchdog":
+            self.handle_api_watchdog()
+            return
+        elif path == "/api/backups":
+            self.handle_api_backups_list()
+            return
         elif path == "/api/clean-cache":
             self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
@@ -890,6 +907,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         elif path == "/api/clean-cache":
             self.handle_api_clean_cache()
+            return
+        elif path == "/api/watchdog":
+            self.handle_api_watchdog(run_probe=True)
+            return
+        elif path == "/api/backups/prune":
+            self.handle_api_backups_prune()
             return
 
         self.send_response(404)
@@ -1153,7 +1176,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             backup_dir.mkdir(parents=True, exist_ok=True)
             sys.path.insert(0, str(WEB_ROOT))
             import tools.backup as stack_backup
-            archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT))
+            archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT), keep_last=5)
 
             size = archive.stat().st_size
             self.send_response(200)
@@ -1166,6 +1189,72 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 shutil.copyfileobj(f, self.wfile)
         except Exception as e:
             self.send_error(500, f"Backup creation failed: {e}")
+
+    def handle_api_health_stats(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.resources as stack_res
+            import tools.backup as stack_backup
+            import tools.watchdog as stack_watchdog
+
+            res_stats = stack_res.get_stack_resources(filter_aio=True)
+            bk_stats = stack_backup.get_backup_telemetry(Path(WEB_ROOT) / "backups", Path(WEB_ROOT))
+            wd_telemetry = stack_watchdog.get_watchdog_telemetry()
+
+            # Ensure we have active probe results for the dashboard
+            if not wd_telemetry.get("last_probe"):
+                wd_summary = stack_watchdog.probe_all_services(auto_restart=False)
+                wd_telemetry = stack_watchdog.get_watchdog_telemetry()
+                services_probed = wd_summary.get("services", [])
+            else:
+                services_probed = []
+
+            payload = {
+                "success": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "resources": res_stats,
+                "backup": bk_stats,
+                "watchdog": wd_telemetry,
+                "services": services_probed
+            }
+            self.json_response(payload)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_watchdog(self, run_probe=False):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.watchdog as stack_watchdog
+            if run_probe:
+                summary = stack_watchdog.probe_all_services(auto_restart=False)
+                self.json_response(summary)
+            else:
+                telemetry = stack_watchdog.get_watchdog_telemetry()
+                self.json_response(telemetry)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_backups_list(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.backup as stack_backup
+            telemetry = stack_backup.get_backup_telemetry(Path(WEB_ROOT) / "backups", Path(WEB_ROOT))
+            self.json_response(telemetry)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_backups_prune(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            body = self.rfile.read(length) if length > 0 else b"{}"
+            payload = json.loads(body.decode("utf-8")) if body else {}
+            keep_last = int(payload.get("keep_last", 5))
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.backup as stack_backup
+            res = stack_backup.prune_backups(Path(WEB_ROOT) / "backups", keep_last=keep_last, root=Path(WEB_ROOT))
+            self.json_response(res)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
 
     def handle_api_resources(self):
         try:
