@@ -255,7 +255,7 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap, "BASE_URL", "https://aio.example.test"):
             config = bootstrap.build_default_config()
         self.assertTrue(config["proxy"]["enabled"])
-        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews"])
+        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "none"])
 
     def test_stremthru_store_preset_configured_with_debrid(self):
         with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "mock-prem-key"):

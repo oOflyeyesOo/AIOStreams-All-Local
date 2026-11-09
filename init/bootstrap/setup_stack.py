@@ -1405,7 +1405,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         "enabled": proxy_is_public,
         "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
         "credentials": proxy_creds,
-        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews"]
+        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "none"]
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"

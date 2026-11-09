@@ -178,7 +178,7 @@ services:
       - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
-      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews"]
+      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
       - ENCRYPT_STREMTHRU_URLS=false
       - ENCRYPT_MEDIAFLOW_URLS=false
 
