@@ -55,6 +55,7 @@ const runner=createRunner({
   requestMs:number(process.env.SOOTIO_CURL_TIMEOUT_MS,5000,1000,15000),
   connectMs:number(process.env.SOOTIO_CONNECT_TIMEOUT_MS,2000,500,5000),
   cooldownMs:number(process.env.SOOTIO_SOURCE_COOLDOWN_MS,120000,5000,900000),
+  maxPending:number(process.env.SOOTIO_MAX_PENDING,6,2,32),
 });
 export const run=runner.run;
 export const stats=runner.stats;

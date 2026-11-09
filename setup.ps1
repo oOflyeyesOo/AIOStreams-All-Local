@@ -82,6 +82,7 @@ function Ensure-Directories {
             New-Item -ItemType Directory -Path $p -Force | Out-Null
         }
     }
+    if (Test-Path (Join-Path $ScriptDir ".git")) { git config core.hooksPath .githooks 2>$null }
     Write-Success "All directories ready."
 }
 

@@ -45,6 +45,7 @@ ensure_directories() {
     chmod -R 777 data/slicksync data/aiometadata data/postersplus data/infinidysk data/stremio-web data/debrid-search data/sootio 2>/dev/null || true
     chmod +x init/postgres/init-databases.sh docker/sootio/*.js 2>/dev/null || true
     [ -f data/infinidysk/session.key ] && chmod 600 data/infinidysk/session.key 2>/dev/null || true
+    [ -d .git ] && git config core.hooksPath .githooks 2>/dev/null || true
     echo -e "${GREEN}[✓] Directories ready.${NC}"
 }
 

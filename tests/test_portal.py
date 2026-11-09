@@ -479,6 +479,15 @@ class PortalTests(unittest.TestCase):
             data = json.loads(body)
             self.assertEqual(len(data.get("pruned")), 1)
 
+    def test_zilean_stats_endpoint(self):
+        self.assertEqual(self.request("/api/zilean-stats", auth=False)[0], 401)
+        with patch("tools.watchdog.get_zilean_stats", return_value={"healthy": True, "engine": "DMM Hash Search (Active)", "latency_ms": 12.0}):
+            status, body, _ = self.request("/api/zilean-stats", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+            self.assertTrue(data["stats"]["healthy"])
+
 
 if __name__ == "__main__":
     unittest.main()

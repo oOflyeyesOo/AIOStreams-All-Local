@@ -88,6 +88,8 @@ FAILURE_COUNTS = {}
 LAST_RESTART = {}
 PROBE_HISTORY = []
 MAX_HISTORY = 30
+MEMORY_FAILURES = {}
+LAST_MEMORY_RESTART = {}
 
 
 def get_webhook_url() -> str:
@@ -183,6 +185,114 @@ def probe_single_endpoint(endpoint: dict, timeout: float = 3.5) -> dict:
     }
 
 
+def check_memory_pressure(threshold_percent: float = 95.0, auto_restart: bool = False, cooldown_sec: int = 180) -> list:
+    """Check running containers for sustained memory pressure and optionally restart."""
+    alerts = []
+    now = time.monotonic()
+    try:
+        res = subprocess.run(
+            ["docker", "stats", "--no-stream", "--format", "{{.Name}}	{{.MemPerc}}"],
+            capture_output=True, text=True, timeout=10
+        )
+        if res.returncode != 0:
+            return []
+        for line in res.stdout.strip().splitlines():
+            parts = line.split("	")
+            if len(parts) < 2:
+                continue
+            name, perc_str = parts[0].strip(), parts[1].strip().rstrip("%")
+            try:
+                perc = float(perc_str)
+            except ValueError:
+                continue
+            if perc >= threshold_percent:
+                hits = MEMORY_FAILURES.get(name, 0) + 1
+                MEMORY_FAILURES[name] = hits
+                entry = {"container": name, "mem_percent": perc, "consecutive_hits": hits}
+                if auto_restart and hits >= 3:
+                    last_r = LAST_MEMORY_RESTART.get(name, 0)
+                    if now - last_r >= cooldown_sec:
+                        LAST_MEMORY_RESTART[name] = now
+                        MEMORY_FAILURES[name] = 0
+                        restarted = restart_container(name)
+                        if restarted:
+                            entry["restarted"] = True
+                            send_discord_alert(
+                                title=f"⚠️ AIO Watchdog: Memory Limit Restart ({name})",
+                                description=f"Container `{name}` sustained {perc}% memory usage for {hits} consecutive checks.\nAutomatic restart executed to relieve memory pressure.",
+                                color=0xE74C3C,
+                                fields=[
+                                    {"name": "Container", "value": name, "inline": True},
+                                    {"name": "RAM Usage", "value": f"{perc}%", "inline": True}
+                                ]
+                            )
+                alerts.append(entry)
+            else:
+                MEMORY_FAILURES[name] = 0
+    except Exception:
+        pass
+    return alerts
+
+
+def check_prowlarr_indexers() -> dict:
+    """Probe Prowlarr indexer inventory and identify degraded or rate-limited indexers."""
+    in_docker = is_running_in_docker()
+    prowlarr_base = "http://prowlarr:9696" if in_docker else "http://127.0.0.1:9696"
+    api_key = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
+    headers = {"X-Api-Key": api_key, "User-Agent": "AIO-Watchdog/2.0"}
+
+    try:
+        req_idx = urllib.request.Request(f"{prowlarr_base}/api/v1/indexer", headers=headers)
+        with urllib.request.urlopen(req_idx, timeout=3.5) as r:
+            indexers = json.loads(r.read().decode("utf-8"))
+            id_to_name = {idx["id"]: idx.get("name", f"Indexer #{idx['id']}") for idx in indexers if isinstance(idx, dict) and "id" in idx}
+
+        req_st = urllib.request.Request(f"{prowlarr_base}/api/v1/indexerstatus", headers=headers)
+        with urllib.request.urlopen(req_st, timeout=3.5) as r:
+            statuses = json.loads(r.read().decode("utf-8"))
+            degraded = []
+            for s in statuses:
+                if isinstance(s, dict) and s.get("disabledTill"):
+                    degraded.append({
+                        "id": s.get("indexerId"),
+                        "name": id_to_name.get(s.get("indexerId"), f"Indexer #{s.get('indexerId')}"),
+                        "disabled_till": s.get("disabledTill")
+                    })
+            return {
+                "total_indexers": len(id_to_name),
+                "healthy_indexers": len(id_to_name) - len(degraded),
+                "degraded_indexers": degraded
+            }
+    except Exception:
+        return {"total_indexers": 0, "healthy_indexers": 0, "degraded_indexers": []}
+
+
+def get_zilean_stats() -> dict:
+    """Probe Zilean DMM hash search engine and report latency and status."""
+    in_docker = is_running_in_docker()
+    zilean_base = "http://zilean:8181" if in_docker else "http://127.0.0.1:8181"
+    start = time.monotonic()
+    try:
+        req = urllib.request.Request(f"{zilean_base}/dmm/filtered?query=ping", headers={"User-Agent": "AIO-Watchdog/2.0"})
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            elapsed = round((time.monotonic() - start) * 1000.0, 1)
+            return {
+                "healthy": resp.status == 200,
+                "status_code": resp.status,
+                "latency_ms": elapsed,
+                "engine": "DMM Hash Search (Active)"
+            }
+    except Exception as e:
+        elapsed = round((time.monotonic() - start) * 1000.0, 1)
+        return {
+            "healthy": False,
+            "status_code": 0,
+            "latency_ms": elapsed,
+            "error": str(e),
+            "engine": "DMM Hash Search"
+        }
+
+
 def restart_container(container_name: str) -> bool:
     """Trigger a docker container restart."""
     try:
@@ -194,7 +304,7 @@ def restart_container(container_name: str) -> bool:
         return False
 
 
-def probe_all_services(auto_restart: bool = False, max_failures: int = 3, cooldown_sec: int = 120) -> dict:
+def probe_all_services(auto_restart: bool = False, max_failures: int = 3, cooldown_sec: int = 120, check_memory: bool = True, mem_threshold: float = 95.0) -> dict:
     """Run a full check pass across all service endpoints and handle self-healing."""
     endpoints = get_service_endpoints()
     results = []
@@ -252,6 +362,10 @@ def probe_all_services(auto_restart: bool = False, max_failures: int = 3, cooldo
 
         results.append(probe)
 
+    mem_alerts = check_memory_pressure(threshold_percent=mem_threshold, auto_restart=auto_restart) if check_memory else []
+    prowlarr_idx = check_prowlarr_indexers()
+    zilean_stats = get_zilean_stats()
+
     timestamp = datetime.now(timezone.utc).isoformat()
     summary = {
         "timestamp": timestamp,
@@ -261,7 +375,10 @@ def probe_all_services(auto_restart: bool = False, max_failures: int = 3, cooldo
         "overall_status": "healthy" if total_healthy == len(endpoints) else "degraded",
         "restarts_triggered": restarts_triggered,
         "recovered": recovered,
-        "services": results
+        "services": results,
+        "memory_alerts": mem_alerts,
+        "indexer_health": prowlarr_idx,
+        "zilean_stats": zilean_stats
     }
 
     PROBE_HISTORY.append({
@@ -286,6 +403,8 @@ def get_watchdog_telemetry() -> dict:
         "total_services": latest["total_services"] if latest else 0,
         "overall": "healthy" if (latest and latest["healthy_count"] == latest["total_services"]) else "degraded",
         "failure_counts": dict(FAILURE_COUNTS),
+        "indexer_health": PROBE_HISTORY[-1].get("indexer_health") if PROBE_HISTORY else check_prowlarr_indexers(),
+        "zilean_stats": PROBE_HISTORY[-1].get("zilean_stats") if PROBE_HISTORY else get_zilean_stats(),
         "history": list(PROBE_HISTORY)
     }
 
@@ -320,6 +439,7 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Run continuously in background daemon loop")
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds for daemon mode (default: 60)")
     parser.add_argument("--max-failures", type=int, default=3, help="Consecutive failures before restart (default: 3)")
+    parser.add_argument("--mem-threshold", type=float, default=95.0, help="Memory percentage threshold for auto-restart (default: 95.0)")
     parser.add_argument("--no-restart", action="store_true", help="Disable automatic container restarts")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
 

@@ -553,14 +553,21 @@ async function refreshHealthTelemetry() {
     const cpuEl = document.getElementById('health-cpu-load');
     if (cpuEl) cpuEl.textContent = `${res.total_cpu_percent || 0}%`;
 
+        const zil = data.zilean || {};
+    const idx = data.indexer_health || {};
+
     const wdEl = document.getElementById('health-watchdog-state');
     if (wdEl) {
-      wdEl.textContent = `${wd.healthy_count || 0} / ${wd.total_services || 0} Online`;
+      const idxText = idx.total_indexers ? ` (${idx.healthy_indexers}/${idx.total_indexers} Indexers)` : '';
+      wdEl.textContent = `${wd.healthy_count || 0} / ${wd.total_services || 0} Online${idxText}`;
       wdEl.className = wd.overall === 'healthy' ? 'stat-val text-green' : 'stat-val text-amber';
     }
 
     const bkEl = document.getElementById('health-backup-summary');
-    if (bkEl) bkEl.textContent = `${bk.count || 0} Backups (${bk.total_size_mb || 0} MB) · Retaining 5`;
+    if (bkEl) {
+      const zilText = zil.healthy ? ' • Zilean DMM Active' : '';
+      bkEl.textContent = `${bk.count || 0} Backups (${bk.total_size_mb || 0} MB) • Retaining 5${zilText}`;
+    }
 
     const tbody = document.getElementById('telemetry-table-body');
     if (tbody && Array.isArray(res.containers)) {

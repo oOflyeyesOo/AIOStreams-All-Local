@@ -370,7 +370,14 @@ def setup_prowlarr_indexers():
         return
 
     added_count = 0
-    for target in TARGET_INDEXERS:
+    extra_indexers_raw = os.environ.get("PROWLARR_EXTRA_INDEXERS", "")
+    extra_indexers = [x.strip() for x in extra_indexers_raw.split(",") if x.strip()]
+    target_list = list(TARGET_INDEXERS)
+    for extra in extra_indexers:
+        if extra.lower() not in [t.lower() for t in target_list]:
+            target_list.append(extra)
+
+    for target in target_list:
         target_lower = target.lower()
         if any(target_lower in d for d in existing_definitions):
             continue
@@ -1175,7 +1182,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             p["enabled"] = enable_kc
             validated_presets.append(p)
         elif ptype == "mediafusion":
-            if os.environ.get('MEDIAFUSION_REPLICAS','0') != '1':
+            if os.environ.get('MEDIAFUSION_REPLICAS','0') in ('0', 'false', ''):
                 continue
             if os.environ.get('MEDIAFUSION_MANIFEST_URL'):
                 opts['url']=os.environ['MEDIAFUSION_MANIFEST_URL']
@@ -1186,16 +1193,16 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             else:
                 p["enabled"] = False
                 print(f"[AIOStreams Setup] ℹ️ MediaFusion not active in current profile. Preset disabled.", flush=True)
-            curr_timeout = int(opts.get("timeout") or 7000)
-            if curr_timeout < 20000:
-                opts["timeout"] = 20000
+            curr_timeout = int(opts.get("timeout") or 10000)
+            if curr_timeout > 12000 or curr_timeout < 5000:
+                opts["timeout"] = 10000
             validated_presets.append(p)
         elif ptype == "comet":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
-            curr_timeout = int(opts.get("timeout") or 7000)
-            if curr_timeout < 20000:
-                opts["timeout"] = 20000
+            curr_timeout = int(opts.get("timeout") or 10000)
+            if curr_timeout > 12000 or curr_timeout < 5000:
+                opts["timeout"] = 10000
             manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
             if reachable(manifest_url, timeout=1.0):
                 p["enabled"] = True

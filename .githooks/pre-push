@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# AIO Local Git Pre-Push Release Gate
+# Ensures all unit tests pass cleanly before any code reaches the repository.
+# ==============================================================================
+echo "==> [Gate] Running AIO Local test suite before push..."
+
+python -m unittest tests.test_bootstrap tests.test_portal tests.test_usenet_config
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "" >&2
+  echo "==> [ERROR] Unit test suite failed! Git push rejected." >&2
+  echo "==> Fix test failures before pushing to maintain release integrity." >&2
+  exit 1
+fi
+
+echo "==> [SUCCESS] All unit tests passed! Push permitted."
+exit 0

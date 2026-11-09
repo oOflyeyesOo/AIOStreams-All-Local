@@ -815,6 +815,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/watchdog":
             self.handle_api_watchdog()
             return
+        elif path in ("/api/zilean", "/api/zilean-stats"):
+            self.handle_api_zilean_stats()
+            return
         elif path == "/api/backups":
             self.handle_api_backups_list()
             return
@@ -1209,12 +1212,16 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 services_probed = []
 
+            zilean_stats = wd_telemetry.get("zilean_stats") or stack_watchdog.get_zilean_stats()
+            indexer_health = wd_telemetry.get("indexer_health") or stack_watchdog.check_prowlarr_indexers()
             payload = {
                 "success": True,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "resources": res_stats,
                 "backup": bk_stats,
                 "watchdog": wd_telemetry,
+                "zilean": zilean_stats,
+                "indexer_health": indexer_health,
                 "services": services_probed
             }
             self.json_response(payload)
@@ -1231,6 +1238,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 telemetry = stack_watchdog.get_watchdog_telemetry()
                 self.json_response(telemetry)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_zilean_stats(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.watchdog as stack_watchdog
+            stats = stack_watchdog.get_zilean_stats()
+            self.json_response({"success": True, "stats": stats})
         except Exception as e:
             self.json_response({"success": False, "error": str(e)}, 500)
 
