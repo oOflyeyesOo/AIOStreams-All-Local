@@ -56,6 +56,12 @@ def print(*values, **kwargs):
         if len(value) >= 6 and any(part in name for part in ("KEY", "PASSWORD", "TOKEN", "ENCRYPTED", "MANIFEST_URL", "USENET_PASS", "USENET_USER")):
             message = message.replace(value, "[REDACTED]")
     message = re.sub(r"(/stremio/)[^/\s]+/[^/\s]+", r"\1[REDACTED]", message)
+    # Encode safely when stdout uses a narrow codec (e.g. cp1252 on Windows).
+    enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        message.encode(enc)
+    except (UnicodeEncodeError, LookupError):
+        message = message.encode(enc, errors="replace").decode(enc, errors="replace")
     builtins.print(message, **kwargs)
 
 def update_env_file(key, value, candidates=None):
