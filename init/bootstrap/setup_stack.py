@@ -250,12 +250,10 @@ TARGET_INDEXERS = [
     "eztv",
     "thepiratebay",
     "torrentgalaxy",
-    "limetorrents",
     "kickasstorrents-ws",
     "badass-torrents",
     "torrentdownload",
     "nyaasi",
-    "tokyotosho",
     "subsplease",
     "animetosho-xyz",
     "nekobt"
@@ -425,6 +423,49 @@ def setup_prowlarr_indexers():
     print(f"[Prowlarr Setup] Prowlarr indexer provisioning complete. Added {added_count} new indexers.", flush=True)
 
 # ==============================================================================
+def tune_prowlarr_indexers():
+    """Tuning priorities for high-speed local and public indexers, auto-disabling broken trackers."""
+    headers = {"X-Api-Key": PROWLARR_API_KEY}
+    active_indexers = make_request(f"{PROWLARR_URL}/api/v1/indexer", headers=headers)
+    if not isinstance(active_indexers, list):
+        return
+    disabled_names = ["limetorrents", "tokyo toshokan", "acg.rip"]
+    priority_map = {
+        "zilean": 1,
+        "animetosho": 5,
+        "althub": 5,
+        "the pirate bay": 10,
+        "nyaa": 10,
+        "yts": 10,
+        "subsplease": 15,
+        "mikan": 15,
+        "shana project": 15,
+        "nekobt": 20,
+        "anibt": 20,
+        "dmhy": 20,
+        "torrentdownload": 30,
+    }
+    for idx in active_indexers:
+        name_lower = idx.get("name", "").lower()
+        updated = False
+        if any(d in name_lower for d in disabled_names):
+            if idx.get("enable"):
+                idx["enable"] = False
+                updated = True
+        new_pri = 25
+        for k, p in priority_map.items():
+            if k in name_lower:
+                new_pri = p
+                break
+        if idx.get("priority") != new_pri:
+            idx["priority"] = new_pri
+            updated = True
+        if updated and "id" in idx:
+            try:
+                make_request(f"{PROWLARR_URL}/api/v1/indexer/{idx['id']}", method="PUT", data=idx, headers=headers)
+            except Exception:
+                pass
+
 def setup_usenet_indexer():
     base=os.environ.get('NZB_INDEXER_URL','').rstrip('/')
     key=os.environ.get('NZB_INDEXER_API_KEY','')
@@ -861,7 +902,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "options": {
                 "name": "Comet (Local)",
                 "url": "http://comet:8000",
-                "timeout": 20000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "includeP2P": False,
                 "removeTrash": True,
@@ -875,7 +916,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "options": {
                 "name": "MediaFusion (Local)",
                 "url": "http://mediafusion:8000",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "useCachedResultsOnly": True,
                 "enableWatchlistCatalogs": False,
@@ -892,7 +933,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": False,
             "options": {
                 "name": "Knaben (Built-in)",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -905,7 +946,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "options": {
                 "name": "StremThru Torz (Local)",
                 "url": "http://stremthru:8080/stremio/torz/",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "includeP2P": False,
@@ -918,7 +959,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "Torrentio",
-                "timeout": 18000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "providers": [],
                 "useMultipleInstances": False
@@ -930,7 +971,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "Anime Tosho",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -942,7 +983,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "TsukiHime",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -954,7 +995,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "nekoBT",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -966,7 +1007,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
             "options": {
                 "name": "Easynews Search",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "services": ["easynews"],
@@ -983,7 +1024,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
-                "timeout": 20000
+                "timeout": 8000
             }
         },
         {
@@ -1022,7 +1063,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
-                "timeout": 12000
+                "timeout": 8000
             }
         },
         {
@@ -1035,7 +1076,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
-                "timeout": 12000
+                "timeout": 8000
             }
         }
     ])
@@ -1044,7 +1085,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     if usenet_active:
         presets.append({'type':'prowlarr','instanceId':'prowlarr-usenet','enabled':True,'options':{
             'name':'Usenet (Prowlarr → InfiniDysk)','prowlarrUrl':PROWLARR_URL,'prowlarrApiKey':PROWLARR_API_KEY,
-            'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':20000}})
+            'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':8000}})
     sootio_url = f"{SOOTIO_URL}/manifest.json"
     if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY or (EASYNEWS_USER and EASYNEWS_PASSWORD):
         debrid_services = []
@@ -1094,7 +1135,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "Anime Tosho",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -1106,7 +1147,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "TsukiHime",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -1118,7 +1159,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": True,
             "options": {
                 "name": "nekoBT",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -1130,7 +1171,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
             "options": {
                 "name": "Easynews Search",
-                "timeout": 15000,
+                "timeout": 8000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "services": ["easynews"],
@@ -1175,6 +1216,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             if not any(s.get('enabled') and s.get('id')!='nzbdav' for s in services):
                 continue
             opts["name"] = "Torrentio"
+            opts["timeout"] = 8000
             if os.environ.get("KNIGHTCRAWLER_URL"):
                 opts["url"] = os.environ.get("KNIGHTCRAWLER_URL")
                 opts["name"] = "KnightCrawler (custom)"
@@ -1194,15 +1236,15 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 p["enabled"] = False
                 print(f"[AIOStreams Setup] ℹ️ MediaFusion not active in current profile. Preset disabled.", flush=True)
             curr_timeout = int(opts.get("timeout") or 10000)
-            if curr_timeout > 12000 or curr_timeout < 5000:
-                opts["timeout"] = 10000
+            if curr_timeout > 8000 or curr_timeout < 5000:
+                opts["timeout"] = 8000
             validated_presets.append(p)
         elif ptype == "comet":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
             curr_timeout = int(opts.get("timeout") or 10000)
-            if curr_timeout > 12000 or curr_timeout < 5000:
-                opts["timeout"] = 10000
+            if curr_timeout > 8000 or curr_timeout < 5000:
+                opts["timeout"] = 8000
             manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
             if reachable(manifest_url, timeout=1.0):
                 p["enabled"] = True
@@ -1219,7 +1261,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         elif ptype == "easynews-search":
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
             curr_timeout = int(opts.get("timeout") or 15000)
-            opts["timeout"] = curr_timeout
+            opts["timeout"] = 8000
             opts["services"] = ["easynews"]
             if p["enabled"]:
                 print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
@@ -1229,7 +1271,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         elif ptype in ("anime-tosho-new", "tsukihime", "neko-bt"):
             p["enabled"] = True
             curr_timeout = int(opts.get("timeout") or 15000)
-            opts["timeout"] = curr_timeout
+            opts["timeout"] = 8000
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.
@@ -1241,8 +1283,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 opts["manifestUrl"] = sootio_url
                 opts["resources"] = ["stream"]
                 curr_timeout = int(opts.get("timeout") or 7000)
-                if curr_timeout < 20000:
-                    opts["timeout"] = 20000
+                opts["timeout"] = 8000
                 if reachable(sootio_url, timeout=1.0) and sootio_mode != "off":
                     p["enabled"] = True
                     print(f"[AIOStreams Setup] ✓ Sootio (Local) is online and active.", flush=True)
@@ -1804,6 +1845,7 @@ def main():
             setup_prowlarr_auth()
             setup_prowlarr_flaresolverr()
             setup_prowlarr_indexers()
+            tune_prowlarr_indexers()
             setup_usenet_indexer()
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)

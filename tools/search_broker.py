@@ -55,12 +55,81 @@ class SearchCache:
         with self.lock:return {'status':'ok','inFlight':len(self.pending),'cacheEntries':len(self.cache),'cacheBytes':self.bytes,**self.metrics}
     def close(self):self.pool.shutdown(wait=True)
 
+class IndexerFilter:
+    """Discovers and caches healthy Prowlarr indexers, excluding degraded ones."""
+    def __init__(self, host, port, refresh_interval=30):
+        self.host = host
+        self.port = port
+        self.refresh_interval = refresh_interval
+        self.last_refresh = 0
+        self.healthy_ids = None
+        self.lock = threading.Lock()
+
+    def get_healthy_ids(self, api_key):
+        now = time.monotonic()
+        with self.lock:
+            if self.healthy_ids is not None and (now - self.last_refresh) < self.refresh_interval:
+                return self.healthy_ids
+
+        try:
+            headers = {"X-Api-Key": api_key}
+            # Query disabled/degraded status
+            conn = http.client.HTTPConnection(self.host, self.port, timeout=3)
+            conn.request("GET", "/api/v1/indexerstatus", headers=headers)
+            res = conn.getresponse()
+            disabled_ids = set()
+            if res.status == 200:
+                data = json.loads(res.read().decode())
+                for d in data:
+                    disabled_ids.add(d.get("indexerId"))
+            conn.close()
+
+            # Query all indexers
+            conn = http.client.HTTPConnection(self.host, self.port, timeout=3)
+            conn.request("GET", "/api/v1/indexer", headers=headers)
+            res2 = conn.getresponse()
+            healthy = []
+            if res2.status == 200:
+                indexers = json.loads(res2.read().decode())
+                for idx in indexers:
+                    iid = idx.get("id")
+                    if idx.get("enable", True) and iid not in disabled_ids:
+                        healthy.append(iid)
+            conn.close()
+
+            with self.lock:
+                if healthy:
+                    self.healthy_ids = healthy
+                    self.last_refresh = now
+                return self.healthy_ids
+        except Exception:
+            with self.lock:
+                return self.healthy_ids
+
 UPSTREAM=os.environ.get('SEARCH_UPSTREAM_HOST','prowlarr')
 PORT=int(os.environ.get('SEARCH_UPSTREAM_PORT','9696'))
 TIMEOUT=float(os.environ.get('SEARCH_TIMEOUT','8'))
 MAX_BODY=4*1024*1024
+INDEXER_FILTER = IndexerFilter(UPSTREAM, PORT)
 
 def fetch(path,headers):
+    # Auto-inject healthy indexer IDs into general broadcast searches to avoid stalling on degraded trackers
+    if '/api/v1/search' in path and 'indexerIds=' not in path:
+        api_key = headers.get('x-api-key') or headers.get('X-Api-Key')
+        if not api_key and 'apikey=' in path:
+            try:
+                import urllib.parse
+                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)
+                api_key = parsed.get('apikey', [None])[0]
+            except Exception:
+                pass
+        if api_key:
+            healthy = INDEXER_FILTER.get_healthy_ids(api_key)
+            if healthy:
+                param = '&'.join(f'indexerIds={i}' for i in healthy)
+                delimiter = '&' if '?' in path else '?'
+                path = f"{path}{delimiter}{param}"
+
     connection=http.client.HTTPConnection(UPSTREAM,PORT,timeout=TIMEOUT)
     try:
         connection.request('GET',path,headers={k:v for k,v in headers.items() if k.lower() not in ('host','connection','accept-encoding')})
