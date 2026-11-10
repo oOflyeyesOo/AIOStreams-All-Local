@@ -14,7 +14,6 @@ INTEGRATIONS = (
     ("SubSense", "subsense", 3100, "Subtitles"),
     ("InfiniDysk", "infinidysk", 3000, "Usenet"),
     ("StremThru", "stremthru", 8080, "Proxies"),
-    ("MediaFlow", "mediaflow", 8888, "Proxies"),
     ("Stremio Web", "stremio-web", 8080, "Players"),
     ("Nuvio", "nuvio", 3000, "Players"),
     ("SlickSync", "slicksync", 3000, "Sync"),

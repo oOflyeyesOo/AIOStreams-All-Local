@@ -277,12 +277,6 @@ def test_stremthru():
         record("16. StremThru Proxy & Store Router", False, str(e))
 
 
-def test_mediaflow():
-    try:
-        with urllib.request.urlopen("http://mediaflow:8888/health", timeout=5) as resp:
-            record("17. MediaFlow Stream Proxy", True, "Health endpoint 200 OK (Transcoding & HLS engine active)")
-    except Exception as e:
-        record("17. MediaFlow Stream Proxy", False, str(e))
 
 
 def test_slicksync():
@@ -406,7 +400,6 @@ def main():
     test_infinidysk()
     test_anime_kitsu()
     test_stremthru()
-    test_mediaflow()
     test_slicksync()
     test_stremio_web()
     test_nuvio_web()

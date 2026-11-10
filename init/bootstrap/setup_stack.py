@@ -131,7 +131,6 @@ STREMIO_WEB_URL = os.environ.get("STREMIO_WEB_URL", "http://stremio-web:8080").r
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
-MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "http://mediaflow:8888").rstrip("/")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000").rstrip("/")
 MEDIAFUSION_HOST_URL = os.environ.get("MEDIAFUSION_HOST_URL", "").rstrip("/")
 

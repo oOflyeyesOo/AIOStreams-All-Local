@@ -44,8 +44,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/setup.sh /app/docker/all-in-one/p
 # 3005: InfiniDysk Usenet WebDAV
 # 8082: Stremio Web Player
 # 8080: StremThru
-# 8888: MediaFlow
 # 9696: Prowlarr
-EXPOSE 8088 3001 3005 8082 8085 8086 4005 9039 3100 8000 8001 55771 7005 8181 9696 8080 8888
+EXPOSE 8088 3001 3005 8082 8085 8086 4005 9039 3100 8000 8001 55771 7005 8181 9696 8080
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

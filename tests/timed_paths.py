@@ -78,7 +78,7 @@ if Path('/app/.env').is_file():
 poster_key=os.environ.get('POSTERSPLUS_ACCESS_KEY') or saved.get('POSTERSPLUS_ACCESS_KEY','')
 poster_url='http://postersplus:8000/poster?'+urllib.parse.urlencode({'stremio_id':'tt1375666',**({'access_key':poster_key} if poster_key else {})})
 report['measurements'].append(measure('Posters corrected query route',poster_url,limit=256*1024))
-for name,url in [('StremThru transport health','http://stremthru:8080/v0/health'),('MediaFlow transport health','http://mediaflow:8888/health')]:
+for name,url in [('StremThru transport health','http://stremthru:8080/v0/health')]:
  row=measure(name,url);row['scope']='health only';row['successful']=row.get('http')==200;report['measurements'].append(row)
 for kind,ident in cases:
  row={'path':'AIOStreams '+kind+' media range','scope':'1024-byte origin read; not media decode'}

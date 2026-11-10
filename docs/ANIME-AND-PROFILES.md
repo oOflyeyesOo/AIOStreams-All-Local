@@ -90,7 +90,7 @@ COMPOSE_PROFILES=core
 | :--- | :--- | :--- |
 | **`core`** | **~1.1 GB** | **Recommended Lean Setup**: Runs AIOStreams, Comet, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, and Setup Portal. Ideal for low-memory VPS or lightweight servers relying on Torrentio and Comet. |
 | **`scrapers`** | **~3.5 GB** | **Full Local Crawlers**: Launches `core` plus MediaFusion, Sootio (Multi-Scraper), Zilean (Local DMM Hash Cache), Prowlarr (`:9696`), FlareSolverr (`:8191`) (`:8004`), and Anime Kitsu (`:7000`). |
-| **`proxies`** | **~1.8 GB** | **Extended Proxy & Usenet Routing**: Launches `core` plus MediaFlow proxy, StremThru proxy router, and InfiniDysk Usenet Engine (`:3005`). |
+| **`proxies`** | **~1.8 GB** | **Extended Proxy & Usenet Routing**: Launches `core` plus StremThru proxy router, and InfiniDysk Usenet Engine (`:3005`). |
 | **`web`** | **~1.6 GB** | **Web Players & Sync Hub**: Launches `core` plus Stremio Web Player (`:8082`), Nuvio Web Player (`:8085`), and SlickSync Hub (`:8086`). |
 | **`usenet`** | **~2.2 GB** | **Dedicated Usenet Streaming**: Launches `core` plus InfiniDysk (`:3005`), NZBDav, and Prowlarr configured with Newznab indexers for direct NNTP debrid-free streaming. |
 | **`all`** (Default) | **~4.5 GB** | **Complete Appliance**: Runs all 22 microservices simultaneously on `stremio-net` with zero missing components. |

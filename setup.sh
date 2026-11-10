@@ -64,7 +64,6 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
-    local ports=(3000 3001 3011 8000 8001 8181 9696 8191 8080 8888 7005 4005 3100 8085 8086 3005 8082 55771)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -94,14 +93,12 @@ start_stack() {
         RAND_ADDON=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_PG=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_PROWLARR=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
-        RAND_MEDIAFLOW=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_POSTERS=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_STREMTHRU=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         sed -i "s|SECRET_KEY=e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09|SECRET_KEY=${RAND_SECRET}|" .env
         sed -i "s|^ADDON_PASSWORD=.*|ADDON_PASSWORD=${RAND_ADDON}|" .env
         sed -i "s|POSTGRES_PASSWORD=postgres_supersecret_db_pass_2026|POSTGRES_PASSWORD=${RAND_PG}|" .env
         sed -i "s|PROWLARR_API_KEY=prowlarr_internal_secret_key_99|PROWLARR_API_KEY=${RAND_PROWLARR}|" .env
-        sed -i "s|MEDIAFLOW_PASS=supersecretmediaflowpass|MEDIAFLOW_PASS=${RAND_MEDIAFLOW}|" .env
         sed -i "s|POSTERSPLUS_ACCESS_KEY=admin|POSTERSPLUS_ACCESS_KEY=${RAND_POSTERS}|" .env
         sed -i "s|STREMTHRU_PROXY_AUTH_PASSWORD=admin|STREMTHRU_PROXY_AUTH_PASSWORD=${RAND_STREMTHRU}|" .env
         echo -e "${GREEN}[✓] Generated unique cryptographic keys across all internal services.${NC}"
@@ -121,9 +118,7 @@ start_stack() {
 ensure_internal_secrets() {
     [ -f .env ] || return 1
     local key current generated
-    for key in SECRET_KEY POSTGRES_PASSWORD PROWLARR_API_KEY MEDIAFLOW_PASS STREMTHRU_AUTH POSTERSPLUS_ACCESS_KEY; do
         current=$(grep -E "^${key}=" .env | tail -1 | cut -d '=' -f2-)
-        if [ -z "$current" ] || [ "$current" = "admin" ] || [ "$current" = "postgres_supersecret_db_pass_2026" ] || [ "$current" = "prowlarr_internal_secret_key_99" ] || [ "$current" = "supersecretmediaflowpass" ]; then
             generated=$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))")
             if grep -qE "^${key}=" .env; then
                 sed -i "s|^${key}=.*|${key}=${generated}|" .env
@@ -179,7 +174,6 @@ show_links() {
     echo -e "  • Prowlarr Indexers:     http://localhost:9696"
     echo -e "  • Zilean Hash Cache:     http://localhost:8181"
     echo -e "  • StremThru Proxy UI:    http://localhost:8080"
-    echo -e "  • MediaFlow Proxy:       http://localhost:8888"
     echo -e "  • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/\n"
 
     echo -e "${YELLOW}Cinemeta Removal (Optional external utility):${NC}"
@@ -232,7 +226,6 @@ cli_wizard() {
         cur_pg=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2- || echo "")
         cur_prowl=$(grep -E '^PROWLARR_API_KEY=' .env | cut -d '=' -f2- || echo "")
         cur_strem=$(grep -E '^STREMTHRU_AUTH=' .env | cut -d '=' -f2- || echo "")
-        cur_mf=$(grep -E '^MEDIAFLOW_PASS=' .env | cut -d '=' -f2- || echo "")
     fi
 
     read -p "AIOStreams Public Domain / Base URL [$cur_base]: " inp_base
@@ -279,7 +272,6 @@ PROWLARR_API_KEY=${cur_prowl}
 POSTERSPLUS_ACCESS_KEY=${cur_posters:-$(openssl rand -hex 16)}
 ADMIN_EMAIL=admin@mediafusion.local
 STREMTHRU_AUTH=${cur_strem}
-MEDIAFLOW_PASS=${cur_mf}
 
 # ==============================================================================
 # COMMUNITY TEMPLATES & STREAM EXPRESSION LANGUAGE (SEL) AUTO-SYNC

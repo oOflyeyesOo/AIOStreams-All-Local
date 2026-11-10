@@ -17,7 +17,6 @@ mkdir -p /data/aiostreams \
          /data/subsense \
          /data/sootio \
          /data/stremthru \
-         /data/mediaflow \
          /data/redis \
          /data/postgres \
          /data/slicksync \
@@ -252,7 +251,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • Prowlarr Indexers:     http://localhost:9696"
     echo " • Zilean Hash Cache:     http://localhost:8181"
     echo " • StremThru Proxy UI:    http://localhost:8080"
-    echo " • MediaFlow Proxy:       http://localhost:8888"
     echo "=================================================================="
     echo ""
 

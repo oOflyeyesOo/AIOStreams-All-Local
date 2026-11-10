@@ -120,7 +120,6 @@ function Test-SystemPrerequisites {
         @{ Port = 9696; Service = "Prowlarr" },
         @{ Port = 8191; Service = "FlareSolverr" },
         @{ Port = 8080; Service = "StremThru Proxy" },
-        @{ Port = 8888; Service = "MediaFlow Proxy" },
         @{ Port = 7005; Service = "Anime Kitsu" },
         @{ Port = 4005; Service = "AIOMetadata" },
         @{ Port = 3100; Service = "SubSense Subtitles" },
@@ -243,7 +242,6 @@ function Invoke-CLIWizard {
     $pgPass = if ($existingEnv.ContainsKey("POSTGRES_PASSWORD") -and $existingEnv["POSTGRES_PASSWORD"]) { $existingEnv["POSTGRES_PASSWORD"] } else { "pg_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 16) }
     $prowlarrKey = if ($existingEnv.ContainsKey("PROWLARR_API_KEY") -and $existingEnv["PROWLARR_API_KEY"]) { $existingEnv["PROWLARR_API_KEY"] } else { "prow_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 16) }
     $stremthruAuth = if ($existingEnv.ContainsKey("STREMTHRU_AUTH") -and $existingEnv["STREMTHRU_AUTH"]) { $existingEnv["STREMTHRU_AUTH"] } else { "admin:" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
-    $mediaflowPass = if ($existingEnv.ContainsKey("MEDIAFLOW_PASS") -and $existingEnv["MEDIAFLOW_PASS"]) { $existingEnv["MEDIAFLOW_PASS"] } else { "mf_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
     $addonPassword = if ($existingEnv.ContainsKey("ADDON_PASSWORD") -and $existingEnv["ADDON_PASSWORD"]) { $existingEnv["ADDON_PASSWORD"] } else { "aio_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 24) }
     $postersKey = if ($existingEnv.ContainsKey("POSTERSPLUS_ACCESS_KEY") -and $existingEnv["POSTERSPLUS_ACCESS_KEY"]) { $existingEnv["POSTERSPLUS_ACCESS_KEY"] } else { "posters_" + [System.Guid]::NewGuid().ToString("N") }
     $adminEmail = if ($existingEnv.ContainsKey("ADMIN_EMAIL") -and $existingEnv["ADMIN_EMAIL"]) { $existingEnv["ADMIN_EMAIL"] } else { "admin@mediafusion.local" }
@@ -282,7 +280,6 @@ PROWLARR_API_KEY=$prowlarrKey
 POSTERSPLUS_ACCESS_KEY=$postersKey
 ADMIN_EMAIL=$adminEmail
 STREMTHRU_AUTH=$stremthruAuth
-MEDIAFLOW_PASS=$mediaflowPass
 
 # ==============================================================================
 # COMMUNITY TEMPLATES & STREAM EXPRESSION LANGUAGE (SEL) AUTO-SYNC
@@ -338,10 +335,8 @@ function Start-Stack {
     }
     $envLines = Get-Content $envPath
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    foreach ($key in @("SECRET_KEY", "POSTGRES_PASSWORD", "PROWLARR_API_KEY", "MEDIAFLOW_PASS", "STREMTHRU_AUTH", "POSTERSPLUS_ACCESS_KEY", "ADDON_PASSWORD")) {
         $line = $envLines | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
         $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
-        if ([string]::IsNullOrWhiteSpace($value) -or $value -eq "admin" -or $value -eq "postgres_supersecret_db_pass_2026" -or $value -eq "prowlarr_internal_secret_key_99" -or $value -eq "supersecretmediaflowpass") {
             $bytes = New-Object byte[] 24
             $rng.GetBytes($bytes)
             $generated = -join ($bytes | ForEach-Object { "{0:x2}" -f $_ })
@@ -407,7 +402,6 @@ function Show-StremioLinks {
     Write-Host "  • Prowlarr Indexers:     http://localhost:9696"
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"
     Write-Host "  • StremThru Proxy UI:    http://localhost:8080"
-    Write-Host "  • MediaFlow Proxy:       http://localhost:8888"
     Write-Host "  • Hidden Cinemeta:       https://hidden-cinemeta.vercel.app/"
 
     Write-Host "`nCinemeta Removal (Optional external utility):" -ForegroundColor Yellow

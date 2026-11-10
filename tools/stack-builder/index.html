@@ -513,17 +513,7 @@
                 <input type="checkbox" id="svc-stremthru" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
               </label>
 
-              <!-- MediaFlow -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">MediaFlow</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8888</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Live stream proxy with HLS & header rewrite.</p>
-                </div>
-                <input type="checkbox" id="svc-mediaflow" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
+              
 
               <!-- Nuvio Web Player -->
               <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
@@ -634,12 +624,7 @@
                     oninput="updateOutputs()"
                     class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
                 </div>
-                <div>
-                  <label class="block font-semibold mb-1">MEDIAFLOW_PASS</label>
-                  <input type="text" id="sec-mediaflow-pass" value="supersecretmediaflowpass"
-                    oninput="updateOutputs()"
-                    class="w-full text-xs font-mono px-3 py-1.5 rounded-lg bg-[#121719] border border-[#2c3235]">
-                </div>
+                
               </div>
 
               <div class="flex justify-end">
@@ -789,7 +774,6 @@
         aiometadata: true,
         subsense: true,
         stremthru: true,
-        mediaflow: true,
         nuvio: true,
         stremioWeb: true,
         slicksync: true,
@@ -809,7 +793,6 @@
       state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
       state.services.subsense = document.getElementById('svc-subsense').checked;
       state.services.stremthru = document.getElementById('svc-stremthru').checked;
-      state.services.mediaflow = document.getElementById('svc-mediaflow').checked;
       state.services.nuvio = document.getElementById('svc-nuvio').checked;
       state.services.stremioWeb = document.getElementById('svc-stremio-web') ? document.getElementById('svc-stremio-web').checked : true;
       state.services.slicksync = document.getElementById('svc-slicksync').checked;
@@ -842,7 +825,6 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          mediaflow: false,
           nuvio: true,
           stremioWeb: true,
           slicksync: true,
@@ -860,7 +842,6 @@
           aiometadata: true,
           subsense: true,
             stremthru: true,
-          mediaflow: false,
           nuvio: true,
           stremioWeb: true,
           slicksync: true,
@@ -878,7 +859,6 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          mediaflow: false,
           nuvio: false,
           stremioWeb: false,
           slicksync: false,
@@ -896,7 +876,6 @@
       document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
       document.getElementById('svc-subsense').checked = state.services.subsense;
       document.getElementById('svc-stremthru').checked = state.services.stremthru;
-      document.getElementById('svc-mediaflow').checked = state.services.mediaflow;
       document.getElementById('svc-nuvio').checked = state.services.nuvio;
       if (document.getElementById('svc-stremio-web')) document.getElementById('svc-stremio-web').checked = state.services.stremioWeb;
       document.getElementById('svc-slicksync').checked = state.services.slicksync;
@@ -916,7 +895,6 @@
       document.getElementById('sec-postgres-pass').value = 'pg_' + generateRandomHex(24);
       document.getElementById('sec-prowlarr-key').value = 'prow_' + generateRandomHex(24);
       document.getElementById('sec-stremthru-auth').value = 'admin:' + generateRandomHex(16);
-      document.getElementById('sec-mediaflow-pass').value = 'mf_' + generateRandomHex(20);
       updateOutputs();
     }
 
@@ -939,7 +917,6 @@
         postgresPass: document.getElementById('sec-postgres-pass').value.trim(),
         prowlarrKey: document.getElementById('sec-prowlarr-key').value.trim(),
         stremthruAuth: document.getElementById('sec-stremthru-auth').value.trim(),
-        mediaflowPass: document.getElementById('sec-mediaflow-pass').value.trim()
       };
     }
 
@@ -947,7 +924,7 @@
       const s = state.services;
       return {
         needsPostgres: s.zilean || s.mediafusion || s.aiometadata,
-        needsRedis: s.mediafusion || s.aiometadata || s.subsense || s.slicksync || s.stremthru || s.mediaflow,
+        needsRedis: s.mediafusion || s.aiometadata || s.subsense || s.slicksync || s.stremthru,
         needsMongo: false,
         needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb
       };
@@ -1011,7 +988,6 @@ PROWLARR_API_KEY=${inp.prowlarrKey}
 
 # Pre-matched Local Stream Proxy Credentials
 STREMTHRU_AUTH=${inp.stremthruAuth}
-MEDIAFLOW_PASS=${inp.mediaflowPass}
 POSTERSPLUS_ACCESS_KEY=${inp.addonPassword}
 ADMIN_EMAIL=admin@mediafusion.local
 
@@ -1086,7 +1062,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       }
 
       // Proxy router
-      if (s.stremthru || s.mediaflow) {
+      if (s.stremthru) {
         lines.push(`\n      # --- Local Debrid Proxy & Store Router ---`);
         const proxiedServices = ["realdebrid","premiumize","alldebrid","torbox","debridlink"];
         if (s.infinidysk) proxiedServices.push("nzbdav");
@@ -1098,14 +1074,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           lines.push(`      - STREMTHRU_TORZ_URL=http://stremthru:8080/stremio/torz/`);
           lines.push(`      - ENCRYPT_STREMTHRU_URLS=true`);
         }
-        if (s.mediaflow) {
-          lines.push(`      - DEFAULT_PROXY_ID=\${DEFAULT_PROXY_ID:-mediaflow}`);
-          lines.push(`      - DEFAULT_PROXY_URL=\${DEFAULT_PROXY_URL:-http://mediaflow:8888}`);
-          lines.push(`      - DEFAULT_PROXY_CREDENTIALS=\${DEFAULT_PROXY_CREDENTIALS:-\${MEDIAFLOW_PASS:-\${ADDON_PASSWORD}}}`);
-          lines.push(`      - DEFAULT_PROXY_PROXIED_SERVICES=\${DEFAULT_PROXY_PROXIED_SERVICES:-${proxiedJson}}`);
-          lines.push(`      - FORCE_PROXY_ENABLED=\${FORCE_PROXY_ENABLED:-false}`);
-          lines.push(`      - ENCRYPT_MEDIAFLOW_URLS=true`);
-        } else if (s.stremthru) {
+        if (s.stremthru) {
           lines.push(`      - DEFAULT_PROXY_ID=stremthru`);
           lines.push(`      - DEFAULT_PROXY_URL=http://stremthru:8080`);
           lines.push(`      - DEFAULT_PROXY_CREDENTIALS=\${STREMTHRU_AUTH}`);
@@ -1147,7 +1116,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       if (s.comet) aiostreamsDeps.push('comet');
       if (s.mediafusion) aiostreamsDeps.push('mediafusion');
       if (s.stremthru) aiostreamsDeps.push('stremthru');
-      if (s.mediaflow) aiostreamsDeps.push('mediaflow');
       if (s.prowlarr) aiostreamsDeps.push('prowlarr');
       if (s.infinidysk) aiostreamsDeps.push('infinidysk');
 
@@ -1334,7 +1302,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       }
 
       // 5. PROXIES & USENET ENGINES
-      if (s.stremthru || s.mediaflow || s.infinidysk) {
+      if (s.stremthru || s.infinidysk) {
         lines.push(`\n  # ============================================================================`);
         lines.push(`  # 5. STREAM PROXIES, ROUTERS & USENET STREAMING ENGINE`);
         lines.push(`  # ============================================================================`);
@@ -1373,150 +1341,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           lines.push(`    depends_on:`);
           lines.push(`      - shared-redis`);
         }
-        if (s.mediaflow) {
-          lines.push(`\n  mediaflow:`);
-          lines.push(`    image: mhdzumair/mediaflow-proxy:latest`);
-          lines.push(`    container_name: mediaflow`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "8888:8888"`);
-          lines.push(`    environment:`);
-          lines.push(`      - API_PASSWORD=\${MEDIAFLOW_PASS:-\${ADDON_PASSWORD}}`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-        }
-        if (s.infinidysk) {
-          lines.push(`\n  # InfiniDysk (High-performance on-demand Usenet streaming engine & WebDAV)`);
-          lines.push(`  infinidysk:`);
-          lines.push(`    image: ghcr.io/infinidysk/infinidysk:latest`);
-          lines.push(`    container_name: infinidysk`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "3005:3000"`);
-          lines.push(`    environment:`);
-          lines.push(`      - PUID=1000`);
-          lines.push(`      - PGID=1000`);
-          lines.push(`      - TZ=Etc/UTC`);
-          lines.push(`      - TRUST_PROXY=1`);
-          lines.push(`      - RESET_ADMIN_PASSWORD=\${RESET_ADMIN_PASSWORD:-false}`);
-          lines.push(`      - FRONTEND_BACKEND_API_KEY=\${SECRET_KEY}`);
-          lines.push(`      - NZBDAV_CONFIG__API__KEY=\${SECRET_KEY}`);
-          lines.push(`      - NZBDAV_CONFIG__WEBDAV__USER=admin`);
-          lines.push(`      - NZBDAV_CONFIG__WEBDAV__PASS=\${ADDON_PASSWORD}`);
-          lines.push(`      - WEBDAV_USER=admin`);
-          lines.push(`      - WEBDAV_PASSWORD=\${ADDON_PASSWORD}`);
-          if (s.prowlarr) {
-            lines.push(`      - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696`);
-            lines.push(`      - NZBDAV_CONFIG__PROWLARR__API_KEY=\${PROWLARR_API_KEY}`);
-          }
-          lines.push(`      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true`);
-          lines.push(`      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15`);
-          lines.push(`    healthcheck:`);
-          lines.push(`      test: ["CMD-SHELL", "curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1"]`);
-          lines.push(`      interval: 30s`);
-          lines.push(`      retries: 3`);
-          lines.push(`      start_period: 40s`);
-          lines.push(`      timeout: 5s`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/infinidysk:/config`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          if (db.needsInitConfigs) {
-            lines.push(`    depends_on:`);
-            lines.push(`      init-configs:`);
-            lines.push(`        condition: service_completed_successfully`);
-          }
-        }
-      }
-
-      // 6. CATALOGS & METADATA
-      if (s.kitsu || s.aiometadata || s.subsense) {
-        lines.push(`\n  # ============================================================================`);
-        lines.push(`  # 6. LOCAL CATALOGS & METADATA`);
-        lines.push(`  # ============================================================================`);
-        if (s.kitsu) {
-          lines.push(`\n  anime-kitsu:`);
-          lines.push(`    build: https://github.com/TheBeastLT/stremio-kitsu-anime.git#master`);
-          lines.push(`    container_name: anime-kitsu`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "7005:7000"`);
-          lines.push(`    environment:`);
-          lines.push(`      - PORT=7000`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-        }
-        if (s.aiometadata) {
-          lines.push(`\n  aiometadata:`);
-          lines.push(`    image: ghcr.io/jigsawfr/aiometadata-docker:latest`);
-          lines.push(`    container_name: aiometadata`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "4005:4005"`);
-          lines.push(`    environment:`);
-          lines.push(`      - PORT=4005`);
-          lines.push(`      - HOST_NAME=\${BASE_URL:-http://localhost:4005}`);
-          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
-          lines.push(`      - TMDB_API=\${TMDB_API_KEY}`);
-          lines.push(`      - BUILT_IN_TMDB_API_KEY=\${TMDB_API_KEY}`);
-          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
-          lines.push(`      - BUILT_IN_TVDB_API_KEY=\${TVDB_API_KEY}`);
-          lines.push(`      - FANART_API_KEY=\${FANART_API_KEY}`);
-          lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
-          lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
-          lines.push(`      - GEMINI_API_KEY=\${GEMINI_API_KEY}`);
-          lines.push(`      - REDIS_URL=redis://shared-redis:6379/5`);
-          lines.push(`      - DATABASE_URI=postgresql://postgres:\${POSTGRES_PASSWORD}@shared-postgres:5432/aiometadata`);
-          lines.push(`      - ADMIN_KEY=\${SECRET_KEY}`);
-          lines.push(`      - ADDON_PASSWORD=\${ADDON_PASSWORD}`);
-          lines.push(`      - IMAGE_PROXY_SIGNING_SECRET=\${SECRET_KEY}`);
-          lines.push(`      - CACHE_WARMUP_ON_STARTUP=true`);
-          lines.push(`      - NODE_ENV=production`);
-          lines.push(`    healthcheck:`);
-          lines.push(`      test: ["CMD-SHELL", "wget -q --spider http://localhost:4005/health/live || exit 1"]`);
-          lines.push(`      interval: 30s`);
-          lines.push(`      timeout: 10s`);
-          lines.push(`      start_period: 40s`);
-          lines.push(`      retries: 3`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/aiometadata:/app/addon/data`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          lines.push(`    depends_on:`);
-          lines.push(`      shared-redis:`);
-          lines.push(`        condition: service_started`);
-          lines.push(`      shared-postgres:`);
-          lines.push(`        condition: service_started`);
-          if (db.needsPostgres) {
-            lines.push(`      init-postgres:`);
-            lines.push(`        condition: service_completed_successfully`);
-          }
-          if (db.needsInitConfigs) {
-            lines.push(`      init-configs:`);
-            lines.push(`        condition: service_completed_successfully`);
-          }
-        }
-        if (s.subsense) {
-          lines.push(`\n  subsense:`);
-          lines.push(`    image: nepiraw/stremio-subsense:latest`);
-          lines.push(`    container_name: stremio-subsense`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "\${PORT_SUBSENSE:-3100}:3100"`);
-          lines.push(`    environment:`);
-          lines.push(`      - PORT=3100`);
-          lines.push(`      - HOST=0.0.0.0`);
-          lines.push(`      - SUBSENSE_ENCRYPTION_KEY=\${SECRET_KEY}`);
-          lines.push(`      - REDIS_URL=redis://shared-redis:6379/1`);
-          lines.push(`      - WARP_ENABLED=true`);
-          lines.push(`      - LOG_LEVEL=info`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/subsense:/app/data`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          lines.push(`    depends_on:`);
-          lines.push(`      - shared-redis`);
-        }
+        
 
       }
 
@@ -1726,7 +1551,6 @@ docker run -d \\
         { name: 'Prowlarr', port: '9696', enabled: s.prowlarr },
         { name: 'FlareSolverr', port: '8191', enabled: s.flaresolverr },
         { name: 'StremThru Proxy', port: '8080', enabled: s.stremthru },
-        { name: 'MediaFlow Proxy', port: '8888', enabled: s.mediaflow },
         { name: 'Anime Kitsu', port: '7005', enabled: s.kitsu },
         { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
         { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
@@ -1820,7 +1644,6 @@ docker run -d \\
       'postgres_supersecret_db_pass_2026',
       'prowlarr_internal_secret_key_99',
       'admin:supersecretproxykey',
-      'supersecretmediaflowpass'
     ];
 
     document.addEventListener('focusin', (e) => {

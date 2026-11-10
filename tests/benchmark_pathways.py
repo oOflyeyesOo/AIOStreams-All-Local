@@ -6,7 +6,6 @@ Tests all possible communication paths between:
 - Scrapers (Comet, MediaFusion, Sootio)
 - Indexer Managers & Cache (Prowlarr, Zilean)
 - Personal Debrid Cloud (Debrid Search, StremThru Store)
-- Stream Proxies (AIOStreams BuiltinProxy, MediaFlow, StremThru)
 
 Measures latency (TTFB/total), response size, item counts, deduplication,
 and identifies the optimal paths for each service.
@@ -30,7 +29,6 @@ COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
 SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
-MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "http://mediaflow:8888").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 
@@ -288,12 +286,7 @@ def benchmark_stream_proxy_pathways():
     except Exception as e:
         print(f"  [!] Note fetching sample stream: {e}")
 
-    # Path 4A: MediaFlow Proxy Health & Engine Check
-    def path_mediaflow():
-        code, body, ttfb, total = http_get(f"{MEDIAFLOW_URL}/health", timeout=5.0)
-        return 1, "MediaFlow HLS/DASH proxy engine online", ttfb, total
 
-    run_benchmark("Stream Proxy", "Health/Engine", "Route 4A: MediaFlow Stream Proxy Engine", path_mediaflow)
 
     # Path 4B: StremThru Health & Proxy Engine
     def path_stremthru():
@@ -392,7 +385,6 @@ def print_optimal_topology_analysis():
             "Why": "Direct BuiltinProxy rewrites scraper URLs to local port :3001, follows 302 redirects, and streams HTTP 206 partial bytes with zero transcoding overhead.",
         },
         {
-            "Endpoint": "MediaFlow (Transcoder/Proxy)",
             "Direct Latency": "~3ms engine",
             "Direct AIOStreams Addon?": "N/A (Stream Proxy)",
             "Optimal Pathway": "Fallback for restrictive NAT/cellular",

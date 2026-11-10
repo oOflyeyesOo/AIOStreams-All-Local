@@ -175,7 +175,7 @@ services:
       - BUILTIN_PROWLARR_URL=http://prowlarr:9696
       - BUILTIN_PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
 
-      # --- Local Debrid Proxy & Stream Router (MediaFlow & StremThru) ---
+      # --- Local Debrid Proxy & Stream Router (StremThru) ---
       - BUILTIN_STREMTHRU_URL=http://stremthru:8080
       - STREMTHRU_STORE_URL=http://stremthru:8080/stremio/store/
       - STREMTHRU_TORZ_URL=http://stremthru:8080/stremio/torz/
@@ -185,7 +185,6 @@ services:
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
       - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
       - ENCRYPT_STREMTHRU_URLS=false
-      - ENCRYPT_MEDIAFLOW_URLS=false
 
       # --- Metadata & Debrid Auto-Configuration ---
       - TMDB_API_KEY=${TMDB_API_KEY}
@@ -536,7 +535,6 @@ services:
       - POSTERSPLUS_URL=http://postersplus:8000
       - POSTERSPLUS_ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-}
       - STREMTHRU_URL=http://stremthru:8080
-      - MEDIAFLOW_URL=http://mediaflow:8888
       - BASE_URL=${BASE_URL:-http://localhost:3001}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
@@ -646,96 +644,6 @@ services:
     depends_on:
       - shared-redis
 
-  mediaflow:
-    image: mhdzumair/mediaflow-proxy:latest
-    container_name: mediaflow
-    profiles: ["proxies", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${MEDIAFLOW_MEM_LIMIT:-384m}
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8888:8888"
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8888/health')\" || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    environment:
-      - PORT=8888
-      - API_PASSWORD=${MEDIAFLOW_PASS:-${ADDON_PASSWORD}}
-      - REDIS_URL=redis://shared-redis:6379/4
-      - ENABLE_STREAMING_PROGRESS=true
-      - ENABLE_HLS_PREBUFFER=true
-      - HLS_PREBUFFER_SEGMENTS=5
-      - ENABLE_DASH_PREBUFFER=true
-      - DASH_PREBUFFER_SEGMENTS=5
-      - LIVESTREAM_START_OFFSET=-18
-      - GUNICORN_WORKERS=${MEDIAFLOW_WORKERS:-2}
-      - GUNICORN_TIMEOUT=120
-    volumes:
-      - ./data/mediaflow:/app/data
-    networks:
-      - stremio-net
-    depends_on:
-      - shared-redis
-
-  # InfiniDysk (On-demand Usenet streaming engine & WebDAV provider)
-  infinidysk:
-    image: ghcr.io/infinidysk/infinidysk:latest
-    container_name: infinidysk
-    profiles: ["proxies", "usenet", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - TRUST_PROXY=1
-      - RESET_ADMIN_PASSWORD=${RESET_ADMIN_PASSWORD:-false}
-      - FRONTEND_BACKEND_API_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - NZBDAV_CONFIG__API__KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - NZBDAV_CONFIG__WEBDAV__USER=admin
-      - NZBDAV_CONFIG__WEBDAV__PASS=${ADDON_PASSWORD:-admin}
-      - WEBDAV_USER=admin
-      - WEBDAV_PASSWORD=${ADDON_PASSWORD:-admin}
-      - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696
-      - NZBDAV_CONFIG__PROWLARR__API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true
-      - NZBDAV_CONFIG__USENET__PROVIDERS=${INFINIDYSK_USENET_PROVIDERS:-}
-      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1"]
-      interval: 30s
-      retries: 3
-      start_period: 60s
-      timeout: 5s
-    volumes:
-      - ./data/infinidysk:/config
-    networks:
-      - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
-
-  # Cloudflare Tunnel (Optional Zero-Trust HTTPS ingress without opening router ports)
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: aio-tunnel
-    profiles: ["tunnel"]
-    restart: unless-stopped
-    logging: *default-logging
-    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
-    networks:
-      - stremio-net
-
-  # ============================================================================
   # 6. LOCAL CATALOGS & METADATA
   # ============================================================================
 
