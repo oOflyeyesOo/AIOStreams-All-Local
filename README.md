@@ -342,10 +342,11 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 
 AIO Local bundles tailored setup profiles selectable via the portal (`:8088`) or `.env`:
 - **AIOStreams Flagship (`all-local-selfhosted.json`)**: Default profile pre-configured with Tamtaro SEL expressions, Vidhin release regexes, SeaDex anime scoring, Comet, Zilean, Torrentio, SubSense subtitles, Debrid Search, and Anime Kitsu.
+- **Usenet Only (`usenet-only.json`)**: Dedicated pipeline for users with an NNTP Usenet account and NZB indexer(s) with **NO Debrid subscription required**. Automatically routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense, and TsukiHime anime. Selectable via the **Usenet Only** mode pill on the setup portal or `STREAMING_MODE=usenet`.
 - **Tamtaro Anime Only (`tamtaro-anime-only.json`)**: Strips western TV rules to optimize strictly for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, and dual-audio ranking.
-- **AIOMetadata Catalogs (`with-anime` vs. `without-anime`)**: Choose between full mainstream catalogs plus 20+ dedicated anime catalogs (MAL schedules, season rows, studio spotlights) or clean movie/TV catalogs without anime rows.
+- **AIOMetadata Catalogs (`with-anime`, `usenet-only`, vs. `without-anime`)**: Choose between full mainstream catalogs plus 20+ dedicated anime catalogs (MAL schedules, season rows, studio spotlights) or clean movie/TV catalogs without anime rows.
 
-See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) for full template definitions and customization steps.
+See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Streaming Path Guide](docs/STREAMING-PATH.md) for full template definitions and architectural diagrams.
 ---
 
 

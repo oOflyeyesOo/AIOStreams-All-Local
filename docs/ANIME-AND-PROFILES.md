@@ -106,6 +106,7 @@ In addition to Docker runtime profiles, AIO Local includes pre-tuned JSON templa
 | Template | File Name | Description |
 | :--- | :--- | :--- |
 | **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | The flagship profile. Pre-configured with Tamtaro SEL expressions, Vidhin regexes, Seadex anime scoring, Comet, Zilean, Torrentio (public index), SubSense subtitles, Debrid Search, StremThru Store, and Anime Kitsu. |
+| **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Streamlined pure Usenet configuration for users with an NNTP provider and NZB indexer without any debrid subscription. Routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime. |
 | **Tamtaro Complete Suite** | `tamtaro-complete.json` | Full Tamtaro sorting and filtering suite containing 100+ release groups, multilingual exclusions, and multi-indexer parsing. |
 | **Tamtaro Anime Only** | `tamtaro-anime-only.json` | Dedicated anime-centric profile. Strips out mainstream western TV rules, optimizing specifically for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, SeaDex quality ranks, and dual-audio preferences. |
 | **Debrid Starter** | `debrid-starter.json` | Lightweight template intended for single-debrid setups without extended custom scrapers. |
@@ -118,6 +119,7 @@ Selected directly in the Setup Portal (`:8088`):
 | Template | File Name | Description |
 | :--- | :--- | :--- |
 | **Tamtaro with Anime (Default)** | `tamtaro-aiometadata-with-anime.json` | Full cinematic library with movies, TV series, streaming platform catalogs (Netflix, HBO, Disney+, Apple TV+), plus the **20+ dedicated Anime catalogs** (MAL schedules, seasons, studios) with Posters+ rating overlays. |
+| **Usenet Only (NNTP InfiniDysk & Prowlarr)** | `usenet-only.json` | Optimized catalog layout tailored for Usenet-only streaming pipelines, pairing seamless movie/TV/anime discovery with zero debrid dependencies. |
 | **Tamtaro without Anime** | `tamtaro-aiometadata-without-anime.json` | Clean mainstream setup containing all movie and TV catalogs, but omitting anime catalogs to keep Stremio's home screen focused exclusively on western media. |
 | **Grabberhawk Config** | `grabberhawk-aiometadata-config.json` | Community catalog layout featuring alternative curation and list sorting. |
 

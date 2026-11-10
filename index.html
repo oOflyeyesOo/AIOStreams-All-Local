@@ -22,8 +22,38 @@
 <input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help">Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.</p>
 <label class="field-label" for="aiometadata-host" style="margin-top:14px">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
 <input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help">Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.</p>
-<div class="section-divider"><span>Debrid provider</span><span class="optional">OR USE USENET BELOW</span></div>
+<div class="streaming-mode-section">
+<label class="field-label" style="margin-top:14px">Streaming provider mode <span>BACKEND</span></label>
+<div class="mode-selector-pills" role="radiogroup" aria-label="Streaming Provider Mode">
+<button type="button" class="mode-pill active" id="mode-debrid" data-mode="debrid"><span class="mode-pill-icon">⚡</span><span class="mode-pill-title">Debrid (Default)</span><span class="mode-pill-desc">Real-Debrid, TorBox, PM, AllDebrid</span></button>
+<button type="button" class="mode-pill" id="mode-usenet" data-mode="usenet"><span class="mode-pill-icon">📰</span><span class="mode-pill-title">Usenet Only</span><span class="mode-pill-desc">NNTP &amp; NZB Indexers (No Debrid)</span></button>
+<button type="button" class="mode-pill" id="mode-hybrid" data-mode="hybrid"><span class="mode-pill-icon">🔀</span><span class="mode-pill-title">Hybrid</span><span class="mode-pill-desc">Debrid + Usenet Failover</span></button>
+</div>
+<input type="hidden" id="streaming-mode" name="STREAMING_MODE" value="debrid">
+</div>
+<div id="debrid-provider-container">
+<div class="section-divider"><span>Debrid provider</span><span class="optional">HIGH-SPEED CLOUD CACHE</span></div>
 <div id="provider-fields" class="field-grid"></div>
+</div>
+<div id="usenet-primary-container" style="display:none">
+<div class="section-divider"><span>Usenet NNTP server &amp; NZB indexer</span><span class="optional">PRIMARY BACKEND</span></div>
+<div class="usenet-primary-card">
+<label class="optional-service" style="margin-bottom:12px;display:inline-block"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
+<div class="field-grid">
+<label><span class="field-label">Server hostname <span>NNTP HOST</span></span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
+<label><span class="field-label">Port <span>PORT</span></span><input id="usenet-port" type="number" min="1" max="65535" value="563"></label>
+<label><span class="field-label">Username <span>USER</span></span><input id="usenet-user" autocomplete="off"></label>
+<label><span class="field-label">Password <span>PASSWORD</span></span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
+<label><span class="field-label">Connections <span>MAX</span></span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
+<label class="optional-service" style="display:flex;align-items:center;gap:6px;margin-top:24px"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption (Port 563)</label>
+</div>
+<div style="margin-top:14px;border-top:1px solid #232a2e;padding-top:12px">
+<label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
+<div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
+</div>
+<p class="field-help" style="margin-top:10px">Streams are fetched on-demand by InfiniDysk via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
+</div>
+</div>
 <div class="section-divider"><span>Metadata & artwork</span><span class="optional">RECOMMENDED</span></div>
 <div class="template-selector-box">
 <div class="template-header">
@@ -35,6 +65,7 @@
 </div>
 <select id="aiometadata-template" name="AIOMETADATA_TEMPLATE">
 <option value="tamtaro-aiometadata-with-anime.json" selected>Tamtaro Complete (with Anime Catalogs: Airing, Seasons, Studios, Rankings) [Recommended]</option>
+<option value="usenet-only.json">Usenet Only (NNTP InfiniDysk &amp; Prowlarr NZB Indexers — No Debrid)</option>
 <option value="tamtaro-anime-only.json">Tamtaro Anime Only (Pure SeaDex &amp; Anime Scrapers, No Live-Action Noise)</option>
 <option value="tamtaro-aiometadata-without-anime.json">Tamtaro Standard (Movies &amp; Series only, without Anime)</option>
 <option value="grabberhawk-aiometadata-config.json">Grabberhawk Metadata Preset</option>
@@ -62,15 +93,7 @@
 </div>
 <div class="optional-setup"><h3>Anime sources · optional</h3><label class="optional-service"><input id="enable-anime-sources" type="checkbox"> Enable additional native anime sources</label><p>Anime Tosho, nekoBT and TsukiHime run directly through AIOStreams for anime requests only. Sources without a compatible account stay disabled.</p></div>
 <div class="optional-setup"><h3>MediaFusion · optional</h3><label class="optional-service"><input id="enable-mediafusion" type="checkbox"> Enable MediaFusion</label><p>Additional sources can require their own engines or accounts. Configure AceStream and other extras in MediaFusion, then paste its configured manifest here. Switching off stops its container and retains its data.</p><div id="mediafusion-manifest-fields" class="field-grid"></div></div>
-<div class="optional-setup"><h3>Usenet · optional</h3><label class="optional-service"><input id="enable-usenet" type="checkbox"> Use a Usenet account</label><div class="field-grid">
-<label><span class="field-label">Server hostname</span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
-<label><span class="field-label">Port</span><input id="usenet-port" type="number" min="1" max="65535" value="563"></label>
-<label><span class="field-label">Username</span><input id="usenet-user" autocomplete="off"></label>
-<label><span class="field-label">Password</span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
-<label><span class="field-label">Connections</span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
-<label class="optional-service"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption</label>
-</div><p>These settings configure InfiniDysk automatically. Passwords stay hidden when this page reloads. Search also needs an NZB indexer; add AltHUB, AnimeTosho, or any Newznab indexer below, or use your existing Prowlarr setup.</p>
-<label><span class="field-label">NZB indexer base address · optional</span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label><div id="usenet-indexer-key-fields" class="field-grid"></div></div>
+
 <div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid #232a2e;padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
 <div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div></details>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>

@@ -144,6 +144,8 @@ async function loadSettings() {
   document.getElementById('usenet-pass').placeholder=usenetPasswordSaved?'Saved · enter to replace':'Usenet password';
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
+  const modeVal = env.STREAMING_MODE || (env.USENET_ENABLED === 'true' && !providers.some(([k]) => savedKeys.has(k) || env[k]) ? 'usenet' : (env.USENET_ENABLED === 'true' ? 'hybrid' : 'debrid'));
+  if (typeof setStreamingMode === 'function') setStreamingMode(modeVal);
   const detectedServer = new URL(location.origin);
   detectedServer.port = '3001';
   const defaultBase = detectedServer.origin;
@@ -167,7 +169,7 @@ async function loadSettings() {
   if (webhookInput && env.DISCORD_WEBHOOK_URL) {
     webhookInput.value = env.DISCORD_WEBHOOK_URL;
   }
-  updateTemplateDisplay();
+  if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
 
   for (const [key] of fields) {
     const saved = savedKeys.has(key);
@@ -304,6 +306,7 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     USENET_SSL: document.getElementById('usenet-tls').checked ? 'true' : 'false',
     NZB_INDEXER_URL: document.getElementById('nzb-indexer-url').value.trim(),
     BASE_URL: document.getElementById('base-url').value.trim(),
+    STREAMING_MODE: document.getElementById('streaming-mode')?.value || 'debrid',
     AIOMETADATA_HOST: document.getElementById('aiometadata-host')?.value.trim() || '',
     AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json',
     DISCORD_WEBHOOK_URL: document.getElementById('discord-webhook-url')?.value.trim() || ''
@@ -314,7 +317,17 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     const value = document.getElementById(key).value.trim();
     if (value || !savedKeys.has(key)) payload[key] = value;
   }
-  if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved&&payload.MEDIAFUSION_REPLICAS!=='1') { notify('Add a provider key, enable Usenet or configure MediaFusion.'); return; }
+  const mode = payload.STREAMING_MODE;
+  if (mode === 'usenet') {
+    payload.USENET_ENABLED = 'true';
+    if (!payload.USENET_HOST || !payload.USENET_USER || (!payload.USENET_PASS && !usenetPasswordSaved)) {
+      notify('Enter your Usenet server hostname, username, and password.');
+      return;
+    }
+  } else if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved&&payload.MEDIAFUSION_REPLICAS!=='1') {
+    notify('Add a provider key, enable Usenet or configure MediaFusion.');
+    return;
+  }
   const button = document.getElementById('setup-button'); button.disabled = true;
   setProgress('Saving your configuration','Connecting local services and checking your keys.',true);
   try {
@@ -402,13 +415,63 @@ function updateTemplateDisplay() {
   }
   const desc = document.getElementById('template-description');
   if (desc) {
-    desc.textContent = isAnime
+    desc.textContent = val.includes('usenet')
+      ? 'Optimized Usenet-only profile routing through Prowlarr NZB indexers and InfiniDysk NNTP on-demand HTTP/WebDAV streaming without Debrid.'
+      : isAnime
       ? 'Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.'
       : val.includes('grabberhawk')
       ? 'Grabberhawk curated metadata configuration for movies and series.'
       : 'Standard Tamtaro configuration with TMDB & TVDB catalogs without anime collections.';
   }
 }
+
+function setStreamingMode(mode) {
+  const hiddenInput = document.getElementById('streaming-mode');
+  if (hiddenInput) hiddenInput.value = mode;
+
+  const modePills = document.querySelectorAll('.mode-pill');
+  modePills.forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+  });
+
+  const debridContainer = document.getElementById('debrid-provider-container');
+  const usenetContainer = document.getElementById('usenet-primary-container');
+  const enableUsenet = document.getElementById('enable-usenet');
+  const templateSelect = document.getElementById('aiometadata-template');
+
+  if (mode === 'usenet') {
+    if (debridContainer) debridContainer.style.display = 'none';
+    if (usenetContainer) usenetContainer.style.display = 'block';
+    if (enableUsenet) enableUsenet.checked = true;
+    if (templateSelect && (!templateSelect.value || templateSelect.value.includes('with-anime'))) {
+      templateSelect.value = 'usenet-only.json';
+      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
+    }
+  } else if (mode === 'hybrid') {
+    if (debridContainer) debridContainer.style.display = 'block';
+    if (usenetContainer) usenetContainer.style.display = 'block';
+    if (enableUsenet) enableUsenet.checked = true;
+    if (templateSelect && templateSelect.value === 'usenet-only.json') {
+      templateSelect.value = 'tamtaro-aiometadata-with-anime.json';
+      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
+    }
+  } else {
+    // debrid
+    if (debridContainer) debridContainer.style.display = 'block';
+    if (usenetContainer) usenetContainer.style.display = 'none';
+    if (templateSelect && templateSelect.value === 'usenet-only.json') {
+      templateSelect.value = 'tamtaro-aiometadata-with-anime.json';
+      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
+    }
+  }
+}
+
+document.querySelectorAll('.mode-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.getAttribute('data-mode');
+    setStreamingMode(mode);
+  });
+});
 
 const templateSelectEl = document.getElementById('aiometadata-template');
 if (templateSelectEl) {

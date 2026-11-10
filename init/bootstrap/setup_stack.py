@@ -234,6 +234,8 @@ def resolve_aiometadata_template_path(template_name=""):
         selected = "tamtaro-aiometadata-without-anime.json"
     elif selected in ("grabberhawk", "grabberhawk-config"):
         selected = "grabberhawk-aiometadata-config.json"
+    elif selected in ("usenet", "usenet-only", "tamtaro-usenet-only", "usenet-only.json"):
+        selected = "usenet-only.json"
 
     candidates = [
         selected,
@@ -792,9 +794,18 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     """Builds our comprehensive Tamtaro All-Local Self-Hosted configuration dictionary."""
     reachable = is_url_reachable if probe_services else lambda *args, **kwargs: True
     template_data = {}
-    if os.path.exists(TEMPLATE_PATH):
+    chosen_template_path = TEMPLATE_PATH
+    usenet_active = (os.environ.get('USENET_ENABLED', 'true') != 'false' and os.environ.get('USENET_HOST')
+                     and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
+                     and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
+    has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
+    if os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
+        u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
+        if os.path.exists(u_cand):
+            chosen_template_path = u_cand
+    if os.path.exists(chosen_template_path):
         try:
-            with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            with open(chosen_template_path, "r", encoding="utf-8") as f:
                 template_data = json.load(f)
         except Exception as e:
             print(f"[AIOStreams Setup] Note loading template file: {e}", flush=True)
@@ -815,9 +826,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             }
         }
     ]
-    usenet_active=(os.environ.get('USENET_ENABLED','true')!='false' and os.environ.get('USENET_HOST')
-                   and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
-                   and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
     if not usenet_active:
         services = []
     if PREMIUMIZE_API_KEY:
@@ -1319,6 +1327,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 else:
                     print(f"[AIOStreams Setup] ℹ️ SubSense not reachable in current profile; omitting from active presets.", flush=True)
             elif pid == "debrid-search-local":
+                if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                    continue
                 opts["resources"] = ["catalog", "stream"]
                 murl = opts.get("manifestUrl", "http://debrid-search:3011/manifest.json")
                 if reachable(murl, timeout=1.0):
@@ -1363,7 +1373,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         "enabled": proxy_is_public,
         "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
         "credentials": proxy_creds,
-        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "none"]
+        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "nzbdav", "none"]
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"
@@ -1408,7 +1418,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config.pop('precacheSelector',None)
     config.pop('precacheCondition',None)
     config.pop('alwaysPrecache',None)
-    config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["torrent", "usenet"]})
+    has_debrid_active = any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services)
+    if not has_debrid_active and usenet_active:
+        config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["usenet"]})
+    else:
+        config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["torrent", "usenet"]})
     enable_remuxdb = os.environ.get("ENABLE_REMUXDB", "true").lower() != "false"
     config["remuxDb"] = {"enabled": enable_remuxdb}
     config.setdefault("titleMatching", {"enabled": True, "mode": "contains", "similarityThreshold": 0.85})
@@ -1416,14 +1430,24 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config.setdefault("episodeTitleMatching", {"enabled": True, "similarityThreshold": 0.8})
     config.setdefault("yearMatching", {"enabled": True, "tolerance": 1})
     config.setdefault("languageInference", {"enabled": True, "sources": ["title", "episodeTitle"]})
-    config.setdefault("failover", {
-        "enabled": True,
-        "contentTypes": ["debrid", "usenet"],
-        "allowCrossType": True,
-        "maxAttempts": 3,
-        "includeExternalFailover": True,
-        "precacheFailover": True,
-    })
+    if not has_debrid_active and usenet_active:
+        config.setdefault("failover", {
+            "enabled": True,
+            "contentTypes": ["usenet"],
+            "allowCrossType": False,
+            "maxAttempts": 3,
+            "includeExternalFailover": True,
+            "precacheFailover": True,
+        })
+    else:
+        config.setdefault("failover", {
+            "enabled": True,
+            "contentTypes": ["debrid", "usenet"],
+            "allowCrossType": True,
+            "maxAttempts": 3,
+            "includeExternalFailover": True,
+            "precacheFailover": True,
+        })
     if "deduplicator" in config and isinstance(config["deduplicator"], dict):
         config["deduplicator"].setdefault("merge", {
             "enabled": True,

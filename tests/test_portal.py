@@ -524,6 +524,37 @@ class PortalTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
 
+    def test_streaming_mode_option_can_be_saved_and_returned(self):
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {
+                "STREAMING_MODE": "usenet",
+                "USENET_ENABLED": "true",
+                "USENET_HOST": "news.usenetserver.com",
+                "USENET_PORT": "563",
+                "USENET_USER": "testuser",
+                "USENET_PASS": "testpass",
+                "AIOMETADATA_TEMPLATE": "usenet-only.json"
+            },
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 200)
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data.get("STREAMING_MODE"), "usenet")
+        self.assertEqual(data.get("USENET_ENABLED"), "true")
+        self.assertEqual(data.get("USENET_HOST"), "news.usenetserver.com")
+        self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "usenet-only.json")
+
+        # Test validation of invalid streaming mode
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {"STREAMING_MODE": "invalid_mode"},
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

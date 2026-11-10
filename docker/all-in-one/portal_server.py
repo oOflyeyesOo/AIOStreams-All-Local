@@ -974,8 +974,20 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         # Send only saved-key indicators, never stored credential values.
         base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
         aiom_val = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST") or derive_aiometadata_host(base_val)
+        mode_val = env_vars.get("STREAMING_MODE")
+        if not mode_val:
+            has_usenet = bool(env_vars.get("USENET_HOST") and (env_vars.get("USENET_USER") or env_vars.get("USENET_USER_B64")))
+            debrid_keys = ("REALDEBRID_API_KEY", "PREMIUMIZE_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY")
+            has_debrid = any(env_vars.get(k) for k in debrid_keys)
+            if has_usenet and not has_debrid:
+                mode_val = "usenet"
+            elif has_usenet and has_debrid:
+                mode_val = "hybrid"
+            else:
+                mode_val = "debrid"
         resp_env = {
             **public_settings(env_vars),
+            "STREAMING_MODE": mode_val,
             "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
             "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
             "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
@@ -1109,6 +1121,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError("Values must be single-line scalars without quotes or dollar interpolation")
 
             keys_to_update = {str(k): str(v).strip() for k, v in data.items() if v is not None}
+            if keys_to_update.get('STREAMING_MODE') and keys_to_update['STREAMING_MODE'] not in ('debrid', 'usenet', 'hybrid'):
+                raise ValueError('Invalid streaming mode; must be debrid, usenet, or hybrid')
             if keys_to_update.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                 raise ValueError('Anime sources must be enabled or disabled')
             if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):

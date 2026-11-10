@@ -123,8 +123,37 @@ AIO Local neutralizes this risk through AIOStreams' native **BuiltinProxy** conf
 FORCE_PROXY_ENABLED=true
 FORCE_PROXY_ID=builtin
 FORCE_PROXY_URL=${BASE_URL}
-FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
+FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
 ```
+
+---
+
+### Usenet-Only (NNTP & NZB Indexer) Streaming Journey (No Debrid Required)
+
+For users who operate with **only a Usenet server (NNTP)** and **Newznab indexer(s)** without any Debrid account:
+
+1. **Dedicated Usenet Mode**:
+   - In the Setup Portal (`:8088`), select the **Usenet Only (NNTP & NZB Indexers — No Debrid)** provider pill (or set `STREAMING_MODE=usenet` in `.env`).
+   - The setup portal exposes the NNTP server settings (Host, Port, User, Pass, TLS, Connections) and NZB indexer base address and API key as the primary setup fields, hiding debrid inputs.
+   - The aggregator profile automatically loads `templates/builtin/usenet-only.json` (or `usenet-only.json`).
+
+2. **Index Searching via Prowlarr**:
+   - When a video title or episode is selected in Stremio, AIOStreams queries **Prowlarr** (`http://prowlarr:9696`) for Newznab NZB releases using the `prowlarr-usenet` preset.
+   - For anime requests, **TsukiHime** directly queries anime NZBs and connects with InfiniDysk (`nzbdav`).
+   - Debrid-dependent scrapers (Comet, Sootio, Torrentio, StremThru Store, Debrid Search) are automatically omitted or disabled so no wasted queries or timeout delays occur.
+
+3. **On-Demand NNTP Downloading & WebDAV Serving via InfiniDysk**:
+   - When the user presses play, AIOStreams passes the chosen NZB to **InfiniDysk** (`http://infinidysk:3000`).
+   - InfiniDysk connects directly to the Usenet provider via multi-threaded NNTP article fetching, reconstructs the media stream on-the-fly, and serves the video over HTTP/WebDAV.
+
+4. **Universal BuiltinProxy Streaming**:
+   - Because `"nzbdav"` is registered in `config["proxy"]["proxiedServices"]`, playback URLs are transformed into `${BASE_URL}/playback/<session_token>/...` on the public AIOStreams port (`3001`).
+   - Remote players (Stremio Web, Android TV, Mobile) never need direct network access to InfiniDysk's internal port (`3005`); all bytes stream cleanly through AIOStreams with full **HTTP 206 Partial Content (byte-range seeking)** support.
+
+5. **Full Metadata & Subtitles**:
+   - **AIOMetadata** provides the full cinematic catalog experience (Cinemeta, TMDB, TVDB, IMDb, Anime) with Posters+ rating badges.
+   - **SubSense** automatically fetches subtitles from OpenSubtitles, SubDL, and SubSource.
+   - **AniSkip** provides instant OP/ED skipping.
 
 ```text
  [Client A: Home Wi-Fi]       [Client B: Mobile 5G]       [Client C: Remote Friend]

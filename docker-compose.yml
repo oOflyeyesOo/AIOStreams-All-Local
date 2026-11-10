@@ -183,7 +183,7 @@ services:
       - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
-      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
+      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
       - ENCRYPT_STREMTHRU_URLS=false
       - ENCRYPT_MEDIAFLOW_URLS=false
 
@@ -477,7 +477,7 @@ services:
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
-    profiles: ["scrapers", "all"]
+    profiles: ["scrapers", "usenet", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${PROWLARR_MEM_LIMIT:-384m}

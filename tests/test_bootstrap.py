@@ -263,7 +263,7 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap, "BASE_URL", "https://aio.example.test"):
             config = bootstrap.build_default_config()
         self.assertTrue(config["proxy"]["enabled"])
-        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "none"])
+        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "nzbdav", "none"])
 
     def test_stremthru_store_preset_configured_with_debrid(self):
         with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "mock-prem-key"):
@@ -340,3 +340,41 @@ class BootstrapTests(unittest.TestCase):
         route=next(p for p in enabled if p['type']=='easynews-search')
         self.assertEqual(route['options']['services'],['easynews'])
         self.assertFalse(route['options']['paginate'])
+
+    def test_usenet_only_mode_configuration(self):
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', ''), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'TORBOX_API_KEY', ''), \
+             patch.object(bootstrap, 'ALLDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'DEBRIDLINK_API_KEY', ''), \
+             patch.object(bootstrap, 'EASYNEWS_USER', ''), \
+             patch.object(bootstrap, 'EASYNEWS_PASSWORD', ''), \
+             patch.dict(bootstrap.os.environ, {
+                 'USENET_ENABLED': 'true',
+                 'USENET_HOST': 'news.fixture',
+                 'USENET_USER_B64': 'Zml4dHVyZQ==',
+                 'USENET_PASS_B64': 'Zml4dHVyZQ==',
+                 'AIOMETADATA_TEMPLATE': 'usenet-only.json',
+                 'BASE_URL': 'https://aio.example.com',
+                 'PREMIUMIZE_API_KEY': '',
+                 'REALDEBRID_API_KEY': '',
+                 'TORBOX_API_KEY': '',
+                 'ALLDEBRID_API_KEY': '',
+                 'DEBRIDLINK_API_KEY': '',
+                 'EASYNEWS_USER': '',
+                 'EASYNEWS_PASSWORD': '',
+             }):
+            config = bootstrap.build_default_config(probe_services=False)
+        self.assertTrue(any(s['id'] == 'nzbdav' for s in config['services']))
+        self.assertIn('nzbdav', config['proxy']['proxiedServices'])
+        self.assertEqual(config['cacheAndPlay']['streamTypes'], ['usenet'])
+        self.assertEqual(config['failover']['contentTypes'], ['usenet'])
+        self.assertFalse(config['failover']['allowCrossType'])
+        self.assertFalse(any(p['instanceId'] == 'debrid-search-local' for p in config['presets']))
+        self.assertFalse(any(p['instanceId'] == 'comet-local' for p in config['presets']))
+        self.assertFalse(any(p['instanceId'] == 'sootio-local' for p in config['presets']))
+        self.assertFalse(any(p['type'] == 'torrentio' for p in config['presets']))
+        usenet_p = next(p for p in config['presets'] if p['instanceId'] == 'prowlarr-usenet')
+        self.assertTrue(usenet_p['enabled'])
+        self.assertEqual(usenet_p['options']['sources'], ['usenet'])
+        self.assertEqual(usenet_p['options']['services'], ['nzbdav'])
