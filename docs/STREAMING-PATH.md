@@ -1,0 +1,237 @@
+# End-to-End Streaming Path & Transport Architecture
+
+This document provides a technical deep-dive into how media requests travel through the **AIO Local** stack—from initial catalog discovery and scrapers fan-out to byte-range playback transport and multi-device debrid IP protection.
+
+---
+
+## 1. Architectural Topology Overview
+
+All media requests flow through a unified Docker bridge network (`stremio-net`). Video streams and catalog metadata are partitioned cleanly to avoid bottlenecks and duplicate catalog registrations.
+
+```text
+                               +-------------------------------------------------------------+
+                               |                  Client Applications                        |
+                               |  (Stremio Web, Stremio Desktop, Stremio Mobile, Android TV) |
+                               +------------------------------+------------------------------+
+                                                              |
+                                           +------------------+------------------+
+                                           |                                     |
+                                  Catalog Requests                       Playback Stream Requests
+                                  (meta.yourdomain.com:4005)             (aio.yourdomain.com:3001)
+                                           |                                     |
+                                           v                                     v
+                           +-------------------------------+     +-------------------------------+
+                           |      AIOMetadata (:4005)      |     |      AIOStreams (:3000)       |
+                           |  - Cinemeta, TVDB, IMDb, MAL  |     |  - Tamtaro SEL Ranking        |
+                           |  - Posters+ Ratings Badges    |     |  - Stream Deduplication       |
+                           |  - AniList / Kitsu Catalogs   |     |  - BuiltinProxy Transport     |
+                           +-------------------------------+     +---------------+---------------+
+                                                                                 |
+                         +-------------------------------------------------------+-------------------------------------------------------+
+                         |                                                       |                                                       |
+                         v                                                       v                                                       v
+         +-------------------------------+                       +-------------------------------+                       +-------------------------------+
+         |    Primary Local Scrapers     |                       |  Public / Community Databases |                       |     Transport & IP Shield     |
+         |  - Comet (:8000)              |                       |  - Torrentio (Public Index)   |                       |  - BuiltinProxy (:3000)       |
+         |  - Zilean DMM Cache (:8181)   |                       |  - RemuxDB (MediaInfo/Codecs) |                       |  - Single-IP Debrid Bridge    |
+         |  - Search Broker (:8091)      |                       |  - DMM Community Hashlists    |                       |  - Non-Debrid Host Shield     |
+         |  - Prowlarr & Flaresolverr    |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
+         |  - Debrid Search (:8004)      |                                                                               +---------------+---------------+
+         |  - SubSense Subtitles (:8001) |                                                                                               |
+         |  - Usenet (NZBDav/InfiniDysk) |                                                                                               v
+         |  - MediaFusion (:8003, opt)   |                                                                               +-------------------------------+
+         +---------------+---------------+                                                                               |     Upstream Providers        |
+                         | (on zero cached results)                                                                      |  - Real-Debrid / Premiumize   |
+                         v                                                                                               |  - TorBox / AllDebrid CDN     |
+         +-------------------------------+                                                                               |  - Usenet NNTP Servers        |
+         |  Sequential Fallback Scrapers |                                                                               +-------------------------------+
+         |  - Sootio Multi-Scraper       |
+         +-------------------------------+
+```
+
+---
+
+## 2. Stage-by-Stage Request Journey
+
+### Stage 1: Discovery & Catalog Browsing
+1. **Catalog Query**: The client browses movies, series, or anime catalogs. The request targets the standalone **AIOMetadata** instance (`${AIOMETADATA_HOST}` or `http://aiometadata:4005`).
+2. **Metadata Enrichment**: AIOMetadata aggregates Cinemeta, TheMovieDB (TMDB), TheTVDB, IMDb, MyAnimeList (MAL/Jikan), and AniList data.
+3. **Poster Artwork & Ratings Badges**: Posters+ dynamically overlays IMDb, Trakt, and MAL ratings badges onto posters via `/poster?stremio_id=...`.
+4. **Manifest Partitioning**: To eliminate duplicate catalog rows inside Stremio, catalog feeds are managed solely through AIOMetadata, while stream resolution is delegated to AIOStreams.
+
+---
+
+### Stage 2: Stream Request Fan-Out & Aggregation
+When a user selects a title or episode, Stremio sends a stream resolution request:
+```http
+GET /stremio/{uuid}/{encryptedPassword}/stream/{type}/{id}.json HTTP/1.1
+Host: aio.yourdomain.com
+```
+
+AIOStreams coordinates a parallel query fan-out across configured scrapers:
+
+1. **Intelligent Query Broker (`:8091`) & Prowlarr (`:9696`)**:
+   - Scrapers requiring Torznab/Newznab indexers route queries through the query broker.
+   - The broker performs **request coalescing** (identical in-flight searches share a single upstream query), caches warm results in memory for 60 seconds (<20ms response), and bypasses Cloudflare challenges via FlareSolverr (`:8191`).
+   - If an indexer fails repeatedly, the broker applies an automated cooldown to protect search latencies.
+
+2. **Primary Scrapers**:
+   - **Comet (`:8000`)**: High-performance torrent crawler querying Prowlarr and Zilean.
+   - **Zilean (`:8181`)**: Local SQLite database storing cached Debrid Media Manager (DMM) torrent hashes. Resolves popular releases in <50ms without external tracker requests.
+   - **Torrentio Public Index**: When `ENABLE_TORRENTIO=true`, queries Torrentio's cloud index (`https://torrentio.strem.fun` or `TORRENTIO_URL`) in ~30ms to access millions of pre-indexed torrent releases without local crawler overhead.
+   - **Debrid Search (`:8004`)**: Queries the user's personal Real-Debrid / Torbox cloud for files already downloaded to their account.
+   - **Usenet Search (Built-in & Prowlarr)**: When enabled, searches configured Newznab indexers and Easynews search.
+   - **MediaFusion (`:8003`)**: Optional secondary scraper for specialized community catalogs and streams.
+
+3. **Adaptive Sequential Fallback (`SOOTIO_MODE=fallback`)**:
+   - Rather than hammering external trackers simultaneously, AIOStreams groups scrapers into primary and fallback tiers.
+   - **Sootio** is configured with `condition: count(cached(totalStreams)) == 0`. It remains completely idle when primary sources return cached streams, executing only if primary scrapers return zero instant-playable results.
+
+---
+
+### Stage 3: Debrid Cache Probe, Filtering & URL Generation
+1. **Instant Debrid Cache Validation**:
+   - Discovered infohashes are checked against the user's debrid provider API (Real-Debrid, Premiumize, TorBox, AllDebrid, Debrid-Link) or StremThru Store (`:8080`).
+   - Only torrents pre-cached on debrid servers are prioritized as instantly streamable.
+
+2. **RemuxDB Codec Probing (`ENABLE_REMUXDB=true`)**:
+   - AIOStreams queries RemuxDB to obtain precise MediaInfo container specs (e.g. TrueHD 7.1 Atmos vs. DTS-HD MA, Dolby Vision Profile 7/8 vs. HDR10+).
+
+3. **Tamtaro SEL & Vidhin Regex Scoring**:
+   - Streams are filtered, deduplicated, and ranked using community Tamtaro Stream Expression Language (SEL) rules and Vidhin release regexes.
+   - Unwanted releases (e.g. CAM, TeleSync, low-bitrate rips) are purged; optimal 4K/1080p remuxes and Web-DLs are sorted to the top.
+
+4. **Stream URL Wrapping**:
+   - Instead of returning direct provider CDN links or raw P2P infohashes to the client, AIOStreams wraps each stream into a secured proxy URL:
+   ```text
+   http://aio.yourdomain.com/playback/<signed_token>/video.mkv
+   ```
+
+---
+
+## 4. Stage 4: Playback Transport & Multi-IP Ban Shield (Deep Dive)
+
+The playback transport layer is the core security boundary of AIO Local.
+
+### The Multi-IP Concurrency Problem
+Debrid services (Real-Debrid, Premiumize) enforce strict anti-account-sharing rules:
+> **Real-Debrid Rule**: An account may only download or stream from **one public IPv4/IPv6 address** at any given moment. If connections originate from two different public IPs simultaneously (e.g. a family member on mobile 5G while another watches on home fiber), the account is immediately suspended or banned.
+
+### The AIO Local Solution: BuiltinProxy Shield
+AIO Local neutralizes this risk through AIOStreams' native **BuiltinProxy** configured with:
+```bash
+FORCE_PROXY_ENABLED=true
+FORCE_PROXY_ID=builtin
+FORCE_PROXY_URL=${BASE_URL}
+FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
+```
+
+```text
+ [Client A: Home Wi-Fi]       [Client B: Mobile 5G]       [Client C: Remote Friend]
+   (IP: 198.51.100.14)          (IP: 203.0.113.88)           (IP: 192.0.2.77)
+            |                            |                            |
+            +----------------------------+----------------------------+
+                                         |
+                                         | All clients stream via:
+                                         | https://aio.yourdomain.com/playback/...
+                                         v
+                         +-------------------------------+
+                         |    AIOStreams BuiltinProxy    |
+                         |   (Your Server / VPS Host)    |
+                         |    Outbound IP: 198.51.100.1  |
+                         +---------------+---------------+
+                                         |
+                                         | Upstream connections originate
+                                         | exclusively from 198.51.100.1
+                                         v
+                         +-------------------------------+
+                         |    Real-Debrid / Premiumize   |
+                         |         CDN Edge Servers      |
+                         |  (Sees ONLY 198.51.100.1)     |
+                         |   => Zero Multi-IP Violations |
+                         +-------------------------------+
+```
+
+#### Step-by-Step Playback Execution:
+1. **Client Request**: The video player sends an HTTP `GET` request to `https://aio.yourdomain.com/playback/<token>/video.mkv`.
+2. **Token Verification**: BuiltinProxy validates the encrypted session token containing provider credentials, file path, and stream metadata.
+3. **Upstream Unrestriction**: BuiltinProxy communicates with the debrid provider API (e.g. `POST /unrestrict/link`) using the **Docker host server's public IP address**.
+4. **Data Piping**: BuiltinProxy initiates an upstream stream to the debrid CDN and pipes chunks down to the player.
+5. **Single-IP Isolation**: The debrid provider's firewall observes only **one** IP address (the Docker host server), regardless of how many devices are streaming concurrently across disparate cellular or home networks.
+
+---
+
+### Non-Debrid & Free Stream Shielding (`"none"`)
+For streams that do not originate from a debrid provider (e.g. direct HTTP web links, IPTV feeds, free hosters, or Usenet):
+- `FORCE_PROXY_PROXIED_SERVICES` includes `"none"`.
+- Requests route through `${BASE_URL}/api/v1/proxy/...`.
+- Untrusted third-party hosts never receive or log the end-user's home IP address, browser user-agent, or geolocation.
+
+---
+
+### HTTP 206 Partial Content & Byte-Range Streaming
+Modern video players require byte-range seeking to support instant scrubbing, audio/video track switching, and subtitle synchronization.
+
+BuiltinProxy fully proxies and preserves HTTP Range headers:
+- **Client Header**: `Range: bytes=1048576-`
+- **Server Response**:
+  ```http
+  HTTP/1.1 206 Partial Content
+  Content-Type: video/x-matroska
+  Accept-Ranges: bytes
+  Content-Range: bytes 1048576-2097151/524288000
+  Content-Length: 1048576
+  ```
+- This enables smooth scrubbing and instant resume without forcing the server or client to buffer the full media file.
+
+---
+
+### Automatic Failover & Self-Healing
+If a debrid link expires, an upstream CDN node drops connection, or a stream fails:
+- `config["failover"]` activates automatically.
+- AIOStreams attempts up to 3 alternate cached releases (`maxAttempts: 3`), seamlessly failing over between debrid and Usenet (`allowCrossType: True`) without terminating the player session.
+
+---
+
+## 5. Stage 5: In-Player Enhancements
+
+### 1. SubSense Subtitles (`:8001`)
+- Stremio requests subtitles via SubSense (`http://subsense:3100/{encrypted_config}/manifest.json`).
+- SubSense queries OpenSubtitles, SubDL, and SubSource using server-side encrypted API keys.
+- Matched `.srt` or `.vtt` subtitles are downloaded, sanitized, and injected directly into the player stream.
+
+### 2. Built-in AniSkip Proxy (`:8088/api/aniskip`)
+- When streaming anime via the bundled Stremio Web player (`:3001`), the player queries the setup portal's `/api/aniskip` endpoint.
+- The portal resolves IMDb / TVDB IDs to MyAnimeList (MAL) IDs and queries the AniSkip API.
+- Opening (`op`), ending (`ed`), and recap intervals are returned with millisecond precision:
+  ```json
+  {
+    "found": true,
+    "malId": 38000,
+    "results": [
+      {"skipType": "op", "interval": {"startTime": 65.5, "endTime": 155.0}},
+      {"skipType": "ed", "interval": {"startTime": 1320.0, "endTime": 1410.0}}
+    ]
+  }
+  ```
+- The player automatically presents an on-screen skip badge and supports instant skipping via keyboard shortcut `s`.
+
+---
+
+## 6. Diagnostic Probing & Verification Commands
+
+To verify that the streaming path, range requests, and proxying are functioning correctly:
+
+```bash
+# 1. Verify AIOStreams BuiltinProxy status
+curl -fsSL http://localhost:3001/api/v1/status
+
+# 2. Test HTTP 206 Partial Content byte streaming (first 1024 bytes)
+curl -i -r 0-1023 "http://localhost:3001/playback/<token>/video.mkv"
+
+# 3. Verify AniSkip proxy resolution
+curl -s "http://localhost:8088/api/aniskip?id=tt9335498&season=1&episode=1"
+
+# 4. Verify Search Broker latency and caching
+curl -s -w "\nTime: %{time_total}s\n" "http://localhost:8091/api/v1/search?query=Inception"
+```

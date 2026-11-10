@@ -1,5 +1,8 @@
 # Routing and timing validation — 2026-11-07
 
+> [!NOTE]
+> For a detailed architectural breakdown of the video playback pipeline, BuiltinProxy transport, and multi-IP debrid ban protection, see the [End-to-End Streaming Path & Transport Architecture](STREAMING-PATH.md) guide.
+
 ## Request ownership
 
 | Resource | Owner and path | Duplicate-work policy |

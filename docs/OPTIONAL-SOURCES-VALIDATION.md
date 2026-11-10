@@ -7,7 +7,7 @@ To maximize stream resolution and release quality without imposing 24/7 backgrou
 1. **Torrentio (`ENABLE_TORRENTIO=true`)**:
    - Queries the official Torrentio public index database (`https://torrentio.strem.fun`) directly.
    - Because Torrentio maintains a massive pre-crawled database of millions of indexed torrents, queries return in **~0.029 seconds** with zero local CPU, crawling, or storage overhead.
-   - All stream requests are routed through AIOStreams' `BuiltinProxy`, ensuring 100% server-side IP isolation and preventing multi-IP debrid account bans.
+   - All stream requests are routed through AIOStreams' `BuiltinProxy`, ensuring 100% server-side IP isolation and preventing multi-IP debrid account bans (detailed in the [Streaming Path Architecture](STREAMING-PATH.md) guide).
    - Set `ENABLE_TORRENTIO=false` to omit Torrentio and rely exclusively on local scrapers. Configure `TORRENTIO_URL` to override with a custom endpoint.
 
 2. **RemuxDB (`ENABLE_REMUXDB=true`)**:
