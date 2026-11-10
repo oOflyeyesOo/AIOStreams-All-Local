@@ -415,9 +415,7 @@ function updateTemplateDisplay() {
   }
   const desc = document.getElementById('template-description');
   if (desc) {
-    desc.textContent = val.includes('usenet')
-      ? 'Optimized Usenet-only profile routing through Prowlarr NZB indexers and InfiniDysk NNTP on-demand HTTP/WebDAV streaming without Debrid.'
-      : isAnime
+    desc.textContent = isAnime
       ? 'Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.'
       : val.includes('grabberhawk')
       ? 'Grabberhawk curated metadata configuration for movies and series.'
@@ -437,32 +435,19 @@ function setStreamingMode(mode) {
   const debridContainer = document.getElementById('debrid-provider-container');
   const usenetContainer = document.getElementById('usenet-primary-container');
   const enableUsenet = document.getElementById('enable-usenet');
-  const templateSelect = document.getElementById('aiometadata-template');
 
   if (mode === 'usenet') {
     if (debridContainer) debridContainer.style.display = 'none';
     if (usenetContainer) usenetContainer.style.display = 'block';
     if (enableUsenet) enableUsenet.checked = true;
-    if (templateSelect && (!templateSelect.value || templateSelect.value.includes('with-anime'))) {
-      templateSelect.value = 'usenet-only.json';
-      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
-    }
   } else if (mode === 'hybrid') {
     if (debridContainer) debridContainer.style.display = 'block';
     if (usenetContainer) usenetContainer.style.display = 'block';
     if (enableUsenet) enableUsenet.checked = true;
-    if (templateSelect && templateSelect.value === 'usenet-only.json') {
-      templateSelect.value = 'tamtaro-aiometadata-with-anime.json';
-      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
-    }
   } else {
     // debrid
     if (debridContainer) debridContainer.style.display = 'block';
     if (usenetContainer) usenetContainer.style.display = 'none';
-    if (templateSelect && templateSelect.value === 'usenet-only.json') {
-      templateSelect.value = 'tamtaro-aiometadata-with-anime.json';
-      if (typeof updateTemplateDisplay === 'function') updateTemplateDisplay();
-    }
   }
 }
 

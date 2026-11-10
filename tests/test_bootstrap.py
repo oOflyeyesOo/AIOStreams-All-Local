@@ -354,7 +354,7 @@ class BootstrapTests(unittest.TestCase):
                  'USENET_HOST': 'news.fixture',
                  'USENET_USER_B64': 'Zml4dHVyZQ==',
                  'USENET_PASS_B64': 'Zml4dHVyZQ==',
-                 'AIOMETADATA_TEMPLATE': 'usenet-only.json',
+                 'STREAMING_MODE': 'usenet',
                  'BASE_URL': 'https://aio.example.com',
                  'PREMIUMIZE_API_KEY': '',
                  'REALDEBRID_API_KEY': '',

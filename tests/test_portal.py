@@ -534,7 +534,7 @@ class PortalTests(unittest.TestCase):
                 "USENET_PORT": "563",
                 "USENET_USER": "testuser",
                 "USENET_PASS": "testpass",
-                "AIOMETADATA_TEMPLATE": "usenet-only.json"
+                "AIOMETADATA_TEMPLATE": "tamtaro-aiometadata-with-anime.json"
             },
             auth=True, headers={"Content-Type": "application/json"}
         )
@@ -545,7 +545,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data.get("STREAMING_MODE"), "usenet")
         self.assertEqual(data.get("USENET_ENABLED"), "true")
         self.assertEqual(data.get("USENET_HOST"), "news.usenetserver.com")
-        self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "usenet-only.json")
+        self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "tamtaro-aiometadata-with-anime.json")
 
         # Test validation of invalid streaming mode
         status, body, _ = self.request(

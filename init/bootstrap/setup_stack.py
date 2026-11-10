@@ -235,7 +235,7 @@ def resolve_aiometadata_template_path(template_name=""):
     elif selected in ("grabberhawk", "grabberhawk-config"):
         selected = "grabberhawk-aiometadata-config.json"
     elif selected in ("usenet", "usenet-only", "tamtaro-usenet-only", "usenet-only.json"):
-        selected = "usenet-only.json"
+        selected = "tamtaro-aiometadata-with-anime.json"
 
     candidates = [
         selected,
@@ -799,7 +799,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                      and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
                      and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
     has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
-    if os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
+    streaming_mode = os.environ.get("STREAMING_MODE", "").lower()
+    if streaming_mode == "usenet" or os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
         u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
         if os.path.exists(u_cand):
             chosen_template_path = u_cand
