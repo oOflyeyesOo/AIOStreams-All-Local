@@ -67,7 +67,6 @@ function Ensure-Directories {
         "data/postersplus",
         "data/infinidysk",
         "data/stremio-web",
-        "data/debrid-search",
         "init/postgres",
         "templates/setup-templates",
         "templates/formatters",

@@ -54,7 +54,7 @@ for kind,ident in cases:
   report['measurements'].extend(pool.map(lambda _:measure('AIOStreams '+kind,url,'concurrent-2'),range(2)))
  # Direct custom requests use exactly the applied profile's manifest configuration.
  for instance,prefix in custom.items():
-  allowed={'sootio-local','debrid-search-local'}
+  allowed={'sootio-local'}
   if instance in allowed:report['measurements'].append(measure(instance+' direct '+kind,prefix+f'/stream/{kind}/{ident}.json'))
 
 services=[s for s in profile.get('services',[]) if s.get('enabled') and s.get('credentials',{}).get('apiKey') and s.get('id')!='nzbdav']

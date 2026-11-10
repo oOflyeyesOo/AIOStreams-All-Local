@@ -29,7 +29,6 @@ ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
 SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
-DEBRID_SEARCH_URL = os.environ.get("DEBRID_SEARCH_URL", "http://debrid-search:3011").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "http://mediaflow:8888").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -242,49 +241,30 @@ def benchmark_zilean_pathways():
 
 
 # ==============================================================================
-# SECTION 3: PERSONAL DEBRID CLOUD PATHWAYS (Debrid Search vs StremThru Store)
+# SECTION 3: PERSONAL DEBRID CLOUD PATHWAYS (StremThru Store)
 # ==============================================================================
 def benchmark_debrid_cloud_pathways():
     print("\n" + "=" * 78)
-    print(" 3. DEBRID CLOUD & PERSONAL LIBRARY PATHWAYS")
+    print(" 3. DEBRID CLOUD & PERSONAL LIBRARY PATHWAYS (StremThru Store)")
     print("=" * 78)
 
-    # Path 3A: stremio-debrid-search Manifest
-    def path_debrid_search_manifest():
-        url = f"{DEBRID_SEARCH_URL}/manifest.json"
-        code, body, ttfb, total = http_get(url, timeout=5.0)
-        data = json.loads(body)
-        return len(data.get("catalogs", [])), f"catalogs: {[c.get('name') for c in data.get('catalogs', [])]}", ttfb, total
-
-    run_benchmark("Debrid Cloud", "Manifest/Catalog", "Route 3A: Debrid Search Manifest", path_debrid_search_manifest)
-
-    # Path 3B: stremio-debrid-search Stream Query
-    def path_debrid_search_stream():
-        url = f"{DEBRID_SEARCH_URL}/stream/movie/tt1375666.json"
-        code, body, ttfb, total = http_get(url, timeout=5.0)
-        data = json.loads(body)
-        streams = data.get("streams", [])
-        return len(streams), "personal cloud matches found", ttfb, total
-
-    run_benchmark("Debrid Cloud", "Personal Cloud", "Route 3B: Debrid Search Stream Lookup", path_debrid_search_stream)
-
-    # Path 3C: StremThru Store Manifest
+    # Path 3A: StremThru Store Manifest
     def path_stremthru_store_manifest():
         url = f"{STREMTHRU_URL}/stremio/store/manifest.json"
         code, body, ttfb, total = http_get(url, timeout=5.0)
         data = json.loads(body)
         return len(data.get("catalogs", [])), f"catalogs: {[c.get('name') for c in data.get('catalogs', [])]}", ttfb, total
 
-    run_benchmark("Debrid Cloud", "Manifest/Catalog", "Route 3C: StremThru Store Manifest", path_stremthru_store_manifest)
+    run_benchmark("Debrid Cloud", "Manifest/Catalog", "Route 3A: StremThru Store Manifest", path_stremthru_store_manifest)
 
-    # Path 3D: StremThru Torz Manifest
+    # Path 3B: StremThru Torz Manifest
     def path_stremthru_torz_manifest():
         url = f"{STREMTHRU_URL}/stremio/torz/manifest.json"
         code, body, ttfb, total = http_get(url, timeout=5.0)
         data = json.loads(body)
         return len(data.get("resources", [])), f"resources: {data.get('resources', [])}", ttfb, total
 
-    run_benchmark("Debrid Cloud", "Manifest/Catalog", "Route 3D: StremThru Torz Manifest", path_stremthru_torz_manifest)
+    run_benchmark("Debrid Cloud", "Manifest/Catalog", "Route 3B: StremThru Torz Manifest", path_stremthru_torz_manifest)
 
 
 # ==============================================================================

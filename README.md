@@ -329,7 +329,7 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
 | **`core`** (Recommended Lean) | `docker compose --profile core up -d` | **~1.1 GB** | AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL, Redis, Portal. Ideal for low-memory VPS relying on Comet and Torrentio. |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.5 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, FlareSolverr, Debrid-Search, and Anime Kitsu. |
+| **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.5 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, FlareSolverr, and Anime Kitsu. |
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + MediaFlow, StremThru proxy router, InfiniDysk Usenet Engine. |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
 | **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
@@ -341,7 +341,7 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 ### 2. Application Configuration Profiles
 
 AIO Local bundles tailored setup profiles selectable via the portal (`:8088`) or `.env`:
-- **AIOStreams Flagship (`all-local-selfhosted.json`)**: Default profile pre-configured with Tamtaro SEL expressions, Vidhin release regexes, SeaDex anime scoring, Comet, Zilean, Torrentio, SubSense subtitles, Debrid Search, and Anime Kitsu.
+- **AIOStreams Flagship (`all-local-selfhosted.json`)**: Default profile pre-configured with Tamtaro SEL expressions, Vidhin release regexes, SeaDex anime scoring, Comet, Zilean, Torrentio, SubSense subtitles, StremThru Store, and Anime Kitsu.
 - **Usenet Only (`usenet-only.json`)**: Dedicated pipeline for users with an NNTP Usenet account and NZB indexer(s) with **NO Debrid subscription required**. Automatically routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense, and TsukiHime anime. Selectable via the **Usenet Only** mode pill on the setup portal or `STREAMING_MODE=usenet`.
 - **Tamtaro Anime Only (`tamtaro-anime-only.json`)**: Strips western TV rules to optimize strictly for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, and dual-audio ranking.
 - **AIOMetadata Catalogs (`with-anime`, `usenet-only`, vs. `without-anime`)**: Choose between full mainstream catalogs plus 20+ dedicated anime catalogs (MAL schedules, season rows, studio spotlights) or clean movie/TV catalogs without anime rows.
@@ -371,7 +371,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Subtitles** | SubSense (`:3100`) | Multi-provider subtitle aggregator (OpenSubtitles, SubSource, SubDL, YIFY) with WARP routing |
 
-| **Personal Library & Cloud** | Debrid Search (`:3011`), StremThru Store (`:8080/stremio/store`) | Instant library search & direct Stremio catalog mounting for personal Real-Debrid / TorBox / Premiumize cloud files |
+| **Personal Library & Cloud** | StremThru Store (`:8080/stremio/store`) | Instant library search & direct Stremio catalog mounting for personal Real-Debrid / TorBox / Premiumize cloud files |
 
 | **Stream Proxies** | StremThru (`:8080`), MediaFlow-Proxy (`:8888`), Universal BuiltinProxy | Debrid store caching, stream proxying, multi-IP ban shield, and non-debrid HTTP stream shielding |
 
@@ -412,7 +412,7 @@ Every media query and stream playback undergoes a coordinated journey across the
                ▼
   2. Select: AIOStreams (:3000 / :3001) Stream Resolution
        ├── Intelligent Query Broker (:8091) ──► Prowlarr ──► FlareSolverr (Cloudflare bypass)
-       ├── Primary Local Scrapers ────────────► Comet (:8000), Zilean DMM (:8181), Debrid Search (:8004)
+       ├── Primary Local Scrapers ────────────► Comet (:8000), Zilean DMM (:8181), StremThru Store (:8080)
        ├── Public & Community Databases ──────► Torrentio (~30ms cloud index), RemuxDB (MediaInfo audio/HDR)
        └── Adaptive Sequential Fallback ──────► Sootio (triggers ONLY if 0 cached streams found)
                │
@@ -448,7 +448,7 @@ Every media query and stream playback undergoes a coordinated journey across the
 2. **Parallel Scraper Fan-Out & Request Coalescing**:
    - When a title is clicked, AIOStreams queries enabled scrapers in parallel.
    - The **Intelligent Search Broker** (`:8091`) coalesces identical in-flight indexer queries into one upstream call, caches results in memory for 60s (<20ms response), and bypasses Cloudflare challenges via FlareSolverr (`:8191`).
-   - Primary local scrapers (**Comet**, **Zilean DMM cache**, **Debrid Search**, **Anime Kitsu**) return instant local results without external scraping delays.
+   - Primary local scrapers (**Comet**, **Zilean DMM cache**, **Anime Kitsu**) return instant local results without external scraping delays.
    - Selectable public databases (**Torrentio** cloud index at ~30ms, **RemuxDB** MediaInfo specs) inject massive pre-indexed release coverage without local crawler overhead.
 
 3. **Adaptive Sequential Fallback (`SOOTIO_MODE=fallback`)**:

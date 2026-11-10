@@ -15,7 +15,7 @@ TARGETS = {'comet':('comet',8000), 'sootio':('sootio',55771),
            'mediafusion':('mediafusion',8000), 'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181),
            'aiometadata':('aiometadata',4005), 'subsense':('subsense',3100),
            'anime-kitsu':('anime-kitsu',7000), 'postersplus':('postersplus',8000),
-           'debrid-search':('debrid-search',3011), 'search-broker':('search-broker',8091)}
+           'search-broker':('search-broker',8091)}
 LOCK = threading.Lock()
 EVENTS = []
 FINGERPRINT_KEY = secrets.token_bytes(32)

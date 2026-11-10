@@ -24,7 +24,7 @@ if os.environ.get('MEDIAFUSION_REPLICAS','0') != '1':
     HTTP_CHECKS.pop('mediafusion',None)
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
     host: TCP_PORTS[host] for host in (
-        "stremthru", "mediaflow", "flaresolverr", "subsense", "debrid-search",
+        "stremthru", "mediaflow", "flaresolverr", "subsense",
         "postersplus", "sootio", "slicksync", "nuvio", "zilean",
     )
 }}

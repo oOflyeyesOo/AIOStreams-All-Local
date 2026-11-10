@@ -107,19 +107,6 @@
       },
       {
         "type": "custom",
-        "instanceId": "debrid-search-local",
-        "enabled": true,
-        "options": {
-          "name": "Debrid Search (Local)",
-          "manifestUrl": "http://debrid-search:3011/manifest.json",
-          "libraryAddon": false,
-          "resultPassthrough": false,
-          "forceToTop": false,
-          "timeout": 12000
-        }
-      },
-      {
-        "type": "custom",
         "instanceId": "anime-kitsu-local",
         "enabled": true,
         "options": {

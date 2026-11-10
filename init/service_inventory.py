@@ -12,7 +12,6 @@ INTEGRATIONS = (
     ("Anime Kitsu", "anime-kitsu", 7000, "Metadata"),
     ("Posters+", "postersplus", 8000, "Metadata"),
     ("SubSense", "subsense", 3100, "Subtitles"),
-    ("Debrid Search", "debrid-search", 3011, "Library"),
     ("InfiniDysk", "infinidysk", 3000, "Usenet"),
     ("StremThru", "stremthru", 8080, "Proxies"),
     ("MediaFlow", "mediaflow", 8888, "Proxies"),

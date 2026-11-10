@@ -449,12 +449,11 @@ services:
       - ./data/aiometadata:/aiometadata
       - ./data/infinidysk:/infinidysk
       - ./data/stremio-web:/stremio-web
-      - ./data/debrid-search:/debrid-search
       - ./data/postersplus:/postersplus
       - ./data/aiostreams:/aiostreams
     command: >
       sh -c "
-        mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /debrid-search /postersplus /aiostreams;
+        mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus /aiostreams;
         if grep -q '\"uuid\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json; fi;
         if grep -q '\"uuid\": *null' /stremio-web/aiostreams_install.json 2>/dev/null; then rm -f /stremio-web/aiostreams_install.json; fi;
         if [ ! -f /stremio-web/localStorage.json ]; then
@@ -469,7 +468,7 @@ services:
             sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g' /prowlarr/config.xml;
           fi;
         fi;
-        chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /debrid-search /postersplus /aiostreams 2>/dev/null || true;
+        chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus /aiostreams 2>/dev/null || true;
         if [ ! -f /stremio-web/localStorage.json ]; then echo '{}' > /stremio-web/localStorage.json; fi;
         if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;
       "
@@ -841,47 +840,6 @@ services:
       - CACHE_DIR=/app/cache
     volumes:
       - ./data/postersplus:/app/cache
-    networks:
-      - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
-
-  # Stremio-IntellDebridSearch (Search & catalog provider for personal Real-Debrid / TorBox / Premiumize / AllDebrid library)
-  debrid-search:
-    image: nepiraw/stremio-intelldebridsearch:latest
-    container_name: stremio-debrid-search
-    profiles: ["scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${DEBRID_SEARCH_MEM_LIMIT:-384m}
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"http=require('http');http.get('http://localhost:3011/manifest.json',r=>{process.exit(r.statusCode===200?0:1)})\" || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    environment:
-      - PORT=3011
-      - NODE_OPTIONS=--max-old-space-size=256
-      - ADDON_URL=${DEBRID_SEARCH_URL:-http://localhost:3011}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-      - TORBOX_API_KEY=${TORBOX_API_KEY}
-      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-      - ENABLE_CATALOG_POSTERS=true
-      - CATALOG_ENRICHMENT_CACHE_ENABLED=true
-      - CATALOG_ENRICHMENT_CACHE_DB_PATH=/app/data/catalog-cache.sqlite
-      - VARIANT_SYSTEM_ENABLED=true
-      - ENABLE_RELEASE_GROUP=true
-      - WARP_ENABLED=true
-    volumes:
-      - ./data/debrid-search:/app/data
     networks:
       - stremio-net
     depends_on:

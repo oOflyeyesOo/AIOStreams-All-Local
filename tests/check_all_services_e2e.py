@@ -243,15 +243,6 @@ def test_subsense():
         record("11. SubSense Subtitles Hub", False, str(e))
 
 
-def test_debrid_search():
-    try:
-        with urllib.request.urlopen("http://debrid-search:3011/manifest.json", timeout=5) as resp:
-            m = json.load(resp)
-            record("12. Stremio Debrid Search", True, f"Manifest OK: '{m.get('name')}' (v{m.get('version')})")
-    except Exception as e:
-        record("12. Stremio Debrid Search", False, str(e))
-
-
 def test_infinidysk():
     try:
         with urllib.request.urlopen("http://infinidysk:3000/healthz", timeout=5) as resp:
@@ -412,7 +403,6 @@ def main():
     test_aiometadata()
     test_postersplus()
     test_subsense()
-    test_debrid_search()
     test_infinidysk()
     test_anime_kitsu()
     test_stremthru()

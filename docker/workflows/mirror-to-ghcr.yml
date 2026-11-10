@@ -33,8 +33,6 @@ jobs:
             target: "mediaflow:latest"
           - source: "ghcr.io/infinidysk/infinidysk:latest"
             target: "infinidysk:latest"
-          - source: "nepiraw/stremio-intelldebridsearch:latest"
-            target: "debrid-search:latest"
           - source: "ghcr.io/jigsawfr/aiometadata-docker:latest"
             target: "aiometadata:latest"
           - source: "nepiraw/stremio-subsense:latest"

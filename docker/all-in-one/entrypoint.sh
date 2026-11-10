@@ -25,13 +25,11 @@ mkdir -p /data/aiostreams \
          /data/postersplus \
          /data/infinidysk \
          /data/stremio-web \
-         /data/debrid-search \
          /var/log \
          /etc/docker \
          /etc/containerd \
          /var/lib/docker
 
-chmod -R 777 /data /data/slicksync /data/aiometadata /data/postersplus /data/infinidysk /data/stremio-web /data/debrid-search /data/sootio 2>/dev/null || true
 [ -f /app/init/postgres/init-databases.sh ] && chmod +x /app/init/postgres/init-databases.sh 2>/dev/null || true
 [ -f /data/infinidysk/session.key ] && chmod 600 /data/infinidysk/session.key 2>/dev/null || true
 
@@ -243,7 +241,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • Stremio Web Player:    http://localhost:8082"
     echo " • Nuvio Web Player:      http://localhost:8085"
     echo " • SlickSync Hub:         http://localhost:8086"
-    echo " • Debrid Cloud Search:   http://localhost:3011"
     echo " • AIOMetadata:           http://localhost:4005"
     echo " • Posters+:              http://localhost:9039"
     echo " • SubSense Subtitles:    http://localhost:3100"

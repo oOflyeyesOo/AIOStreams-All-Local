@@ -1030,19 +1030,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         },
         {
             "type": "custom",
-            "instanceId": "debrid-search-local",
-            "enabled": True,
-            "options": {
-                "name": "Debrid Search (Local)",
-                "manifestUrl": "http://debrid-search:3011/manifest.json",
-                "libraryAddon": False,
-                "resultPassthrough": False,
-                "forceToTop": False,
-                "timeout": 8000
-            }
-        },
-        {
-            "type": "custom",
             "instanceId": "anime-kitsu-local",
             "enabled": True,
             "options": {
@@ -1327,17 +1314,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                     validated_presets.append(p)
                 else:
                     print(f"[AIOStreams Setup] ℹ️ SubSense not reachable in current profile; omitting from active presets.", flush=True)
-            elif pid == "debrid-search-local":
-                if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
-                    continue
-                opts["resources"] = ["catalog", "stream"]
-                murl = opts.get("manifestUrl", "http://debrid-search:3011/manifest.json")
-                if reachable(murl, timeout=1.0):
-                    p["enabled"] = True
-                    print(f"[AIOStreams Setup] ✓ Debrid Search (Local) is online and active.", flush=True)
-                    validated_presets.append(p)
-                else:
-                    print(f"[AIOStreams Setup] ℹ️ Debrid Search not active in current profile; omitting from active presets.", flush=True)
             elif pid == "anime-kitsu-local":
                 opts["resources"] = ["catalog", "meta"]
                 murl = opts.get("manifestUrl", "http://anime-kitsu:7000/manifest.json")

@@ -491,16 +491,7 @@
               <a href="https://hidden-cinemeta.vercel.app/" target="_blank" rel="noopener noreferrer">Optional external Cinemeta utility</a>
 
               <!-- Debrid Cloud Search -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">Debrid Cloud Search</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">:3001</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Search & catalog provider for personal Real-Debrid / TorBox / Premiumize libraries.</p>
-                </div>
-                <input type="checkbox" id="svc-debrid-search" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
+              
             </div>
           </div>
 
@@ -797,7 +788,6 @@
         kitsu: true,
         aiometadata: true,
         subsense: true,
-        debridSearch: true,
         stremthru: true,
         mediaflow: true,
         nuvio: true,
@@ -818,7 +808,6 @@
       state.services.kitsu = document.getElementById('svc-kitsu').checked;
       state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
       state.services.subsense = document.getElementById('svc-subsense').checked;
-      state.services.debridSearch = document.getElementById('svc-debrid-search') ? document.getElementById('svc-debrid-search').checked : true;
       state.services.stremthru = document.getElementById('svc-stremthru').checked;
       state.services.mediaflow = document.getElementById('svc-mediaflow').checked;
       state.services.nuvio = document.getElementById('svc-nuvio').checked;
@@ -852,7 +841,6 @@
           kitsu: false,
           aiometadata: true,
           subsense: false,
-          debridSearch: false,
           stremthru: true,
           mediaflow: false,
           nuvio: true,
@@ -871,8 +859,7 @@
           kitsu: true,
           aiometadata: true,
           subsense: true,
-          debridSearch: true,
-          stremthru: true,
+            stremthru: true,
           mediaflow: false,
           nuvio: true,
           stremioWeb: true,
@@ -890,7 +877,6 @@
           kitsu: false,
           aiometadata: true,
           subsense: false,
-          debridSearch: false,
           stremthru: true,
           mediaflow: false,
           nuvio: false,
@@ -909,7 +895,6 @@
       document.getElementById('svc-kitsu').checked = state.services.kitsu;
       document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
       document.getElementById('svc-subsense').checked = state.services.subsense;
-      if (document.getElementById('svc-debrid-search')) document.getElementById('svc-debrid-search').checked = state.services.debridSearch;
       document.getElementById('svc-stremthru').checked = state.services.stremthru;
       document.getElementById('svc-mediaflow').checked = state.services.mediaflow;
       document.getElementById('svc-nuvio').checked = state.services.nuvio;
@@ -964,7 +949,7 @@
         needsPostgres: s.zilean || s.mediafusion || s.aiometadata,
         needsRedis: s.mediafusion || s.aiometadata || s.subsense || s.slicksync || s.stremthru || s.mediaflow,
         needsMongo: false,
-        needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb || s.debridSearch
+        needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb
       };
     }
 
@@ -1291,8 +1276,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           if (s.aiometadata) lines.push(`      - ./data/aiometadata:/aiometadata`);
           if (s.infinidysk) lines.push(`      - ./data/infinidysk:/infinidysk`);
           if (s.stremioWeb) lines.push(`      - ./data/stremio-web:/stremio-web`);
-          if (s.debridSearch) lines.push(`      - ./data/debrid-search:/debrid-search`);
-          
+                    
           let cmdParts = [];
           let dirs = [];
           if (s.prowlarr) dirs.push('/prowlarr');
@@ -1300,8 +1284,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           if (s.aiometadata) dirs.push('/aiometadata');
           if (s.infinidysk) dirs.push('/infinidysk');
           if (s.stremioWeb) dirs.push('/stremio-web');
-          if (s.debridSearch) dirs.push('/debrid-search');
-          if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
+                    if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
 
           if (s.prowlarr) {
             cmdParts.push(`if [ ! -f /prowlarr/config.xml ]; then echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>\${PROWLARR_API_KEY}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>' > /prowlarr/config.xml; else sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>\${PROWLARR_API_KEY}</ApiKey>|' /prowlarr/config.xml; sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|' /prowlarr/config.xml; sed -i 's|<AuthenticationRequired>.*</AuthenticationRequired>|<AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|' /prowlarr/config.xml; fi;`);
@@ -1447,7 +1430,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       }
 
       // 6. CATALOGS & METADATA
-      if (s.kitsu || s.aiometadata || s.subsense || s.debridSearch) {
+      if (s.kitsu || s.aiometadata || s.subsense) {
         lines.push(`\n  # ============================================================================`);
         lines.push(`  # 6. LOCAL CATALOGS & METADATA`);
         lines.push(`  # ============================================================================`);
@@ -1509,40 +1492,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
             lines.push(`        condition: service_completed_successfully`);
           }
           if (db.needsInitConfigs) {
-            lines.push(`      init-configs:`);
-            lines.push(`        condition: service_completed_successfully`);
-          }
-        }
-        if (s.debridSearch) {
-          lines.push(`\n  # Stremio-IntellDebridSearch (Search & catalog provider for personal Debrid library)`);
-          lines.push(`  debrid-search:`);
-          lines.push(`    image: nepiraw/stremio-intelldebridsearch:latest`);
-          lines.push(`    container_name: stremio-debrid-search`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "3001:3001"`);
-          lines.push(`    environment:`);
-          lines.push(`      - PORT=3001`);
-          lines.push(`      - ADDON_URL=\${BASE_URL:-http://localhost:3001}`);
-          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
-          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
-          lines.push(`      - REALDEBRID_API_KEY=\${REALDEBRID_API_KEY}`);
-          lines.push(`      - ALLDEBRID_API_KEY=\${ALLDEBRID_API_KEY}`);
-          lines.push(`      - TORBOX_API_KEY=\${TORBOX_API_KEY}`);
-          lines.push(`      - PREMIUMIZE_API_KEY=\${PREMIUMIZE_API_KEY}`);
-          lines.push(`      - DEBRIDLINK_API_KEY=\${DEBRIDLINK_API_KEY}`);
-          lines.push(`      - ENABLE_CATALOG_POSTERS=true`);
-          lines.push(`      - CATALOG_ENRICHMENT_CACHE_ENABLED=true`);
-          lines.push(`      - CATALOG_ENRICHMENT_CACHE_DB_PATH=/app/data/catalog-cache.sqlite`);
-          lines.push(`      - VARIANT_SYSTEM_ENABLED=true`);
-          lines.push(`      - ENABLE_RELEASE_GROUP=true`);
-          lines.push(`      - WARP_ENABLED=true`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/debrid-search:/app/data`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          if (db.needsInitConfigs) {
-            lines.push(`    depends_on:`);
             lines.push(`      init-configs:`);
             lines.push(`        condition: service_completed_successfully`);
           }
@@ -1781,7 +1730,6 @@ docker run -d \\
         { name: 'Anime Kitsu', port: '7005', enabled: s.kitsu },
         { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
         { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
-        { name: 'Debrid Search', port: '3001', enabled: s.debridSearch },
         { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk },
         { name: 'Stremio Web Player', port: '8082', enabled: s.stremioWeb },
         { name: 'Nuvio Web Player', port: '8085', enabled: s.nuvio },

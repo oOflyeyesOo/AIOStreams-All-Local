@@ -382,7 +382,7 @@ def public_service_urls(base_url):
     if ":" in host:
         host = f"[{host}]"
     ports = {"SOOTIO_URL": 55771, "MEDIAFUSION_HOST_URL": 8001,
-             "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005, "DEBRID_SEARCH_URL": 3001}
+             "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
     urls = {key: f"{parsed.scheme}://{host}:{port}" for key, port in ports.items()}
     if is_local:
         urls["AIOMETADATA_HOST"] = f"{parsed.scheme}://{host}:4005"

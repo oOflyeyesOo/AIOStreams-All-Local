@@ -22,7 +22,6 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011"   # Debrid Search Provider
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"   # Comet Fast Torrent Scraper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8001"   # MediaFusion Multi-Source Scraper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:55771:55771" # Sootio Multi-Scraper

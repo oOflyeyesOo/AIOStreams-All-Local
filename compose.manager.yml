@@ -113,7 +113,6 @@ services:
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
     - stremio-web-data:/app/data/stremio-web
-    - debrid-search-data:/app/data/debrid-search
     - postersplus-data:/app/data/postersplus
     - stremthru-data:/app/data/stremthru
     - mediaflow-data:/app/data/mediaflow
@@ -469,10 +468,9 @@ services:
     - aiometadata-data:/aiometadata
     - infinidysk-data:/infinidysk
     - stremio-web-data:/stremio-web
-    - debrid-search-data:/debrid-search
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
-    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /debrid-search /postersplus\
+    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus\
       \ /aiostreams;\n  if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
       \ fi;\n  if grep -q '\\\"uuid\\\": *null' /stremio-web/aiostreams_install.json 2>/dev/null; then rm -f /stremio-web/aiostreams_install.json;\
       \ fi;\n  if [ ! -f /stremio-web/localStorage.json ]; then\n    echo '{\\\"profile\\\":{\\\"auth\\\":null,\\\"addons\\\
@@ -484,7 +482,7 @@ services:
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
       \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web\
-      \ /debrid-search /postersplus /aiostreams 2>/dev/null || true;\n  if [ ! -f /stremio-web/localStorage.json ]; then echo\
+      \ /postersplus /aiostreams 2>/dev/null || true;\n  if [ ! -f /stremio-web/localStorage.json ]; then echo\
       \ '{}' > /stremio-web/localStorage.json; fi;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key\
       \ 2>/dev/null || true; fi;\n\"\n"
   prowlarr:
@@ -865,50 +863,6 @@ services:
     depends_on:
       init-configs:
         condition: service_completed_successfully
-  debrid-search:
-    image: nepiraw/stremio-intelldebridsearch:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-    mem_limit: ${DEBRID_SEARCH_MEM_LIMIT:-384m}
-    ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_DEBRID_SEARCH:-3011}:3011
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - node -e "http=require('http');http.get('http://localhost:3011/manifest.json',r=>{process.exit(r.statusCode===200?0:1)})"
-        || exit 1
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    environment:
-    - PORT=3011
-    - NODE_OPTIONS=--max-old-space-size=256
-    - ADDON_URL=${DEBRID_SEARCH_URL:-http://localhost:3011}
-    - TMDB_API_KEY=${TMDB_API_KEY}
-    - TVDB_API_KEY=${TVDB_API_KEY}
-    - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-    - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-    - TORBOX_API_KEY=${TORBOX_API_KEY}
-    - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-    - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-    - ENABLE_CATALOG_POSTERS=true
-    - CATALOG_ENRICHMENT_CACHE_ENABLED=true
-    - CATALOG_ENRICHMENT_CACHE_DB_PATH=/app/data/catalog-cache.sqlite
-    - VARIANT_SYSTEM_ENABLED=true
-    - ENABLE_RELEASE_GROUP=true
-    - WARP_ENABLED=true
-    volumes:
-    - debrid-search-data:/app/data
-    networks:
-    - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
   subsense:
     image: nepiraw/stremio-subsense:latest
     restart: unless-stopped
@@ -1105,7 +1059,6 @@ volumes:
   aiometadata-data: {}
   infinidysk-data: {}
   stremio-web-data: {}
-  debrid-search-data: {}
   postersplus-data: {}
   stremthru-data: {}
   mediaflow-data: {}

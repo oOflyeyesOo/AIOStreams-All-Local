@@ -89,7 +89,7 @@ COMPOSE_PROFILES=core
 | Profile | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- |
 | **`core`** | **~1.1 GB** | **Recommended Lean Setup**: Runs AIOStreams, Comet, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, and Setup Portal. Ideal for low-memory VPS or lightweight servers relying on Torrentio and Comet. |
-| **`scrapers`** | **~3.5 GB** | **Full Local Crawlers**: Launches `core` plus MediaFusion, Sootio (Multi-Scraper), Zilean (Local DMM Hash Cache), Prowlarr (`:9696`), FlareSolverr (`:8191`), Debrid-Search (`:8004`), and Anime Kitsu (`:7000`). |
+| **`scrapers`** | **~3.5 GB** | **Full Local Crawlers**: Launches `core` plus MediaFusion, Sootio (Multi-Scraper), Zilean (Local DMM Hash Cache), Prowlarr (`:9696`), FlareSolverr (`:8191`) (`:8004`), and Anime Kitsu (`:7000`). |
 | **`proxies`** | **~1.8 GB** | **Extended Proxy & Usenet Routing**: Launches `core` plus MediaFlow proxy, StremThru proxy router, and InfiniDysk Usenet Engine (`:3005`). |
 | **`web`** | **~1.6 GB** | **Web Players & Sync Hub**: Launches `core` plus Stremio Web Player (`:8082`), Nuvio Web Player (`:8085`), and SlickSync Hub (`:8086`). |
 | **`usenet`** | **~2.2 GB** | **Dedicated Usenet Streaming**: Launches `core` plus InfiniDysk (`:3005`), NZBDav, and Prowlarr configured with Newznab indexers for direct NNTP debrid-free streaming. |
@@ -105,7 +105,7 @@ In addition to Docker runtime profiles, AIO Local includes pre-tuned JSON templa
 
 | Template | File Name | Description |
 | :--- | :--- | :--- |
-| **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | The flagship profile. Pre-configured with Tamtaro SEL expressions, Vidhin regexes, Seadex anime scoring, Comet, Zilean, Torrentio (public index), SubSense subtitles, Debrid Search, StremThru Store, and Anime Kitsu. |
+| **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | The flagship profile. Pre-configured with Tamtaro SEL expressions, Vidhin regexes, Seadex anime scoring, Comet, Zilean, Torrentio (public index), SubSense subtitles, StremThru Store, and Anime Kitsu. |
 | **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Streamlined pure Usenet configuration for users with an NNTP provider and NZB indexer without any debrid subscription. Routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime. |
 | **Tamtaro Complete Suite** | `tamtaro-complete.json` | Full Tamtaro sorting and filtering suite containing 100+ release groups, multilingual exclusions, and multi-indexer parsing. |
 | **Tamtaro Anime Only** | `tamtaro-anime-only.json` | Dedicated anime-centric profile. Strips out mainstream western TV rules, optimizing specifically for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, SeaDex quality ranks, and dual-audio preferences. |

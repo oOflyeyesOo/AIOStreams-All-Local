@@ -29,7 +29,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status,400)
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 18)
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 17)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,

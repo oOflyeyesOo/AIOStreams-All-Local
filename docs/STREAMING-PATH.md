@@ -36,7 +36,7 @@ All media requests flow through a unified Docker bridge network (`stremio-net`).
          |  - Zilean DMM Cache (:8181)   |                       |  - RemuxDB (MediaInfo/Codecs) |                       |  - Single-IP Debrid Bridge    |
          |  - Search Broker (:8091)      |                       |  - DMM Community Hashlists    |                       |  - Non-Debrid Host Shield     |
          |  - Prowlarr & Flaresolverr    |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
-         |  - Debrid Search (:8004)      |                                                                               +---------------+---------------+
+         |  - StremThru Store (:8080)      |                                                                               +---------------+---------------+
          |  - SubSense Subtitles (:8001) |                                                                                               |
          |  - Usenet (NZBDav/InfiniDysk) |                                                                                               v
          |  - MediaFusion (:8003, opt)   |                                                                               +-------------------------------+
@@ -140,7 +140,7 @@ For users who operate with **only a Usenet server (NNTP)** and **Newznab indexer
 2. **Index Searching via Prowlarr**:
    - When a video title or episode is selected in Stremio, AIOStreams queries **Prowlarr** (`http://prowlarr:9696`) for Newznab NZB releases using the `prowlarr-usenet` preset.
    - For anime requests, **TsukiHime** directly queries anime NZBs and connects with InfiniDysk (`nzbdav`).
-   - Debrid-dependent scrapers (Comet, Sootio, Torrentio, StremThru Store, Debrid Search) are automatically omitted or disabled so no wasted queries or timeout delays occur.
+   - Debrid-dependent scrapers (Comet, Sootio, Torrentio, StremThru Store) are automatically omitted or disabled so no wasted queries or timeout delays occur.
 
 3. **On-Demand NNTP Downloading & WebDAV Serving via InfiniDysk**:
    - When the user presses play, AIOStreams passes the chosen NZB to **InfiniDysk** (`http://infinidysk:3000`).
