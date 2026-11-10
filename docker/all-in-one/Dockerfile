@@ -33,7 +33,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/setup.sh /app/docker/all-in-one/p
 # 3001: AIOStreams Super-Addon
 # 8085: Nuvio Web Player
 # 8086: SlickSync Hub
-#: Hidden Cinemeta
 # 4005: AIOMetadata
 # 9039: Posters+
 # 3100: SubSense Subtitles

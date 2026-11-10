@@ -25,7 +25,7 @@ AIO_CONTAINERS = {
     "aiostreams", "comet", "mediafusion", "sootio", "zilean", "prowlarr",
     "flaresolverr", "stremthru", "mediaflow", "infinidysk", "cloudflared",
     "aio-tunnel", "anime-kitsu", "aiometadata", "postersplus",
-    "stremio-debrid-search", "stremio-subsense", "hidden-cinemeta",
+    "stremio-debrid-search", "stremio-subsense",
     "nuvio-web", "stremio-web", "slicksync", "shared-redis", "shared-postgres",
     "aio-portal", "stack-bootstrap", "init-configs", "init-postgres", "aio-stack"
 }
