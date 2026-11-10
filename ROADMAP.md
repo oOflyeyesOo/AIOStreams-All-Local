@@ -1,6 +1,6 @@
 # AIO Local roadmap
 
-Updated 2026-11-07. The product goal remains: deploy through Docker Compose or a management app, enter keys on one page, and receive manifests for compatible players. Prioritize a dependable installation over adding more services.
+Updated 2026-11-08. The product goal remains: deploy through Docker Compose or a management app, enter keys on one page, and receive manifests for compatible players. Prioritize a dependable installation over adding more services.
 
 Copilot's original suggestions are retained in [docs/COPILOT-ROADMAP.md](docs/COPILOT-ROADMAP.md). Completed work and limits are recorded in [feature validation](docs/FEATURE-VALIDATION.md), [streaming/package validation](docs/TRACING-AND-PACKAGING.md), and [release validation](docs/RELEASE-VALIDATION.md).
 
@@ -11,12 +11,12 @@ Copilot's original suggestions are retained in [docs/COPILOT-ROADMAP.md](docs/CO
 - [x] Movie and episode HTTP range reads and 15-second media decode.
 - [x] Request tracing: default slow-source timeout removed; sampled repeated internal requests reuse cache without identical repeated upstream targets.
 - [x] Live fixture PostgreSQL backup/delete/restore, SQLite snapshots, Prowlarr backup coverage, fresh backup downloads and safe cache cleanup.
-- [x] Update failure handling in Bash and PowerShell; 106 Python tests, eight browser checks and source release CI passing.
+- [x] Update failure handling in Bash and PowerShell; 123 Python tests, 12 browser checks and source release CI passing.
 - [x] Corrected OAuth client wiring and preservation of saved account links on repeated setup.
 - [x] Reproduced and fixed first-start password migration failure; explicit configuration access keys, rejected unauthorized writes and a zero-restart release gate.
 - [x] Supplied keys removed from development copies, current release files and reachable Git history/tags. Original installation and original backup remain unchanged by explicit request.
 
-These checks do not establish every external integration as working. Real OAuth consent/token refresh, an authenticated tunnel, other debrid providers, NNTP and ARM/NAS compatibility remain unverified. Endpoint health is separate from functional playback.
+These checks do not establish every external integration as working. Real OAuth consent/token refresh, an authenticated tunnel, other debrid providers, paid NNTP decoding and ARM/NAS compatibility remain unverified. Endpoint health is separate from functional playback.
 
 ## Next milestones
 
@@ -109,3 +109,8 @@ These checks do not establish every external integration as working. Real OAuth 
 - [ ] Real paid NNTP article retrieval/repair/decoding and AceStream engine/playback.
 
 Evidence and exact limits: [optional sources validation](docs/OPTIONAL-SOURCES-VALIDATION.md). Earlier milestones above describe the versions tested at those times.
+
+- [x] Preserve incoming native anime/EasyNews integrations with compatible-account gates, anime-only scoping, one EasyNews owner, and native manifest/schema acceptance.
+- [ ] Measure incremental cached coverage and latency for optional Anime Tosho/nekoBT/TsukiHime; validate paid EasyNews search and playback.
+
+- [x] Combined source `1bfec7b` passed fresh Linux image-only startup, 21 default endpoints, optional-service/NNTP and native preset acceptance, and strict routing/concurrency. The README now links its tested immutable bundle.

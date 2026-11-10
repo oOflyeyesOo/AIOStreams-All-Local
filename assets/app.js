@@ -135,6 +135,7 @@ async function loadSettings() {
   const remuxdbToggle = document.getElementById('enable-remuxdb');
   if (remuxdbToggle) remuxdbToggle.checked = env.ENABLE_REMUXDB !== 'false';
   document.getElementById('enable-mediafusion').checked = env.MEDIAFUSION_REPLICAS === '1';
+  document.getElementById('enable-anime-sources').checked=env.ENABLE_ANIME_SOURCES==='true';
   document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
   for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
   document.getElementById('usenet-tls').checked=env.USENET_SSL!=='false';
@@ -294,6 +295,7 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     ENABLE_DMM: document.getElementById('enable-dmm')?.checked ? 'true' : 'false',
     ENABLE_REMUXDB: document.getElementById('enable-remuxdb')?.checked ? 'true' : 'false',
     MEDIAFUSION_REPLICAS: document.getElementById('enable-mediafusion').checked ? '1' : '0',
+    ENABLE_ANIME_SOURCES:document.getElementById('enable-anime-sources').checked?'true':'false',
     USENET_ENABLED: document.getElementById('enable-usenet').checked ? 'true' : 'false',
     USENET_HOST: document.getElementById('usenet-host').value.trim(),
     USENET_PORT: document.getElementById('usenet-port').value,

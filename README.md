@@ -1,23 +1,15 @@
 # AIO Local
 
-
-
 [![Microservices](https://img.shields.io/badge/microservices-22%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
-
-[![Regression Tests](https://img.shields.io/badge/regression%20tests-118%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
-
+[![Regression Tests](https://img.shields.io/badge/regression%20tests-123%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
-
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-
-
-A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 22 bundled services together on your private Docker network (`stremio-net`), and copy your personalized manifest URLs directly into Stremio or any compatible player.
-
-
+A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 22 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
 MediaFusion is optional and off by default. The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
 
+Torrentio is an external addon. Its native integration includes enabled provider credentials in its configured addon URL; set ENABLE_TORRENTIO=false to disable it. Treat personalized manifests and profile exports as private.
 
 
 The interface is one page: keys, setup progress, the main AIOStreams manifest, an optional standalone metadata manifest, service health and maintenance. Installing both manifests can duplicate catalogs.
@@ -28,7 +20,7 @@ For reproducible deployments, use the [digest-pinned release bundle and recovery
 
 
 
-[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42433774822/artifacts/13598986164) for management-app deployment. This replacement release fixes the first-start authentication migration crash and passed a fresh Linux install with zero AIOStreams restarts. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
+[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet/MediaFusion setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
 
 
 
@@ -635,8 +627,5 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
 
 
-
-
-
-Current validation: 118 Python regression tests, eleven browser checks and nine Sootio fixture checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.
+Current validation: 123 Python regression tests, twelve browser checks and nine Sootio fixture checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.
 

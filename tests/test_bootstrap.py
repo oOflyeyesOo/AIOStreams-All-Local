@@ -284,11 +284,11 @@ class BootstrapTests(unittest.TestCase):
             config = bootstrap.build_default_config(probe_services=False)
             presets = {p["instanceId"]: p for p in config.get("presets", [])}
             self.assertIn("anime-tosho-new", presets)
-            self.assertTrue(presets["anime-tosho-new"]["enabled"])
+            self.assertFalse(presets["anime-tosho-new"]["enabled"])
             self.assertIn("tsukihime-scraper", presets)
-            self.assertTrue(presets["tsukihime-scraper"]["enabled"])
+            self.assertFalse(presets["tsukihime-scraper"]["enabled"])
             self.assertIn("neko-bt-scraper", presets)
-            self.assertTrue(presets["neko-bt-scraper"]["enabled"])
+            self.assertFalse(presets["neko-bt-scraper"]["enabled"])
             self.assertIn("easynews-search", presets)
             self.assertFalse(presets["easynews-search"]["enabled"])
 
@@ -303,10 +303,6 @@ class BootstrapTests(unittest.TestCase):
             self.assertIsNotNone(easynews_preset)
             self.assertTrue(easynews_preset["enabled"])
 
-    def test_prowlarr_anime_indexers_included(self):
-        self.assertIn("subsplease", bootstrap.TARGET_INDEXERS)
-        self.assertIn("animetosho-xyz", bootstrap.TARGET_INDEXERS)
-
     def test_resolve_aiometadata_template_path(self):
         path_anime = bootstrap.resolve_aiometadata_template_path("with-anime")
         self.assertTrue(path_anime.endswith("tamtaro-aiometadata-with-anime.json"))
@@ -318,3 +314,29 @@ class BootstrapTests(unittest.TestCase):
     def test_seadex_enabled_in_default_config(self):
         config = bootstrap.build_default_config(probe_services=False)
         self.assertTrue(config.get("enableSeadex"))
+    def test_native_anime_sources_are_not_seeded_again_in_prowlarr(self):
+        self.assertNotIn("subsplease", bootstrap.TARGET_INDEXERS)
+        self.assertNotIn("animetosho-xyz", bootstrap.TARGET_INDEXERS)
+
+    def test_native_anime_sources_are_scoped_and_require_compatible_accounts(self):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_ANIME_SOURCES':'true','USENET_ENABLED':'false'}):
+            config=bootstrap.build_default_config(probe_services=False)
+        sources=[p for p in config['presets'] if p['type'] in ('anime-tosho-new','neko-bt','tsukihime')]
+        self.assertEqual(len(sources),3)
+        for source in sources:
+            self.assertTrue(source['enabled']);self.assertEqual(source['options']['mediaTypes'],['anime'])
+            self.assertEqual(source['options']['services'],['premiumize']);self.assertFalse(source['options']['useMultipleInstances'])
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.dict(bootstrap.os.environ,{'ENABLE_ANIME_SOURCES':'true','USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER_B64':'Zml4dHVyZQ==','USENET_PASS_B64':'Zml4dHVyZQ=='}):
+            config=bootstrap.build_default_config(probe_services=False)
+        sources={p['type']:p for p in config['presets'] if p['type'] in ('anime-tosho-new','neko-bt','tsukihime')}
+        self.assertFalse(sources['anime-tosho-new']['enabled']);self.assertFalse(sources['neko-bt']['enabled'])
+        self.assertTrue(sources['tsukihime']['enabled']);self.assertEqual(sources['tsukihime']['options']['services'],['nzbdav'])
+
+    def test_easynews_has_one_direct_owner_and_does_not_enable_torrent_routes(self):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.object(bootstrap,'EASYNEWS_USER','fixture-easynews-user'),patch.object(bootstrap,'EASYNEWS_PASSWORD','fixture-easynews-pass'):
+            config=bootstrap.build_default_config(probe_services=False)
+        enabled=[p for p in config['presets'] if p.get('enabled')]
+        self.assertFalse(any(p['type'] in ('comet','torrentio') or p['instanceId']=='sootio-local' for p in enabled))
+        route=next(p for p in enabled if p['type']=='easynews-search')
+        self.assertEqual(route['options']['services'],['easynews'])
+        self.assertFalse(route['options']['paginate'])

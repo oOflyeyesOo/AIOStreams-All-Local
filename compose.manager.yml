@@ -131,6 +131,7 @@ services:
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
     - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
+    - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-}
     - AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}
     - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
     - PORT_PORTAL=${PORT_PORTAL:-8088}
@@ -403,8 +404,6 @@ services:
     - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
     - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
     - DEBRID_API_KEY=${PREMIUMIZE_API_KEY}
-    - EASYNEWS_USER=${EASYNEWS_USER:-}
-    - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
     volumes:
     - sootio-data:/app/data
     networks:
@@ -542,6 +541,7 @@ services:
     - FLARESOLVERR_URL=http://flaresolverr:8191
     - MEDIAFUSION_URL=http://mediafusion:8000
     - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
+    - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
     - COMET_URL=http://comet:8000
     - SOOTIO_URL=http://sootio:55771
     - SOOTIO_MODE=${SOOTIO_MODE:-fallback}
