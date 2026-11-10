@@ -126,6 +126,14 @@ async function loadSettings() {
   const env = await api('/api/env');
   const schedSelect = document.getElementById('backup-schedule-select');
   if (schedSelect && env.BACKUP_SCHEDULE) schedSelect.value = env.BACKUP_SCHEDULE;
+  const torrentioToggle = document.getElementById('enable-torrentio');
+  if (torrentioToggle) torrentioToggle.checked = env.ENABLE_TORRENTIO !== 'false';
+  const torrentioUrlInput = document.getElementById('torrentio-url');
+  if (torrentioUrlInput) torrentioUrlInput.value = env.TORRENTIO_URL || '';
+  const dmmToggle = document.getElementById('enable-dmm');
+  if (dmmToggle) dmmToggle.checked = env.ENABLE_DMM !== 'false';
+  const remuxdbToggle = document.getElementById('enable-remuxdb');
+  if (remuxdbToggle) remuxdbToggle.checked = env.ENABLE_REMUXDB !== 'false';
   document.getElementById('enable-mediafusion').checked = env.MEDIAFUSION_REPLICAS === '1';
   document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
   for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
@@ -281,6 +289,10 @@ if (baseUrlInput && aiomInput) {
 document.getElementById('setup-form').addEventListener('submit',async event=>{
   event.preventDefault();
   const payload = {
+    ENABLE_TORRENTIO: document.getElementById('enable-torrentio')?.checked ? 'true' : 'false',
+    TORRENTIO_URL: document.getElementById('torrentio-url')?.value.trim() || '',
+    ENABLE_DMM: document.getElementById('enable-dmm')?.checked ? 'true' : 'false',
+    ENABLE_REMUXDB: document.getElementById('enable-remuxdb')?.checked ? 'true' : 'false',
     MEDIAFUSION_REPLICAS: document.getElementById('enable-mediafusion').checked ? '1' : '0',
     USENET_ENABLED: document.getElementById('enable-usenet').checked ? 'true' : 'false',
     USENET_HOST: document.getElementById('usenet-host').value.trim(),

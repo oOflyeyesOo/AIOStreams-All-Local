@@ -974,6 +974,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         resp_env = {
             **public_settings(env_vars),
             "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
+            "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
+            "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
+            "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
+            "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
             "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
@@ -1103,6 +1107,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             keys_to_update = {str(k): str(v).strip() for k, v in data.items() if v is not None}
             if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):
                 raise ValueError('MediaFusion must be enabled (1) or disabled (0)')
+            for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB'):
+                if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
+                    raise ValueError(f'{bkey} must be true or false')
+            if keys_to_update.get('TORRENTIO_URL'):
+                t_url = urllib.parse.urlsplit(keys_to_update['TORRENTIO_URL'])
+                if t_url.scheme not in ('http', 'https') or not t_url.hostname or t_url.username or t_url.password:
+                    raise ValueError('Enter a valid HTTP(S) URL for Torrentio endpoint')
             if keys_to_update.get('AIOMETADATA_TEMPLATE'):
                 tmpl = keys_to_update['AIOMETADATA_TEMPLATE']
                 if not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):

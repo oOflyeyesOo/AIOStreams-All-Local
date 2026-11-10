@@ -488,6 +488,42 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(data.get("success"))
             self.assertTrue(data["stats"]["healthy"])
 
+    def test_public_database_options_can_be_saved_and_returned(self):
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {
+                "ENABLE_TORRENTIO": "false",
+                "TORRENTIO_URL": "https://torrentio.strem.fun",
+                "ENABLE_DMM": "false",
+                "ENABLE_REMUXDB": "false",
+            },
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 200)
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data.get("ENABLE_TORRENTIO"), "false")
+        self.assertEqual(data.get("TORRENTIO_URL"), "https://torrentio.strem.fun")
+        self.assertEqual(data.get("ENABLE_DMM"), "false")
+        self.assertEqual(data.get("ENABLE_REMUXDB"), "false")
+
+        # Test validation of invalid boolean toggle
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {"ENABLE_TORRENTIO": "invalid_val"},
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 400)
+
+        # Test validation of invalid torrentio URL
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {"TORRENTIO_URL": "ftp://bad-url"},
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

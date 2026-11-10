@@ -42,7 +42,24 @@
 <p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
 </div>
 <div id="metadata-fields" class="field-grid"></div>
-<details class="more-options"><summary>Usenet, tracking, subtitles & optional services <span>+</span></summary>
+<details class="more-options"><summary>Public databases, Usenet, tracking, subtitles & optional services <span>+</span></summary>
+<div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
+<label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
+<p>Calls out to the public Torrentio index database (<code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;">https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
+<div class="field-grid" style="margin-top: 8px;">
+<label><span class="field-label">Custom Torrentio endpoint (optional)</span><input id="torrentio-url" placeholder="https://torrentio.strem.fun (default)" autocomplete="off"></label>
+</div>
+
+<div style="margin-top: 18px;">
+<label class="optional-service"><input id="enable-dmm" type="checkbox" checked> Enable DMM Database (Debrid Media Manager)</label>
+<p>Calls out to community Debrid Media Manager (DMM) hashlists over the internet to periodically sync curated torrent hashes into your local Zilean container. This gives you instant (&lt;50ms) local cache hits for popular releases without scraping public trackers from scratch.</p>
+</div>
+
+<div style="margin-top: 18px;">
+<label class="optional-service"><input id="enable-remuxdb" type="checkbox" checked> Enable RemuxDB (MediaInfo &amp; Codec Probes)</label>
+<p>Calls out to the public RemuxDB database over the internet to source accurate container probe data (TrueHD 7.1 Atmos, DTS-HD MA, and Dolby Vision / HDR10+ profiles), enabling high-precision ranking and filtering for 4K Remux releases.</p>
+</div>
+</div>
 <div class="optional-setup"><h3>MediaFusion · optional</h3><label class="optional-service"><input id="enable-mediafusion" type="checkbox"> Enable MediaFusion</label><p>Additional sources can require their own engines or accounts. Configure AceStream and other extras in MediaFusion, then paste its configured manifest here. Switching off stops its container and retains its data.</p><div id="mediafusion-manifest-fields" class="field-grid"></div></div>
 <div class="optional-setup"><h3>Usenet · optional</h3><label class="optional-service"><input id="enable-usenet" type="checkbox"> Use a Usenet account</label><div class="field-grid">
 <label><span class="field-label">Server hostname</span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
