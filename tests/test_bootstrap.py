@@ -199,14 +199,22 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(configured['yearMatching']['enabled'])
 
     def test_torrentio_uses_one_native_preset_with_explicit_custom_override(self):
-        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'true','KNIGHTCRAWLER_URL':''}):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'true','TORRENTIO_URL':''}):
             config=bootstrap.build_default_config(probe_services=False)
         presets=[p for p in config['presets'] if p['type']=='torrentio']
         self.assertEqual(len(presets),1);self.assertTrue(presets[0]['enabled']);self.assertEqual(presets[0]['options']['name'],'Torrentio')
-        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'false','KNIGHTCRAWLER_URL':'https://fixture.invalid'}):
+        with patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'),patch.dict(bootstrap.os.environ,{'ENABLE_TORRENTIO':'false','TORRENTIO_URL':'https://fixture.invalid'}):
             config=bootstrap.build_default_config(probe_services=False)
         preset=next(p for p in config['presets'] if p['type']=='torrentio')
         self.assertFalse(preset['enabled']);self.assertEqual(preset['options']['url'],'https://fixture.invalid')
+
+    def test_public_databases_can_be_toggled(self):
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'fixture-provider-key'), patch.dict(bootstrap.os.environ, {'ENABLE_REMUXDB': 'false', 'TORRENTIO_URL': 'https://custom.torrentio.example'}):
+            config = bootstrap.build_default_config(probe_services=False)
+        self.assertFalse(config['remuxDb']['enabled'])
+        preset = next(p for p in config['presets'] if p['type'] == 'torrentio')
+        self.assertEqual(preset['options']['url'], 'https://custom.torrentio.example')
+        self.assertEqual(preset['options']['name'], 'Torrentio (custom)')
 
     def test_managed_nzb_indexer_changes_address_in_place_and_can_be_disabled(self):
         existing={'id':73,'implementation':'Newznab','name':'AIO Local Usenet','enable':True,'fields':[{'name':'baseUrl','value':'http://old.fixture'},{'name':'apiKey','value':'fixture-old'}]}

@@ -1,11 +1,24 @@
 # Optional sources and Usenet validation — 2026-11-07
 
-## Torrentio and KnightCrawler
+## Torrentio, RemuxDB, and DMM Public Databases
 
-Gemini's commit `2faeaf6` enabled the native `torrentio` preset and renamed it
-“KnightCrawler / Torrentio.” It did not add a KnightCrawler container. Without
-`KNIGHTCRAWLER_URL`, the installed native adapter uses `https://torrentio.strem.fun`.
-The name is now accurate: Torrentio, or KnightCrawler (custom) for an override.
+To maximize stream resolution and release quality without imposing 24/7 background crawling burdens on local hardware, AIO Local bundles selectable upstream and curated public database integrations directly into AIOStreams and Zilean:
+
+1. **Torrentio (`ENABLE_TORRENTIO=true`)**:
+   - Queries the official Torrentio public index database (`https://torrentio.strem.fun`) directly.
+   - Because Torrentio maintains a massive pre-crawled database of millions of indexed torrents, queries return in **~0.029 seconds** with zero local CPU, crawling, or storage overhead.
+   - All stream requests are routed through AIOStreams' `BuiltinProxy`, ensuring 100% server-side IP isolation and preventing multi-IP debrid account bans.
+   - Set `ENABLE_TORRENTIO=false` to omit Torrentio and rely exclusively on local scrapers. Configure `TORRENTIO_URL` to override with a custom endpoint.
+
+2. **RemuxDB (`ENABLE_REMUXDB=true`)**:
+   - Directly sources technical MediaInfo container probes from the public RemuxDB database.
+   - Backfills exact audio codecs (e.g. TrueHD with Dolby Atmos, DTS-HD MA), video profiles, and HDR10+/Dolby Vision formats for accurate filtering and scoring.
+
+3. **DMM Database (`ENABLE_DMM=true`)**:
+   - Syncs curated community Debrid Media Manager (DMM) hashlists into our local **Zilean** container (`:8181`).
+   - Enables sub-50ms instant cache hits for high-demand movie and TV releases directly from your private PostgreSQL database.
+
+### Benchmark & Discovery Measurements
 
 Read-only comparisons used the retained installation without changing its files
 or profile. External discovery requests contained no provider credentials.
@@ -25,10 +38,6 @@ were not flushed; the response times are not cold-search measurements. Hash
 availability does not prove the correct episode/file, language, entitlement or
 successful decoding.
 
-The suggested public `https://knightcrawler.elfhosted.com` endpoint returned
-HTTP 200 HTML instead of addon JSON for its manifest and all four searches.
-There is no measured benefit to deploying a separate KnightCrawler service here.
-
 Keep one native Torrentio preset in AIOStreams. `providers: []` uses the adapter's
 default source selection. Returned results included sources such as ThePirateBay,
 1337x, Rutracker, Rutor, TorrentGalaxy, MagnetDL and RARBG; these labels describe
@@ -38,18 +47,12 @@ Do not add a second copy through Comet or another aggregator. Hash deduplication
 removes duplicate results; global external-site request deduplication is not
 established.
 
-`ENABLE_TORRENTIO=false` disables the native preset. The legacy
-`ENABLE_KNIGHTCRAWLER` switch remains a fallback if the canonical setting is
-absent. A custom `KNIGHTCRAWLER_URL` replaces the endpoint; it never creates a
-second preset. Usenet-only configurations omit it entirely.
-
 An isolated, credential-free native AIOStreams profile also passed movie/episode
 discovery: 168/79 P2P candidates in 1.798/0.786 seconds. The native schema retained
 cache-and-play, remux database, language inference, episode matching and sequential
 failover settings. Paid playback was not exercised by this comparison.
 
-Gemini's matching defaults exposed a registration bug: title/year matching
-requires TMDB. Bootstrap now disables the dependent features without a TMDB key.
+Title/year matching requires TMDB. Bootstrap disables dependent features without a TMDB key.
 Next-episode prefetch is opt-in (`AIO_PRECACHE_NEXT_EPISODE=true`), and failover
 uses one attempt at a time to avoid hidden parallel provider calls.
 

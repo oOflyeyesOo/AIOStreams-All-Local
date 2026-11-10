@@ -55,7 +55,7 @@ MediaFusion is off by default. Enable it on the setup page, optionally supplying
 
 For Usenet, enter the server, port, username, password, TLS and connection count on the setup page. Add a Newznab base URL/API key, or use your existing Prowlarr indexers. Connect my stack configures InfiniDysk and one Usenet-only native AIOStreams route automatically. Passwords stay hidden on reload; leaving the saved-password field blank preserves it. Disabling Usenet stops its managed provider connections and indexer polling while retaining credentials. The form replaces InfiniDysk's provider list when enabled. Unmanaged JSON/UI settings remain supported.
 
-Native Torrentio is enabled for debrid configurations and is not repeated inside Sootio or MediaFusion. Set `ENABLE_TORRENTIO=false` to omit it. `KNIGHTCRAWLER_URL` optionally replaces its endpoint; it does not add a container. Background next-episode searches are opt-in through `AIO_PRECACHE_NEXT_EPISODE=true`.
+Native Torrentio is enabled for debrid configurations and is not repeated inside Sootio or MediaFusion. Set `ENABLE_TORRENTIO=false` to omit it, or set `TORRENTIO_URL` to point to a custom endpoint. Additional selectable database enrichments include `ENABLE_REMUXDB=true` (high-precision audio/video probe metadata) and `ENABLE_DMM=true` (Debrid Media Manager hashlist syncing via Zilean). Background next-episode searches are opt-in through `AIO_PRECACHE_NEXT_EPISODE=true`.
 
 [Measured source coverage and fixture NNTP acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) distinguish authentication/indexer tests from unverified paid article playback.
 

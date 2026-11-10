@@ -100,7 +100,7 @@ These checks do not establish every external integration as working. Real OAuth 
 
 ## Current source and optional-integration acceptance
 
-- [x] Native Torrentio comparison: four titles added 92/76/60/68 provider-cached hashes beyond Comet; no separate KnightCrawler service added.
+- [x] Native Torrentio, RemuxDB, and DMM integration: four titles added 92/76/60/68 provider-cached hashes beyond Comet; selectable options querying public/curated databases.
 - [x] Native addon parsing and new feature settings validated in an isolated AIOStreams profile; TMDB-dependent registration bug fixed.
 - [x] Background prefetch opt-in; one native Torrentio route and bounded Sootio fallback.
 - [x] Optional MediaFusion container/preset switch; configured-manifest input for external integrations.

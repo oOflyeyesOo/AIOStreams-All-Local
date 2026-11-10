@@ -109,6 +109,10 @@ services:
       - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
+      - ENABLE_TORRENTIO=${ENABLE_TORRENTIO:-true}
+      - TORRENTIO_URL=${TORRENTIO_URL:-}
+      - ENABLE_REMUXDB=${ENABLE_REMUXDB:-true}
+      - ENABLE_DMM=${ENABLE_DMM:-true}
       - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
     healthcheck:
@@ -421,7 +425,7 @@ services:
       - Zilean__Database__ConnectionString=Host=shared-postgres;Database=zilean;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
       - Zilean__Dmm__ImportBatched=true
       - Zilean__Parsing__BatchSize=${ZILEAN_BATCH_SIZE:-500}
-      - Zilean__Dmm__EnableScraping=${ZILEAN_ENABLE_SCRAPING:-true}
+      - Zilean__Dmm__EnableScraping=${ENABLE_DMM:-${ZILEAN_ENABLE_SCRAPING:-true}}
       - Zilean__Dmm__ScrapeSchedule=${ZILEAN_SCRAPE_SCHEDULE:-0 4 * * *}
       - Zilean__Dmm__MinimumReDownloadIntervalMinutes=1440
     networks:

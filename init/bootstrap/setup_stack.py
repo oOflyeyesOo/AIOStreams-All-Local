@@ -407,7 +407,7 @@ def setup_prowlarr_indexers():
         if torznab_schema:
             z_payload = dict(torznab_schema)
             z_payload["name"] = "Zilean DMM (Local)"
-            z_payload["enable"] = True
+            z_payload["enable"] = os.environ.get("ENABLE_DMM", os.environ.get("ZILEAN_ENABLE_SCRAPING", "true")).lower() != "false"
             z_payload["priority"] = 1
             z_payload["appProfileId"] = 1
             for f in z_payload.get("fields", []):
@@ -1252,11 +1252,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 continue
             opts["name"] = "Torrentio"
             opts["timeout"] = 8000
-            if os.environ.get("KNIGHTCRAWLER_URL"):
-                opts["url"] = os.environ.get("KNIGHTCRAWLER_URL")
-                opts["name"] = "KnightCrawler (custom)"
-            enable_kc = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
-            p["enabled"] = enable_kc
+            custom_url = os.environ.get("TORRENTIO_URL") or os.environ.get("KNIGHTCRAWLER_URL", "")
+            if custom_url:
+                opts["url"] = custom_url
+                opts["name"] = "Torrentio (custom)"
+            enable_t = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
+            p["enabled"] = enable_t
             validated_presets.append(p)
         elif ptype == "mediafusion":
             if os.environ.get('MEDIAFUSION_REPLICAS','0') in ('0', 'false', ''):
@@ -1451,7 +1452,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config.pop('precacheCondition',None)
     config.pop('alwaysPrecache',None)
     config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["torrent", "usenet"]})
-    config.setdefault("remuxDb", {"enabled": True})
+    enable_remuxdb = os.environ.get("ENABLE_REMUXDB", "true").lower() != "false"
+    config["remuxDb"] = {"enabled": enable_remuxdb}
     config.setdefault("titleMatching", {"enabled": True, "mode": "contains", "similarityThreshold": 0.85})
     config.setdefault("seasonEpisodeMatching", {"enabled": True, "strict": False})
     config.setdefault("episodeTitleMatching", {"enabled": True, "similarityThreshold": 0.8})
