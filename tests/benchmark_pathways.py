@@ -3,7 +3,7 @@
 
 Tests all possible communication paths between:
 - AIOStreams (Super-Aggregator)
-- Scrapers (Comet, Sootio)
+- Scrapers (Comet)
 - Indexer Managers & Cache (Prowlarr, Zilean)
 - Personal Debrid Cloud (Debrid Search, StremThru Store)
 
@@ -26,7 +26,6 @@ PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/"
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
-SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
@@ -210,16 +209,6 @@ def benchmark_zilean_pathways():
 
     run_benchmark("Zilean", "DMM Cache", "Route 2B: Direct Zilean REST (TV Episode)", path_direct_zilean_tv)
 
-    # Path 2C: Via Sootio (Sootio -> Zilean bridge)
-    def path_via_sootio():
-        url = f"{SOOTIO_URL}/stream/movie/tt1375666.json"
-        code, body, ttfb, total = http_get(url, timeout=15.0)
-        data = json.loads(body)
-        streams = data.get("streams", [])
-        return len(streams), "resolved streams via Sootio (Zilean-backed)", ttfb, total
-
-    run_benchmark("Zilean", "Stremio Bridge", "Route 2C: Via Sootio (Zilean + Direct Scrapers)", path_via_sootio)
-
     # Path 2D: Via Comet (Comet -> Zilean bridge)
     def path_via_comet_zilean():
         comet_cfg = base64.b64encode(json.dumps({
@@ -275,7 +264,7 @@ def benchmark_stream_proxy_pathways():
     # Step 1: Obtain a live stream from Sootio / Comet
     stream_url = None
     try:
-        url = f"{SOOTIO_URL}/stream/movie/tt1375666.json"
+        url = f"{COMET_URL}/stream/movie/tt1375666.json"
         code, body, _, _ = http_get(url, timeout=15.0)
         data = json.loads(body)
         for s in data.get("streams", []):
@@ -297,7 +286,7 @@ def benchmark_stream_proxy_pathways():
     # Path 4C: Direct Playback Probe through AIOStreams BuiltinProxy
     if stream_url:
         def path_direct_resolve():
-            # Follow 302 redirect from Sootio resolve endpoint to CDN
+            # Follow 302 redirect from resolver endpoint to CDN
             req = urllib.request.Request(stream_url, headers={"User-Agent": "VLC/3.0.18"})
             t0 = time.time()
             opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
@@ -352,8 +341,8 @@ def print_optimal_topology_analysis():
             "Endpoint": "Zilean (DMM Cache)",
             "Direct Latency": "~90ms",
             "Direct AIOStreams Addon?": "No (API only)",
-            "Optimal Pathway": "AIOStreams -> Comet & Sootio -> Zilean",
-            "Why": "Zilean provides sub-100ms local Postgres hash lookups. Comet and Sootio query Zilean instantly before checking external trackers.",
+            "Optimal Pathway": "AIOStreams -> Comet -> Zilean",
+            "Why": "Zilean provides sub-100ms local Postgres hash lookups. Comet queries Zilean instantly before checking external trackers.",
         },
         {
             "Endpoint": "Prowlarr (Torrents/Indexers)",

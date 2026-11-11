@@ -110,7 +110,7 @@ For remote playback, route these two endpoints through your reverse proxy or tun
 
 
 
-All other microservices (Comet, Sootio, Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
+All other microservices (Comet, Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
 
 
 
@@ -145,7 +145,6 @@ flowchart LR
         Comet["Comet (:8000)"]
 
 
-        Sootio["Sootio (:55771)"]
 
         Zilean["Zilean DMM (:8181)"]
 
@@ -177,11 +176,11 @@ flowchart LR
 
     
 
-    AIO -->|2. Internal Scrape| Comet & Sootio
+    AIO -->|2. Internal Scrape| Comet
 
     AIOMeta -->|Internal Poster Cache| Posters
 
-    Comet & Sootio -->|3. Torrent/Cache Lookup| Zilean & Prowlarr & DB
+    Comet -->|3. Torrent/Cache Lookup| Zilean & Prowlarr & DB
 
     AIO -->|4. Resolve & Follow 302 Redirect| CDN
 
@@ -193,7 +192,7 @@ flowchart LR
 
 * **Internal Loopback Binding (`INTERNAL_BIND_IP=127.0.0.1`)**: Internal scrapers, indexers, and proxies bind to `127.0.0.1` on the host, preventing unauthenticated access from the public internet even on a VPS where Docker bypasses UFW. For private home LAN NAS deployments needing direct LAN dashboard access, set `INTERNAL_BIND_IP=0.0.0.0` in `.env`.
 
-* **Built-in Stream Proxying**: AIOStreams' `BuiltinProxy` intercepts stream requests and transforms scraper links (e.g. `http://sootio:55771/...` or `http://comet:8000/...`) into secure proxy endpoints (`${BASE_URL}/api/v1/proxy/...`).
+* **Built-in Stream Proxying**: AIOStreams' `BuiltinProxy` intercepts stream requests and transforms scraper links (e.g. `http://comet:8000/...`) into secure proxy endpoints (`${BASE_URL}/api/v1/proxy/...`).
 
 * **Debrid CDN Redirect Handling**: When playing media, AIOStreams follows the provider's 302 redirect internally and streams video bytes directly to your player over HTTP 206 Partial Content.
 
@@ -328,11 +327,11 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
 | **`core`** (Recommended Lean) | `docker compose --profile core up -d` | **~1.1 GB** | AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL, Redis, Portal. Ideal for low-memory VPS relying on Comet and Torrentio. |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | **~2.7 GB** | Core + Sootio, Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
+| **`scrapers`** | `docker compose --profile scrapers up -d` | **~2.7 GB** | Core + Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + StremThru proxy router, InfiniDysk Usenet Engine. |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
 | **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
-| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 18 microservices running on `stremio-net`. |
+| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 17 continuous containers running on `stremio-net`. |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
@@ -362,7 +361,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Management & Watchdog** | AIO Portal (`:8088`), Stack Watchdog | Central setup wizard, dual manifest exporter, automated backups, and live integration monitor |
 
-| **Scrapers** | Comet (`:8000`), Sootio (`:55771`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
+| **Scrapers** | Comet (`:8000`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
 
 | **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Search Broker (`:8091`), Byparr (`:8191`) | DMM hash cache (<100ms lookup), intelligent indexer caching/deduplication broker, auto-provisioned indexers, and Cloudflare bypass |
 
@@ -413,7 +412,7 @@ Every media query and stream playback undergoes a coordinated journey across the
        ├── Intelligent Query Broker (:8091) ──► Prowlarr ──► Byparr (Cloudflare bypass)
        ├── Primary Local Scrapers ────────────► Comet (:8000), Zilean DMM (:8181), StremThru Store (:8080)
        ├── Public & Community Databases ──────► Torrentio (~30ms cloud index), RemuxDB (MediaInfo audio/HDR)
-       └── Adaptive Sequential Fallback ──────► Sootio (triggers ONLY if 0 cached streams found)
+       └── Native DHT & Multi-Tracker Indexing ► Bitsearch & SolidTorrents via Prowlarr
                │
                ▼
   3. Debrid Cache Probe & Filtering
@@ -450,9 +449,9 @@ Every media query and stream playback undergoes a coordinated journey across the
    - Primary local scrapers (**Comet**, **Zilean DMM cache**, **Anime Kitsu**) return instant local results without external scraping delays.
    - Selectable public databases (**Torrentio** cloud index at ~30ms, **RemuxDB** MediaInfo specs) inject massive pre-indexed release coverage without local crawler overhead.
 
-3. **Adaptive Sequential Fallback (`SOOTIO_MODE=fallback`)**:
-   - Secondary multi-scrapers like **Sootio** run only when `count(cached(totalStreams)) == 0`.
-   - If Comet, Zilean, or Torrentio return cached streams, Sootio remains idle—saving CPU, memory, and network bandwidth.
+3. **Native DHT & Multi-Tracker Indexing (Prowlarr + Byparr)**:
+   - Prowlarr natively probes Bitsearch, SolidTorrents, and top public trackers with automated Cloudflare bypass via Byparr.
+   - DHT meta-search indexers feed Comet and Zilean instant cached torrent hashes directly into AIOStreams without the overhead of heavy standalone scrapers.
 
 4. **Instant Debrid Cache Validation & SEL Scoring**:
    - Discovered infohashes are checked against the user's debrid provider API (Real-Debrid, Premiumize, Torbox, AllDebrid, Debrid-Link) or StremThru Store (`:8080`).

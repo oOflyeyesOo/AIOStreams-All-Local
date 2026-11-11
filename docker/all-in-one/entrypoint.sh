@@ -14,7 +14,6 @@ mkdir -p /data/aiostreams \
          /data/comet \
          /data/prowlarr \
          /data/subsense \
-         /data/sootio \
          /data/stremthru \
          /data/redis \
          /data/postgres \
@@ -244,7 +243,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • SubSense Subtitles:    http://localhost:3100"
     echo " • InfiniDysk Usenet:     http://localhost:3005"
     echo " • Comet Scraper:         http://localhost:8000"
-    echo " • Sootio Multi-Scraper:  http://localhost:55771"
     echo " • Anime Kitsu:           http://localhost:7005"
     echo " • Prowlarr Indexers:     http://localhost:9696"
     echo " • Zilean Hash Cache:     http://localhost:8181"

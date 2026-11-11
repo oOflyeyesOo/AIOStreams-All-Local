@@ -58,7 +58,6 @@ function Ensure-Directories {
         "data/comet",
         "data/prowlarr",
         "data/subsense",
-        "data/sootio",
         "data/redis",
         "data/postgres",
         "data/slicksync",
@@ -126,7 +125,6 @@ function Test-SystemPrerequisites {
         @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
         @{ Port = 8082; Service = "Stremio Web Player & Engine" },
         @{ Port = 3011; Service = "Stremio Debrid Search (Personal Cloud)" },
-        @{ Port = 55771; Service = "Sootio Multi-Scraper" }
     )
 
     $conflicts = @()
@@ -392,7 +390,6 @@ function Show-StremioLinks {
     Write-Host "  • SubSense Subtitles:    http://localhost:3100"
     Write-Host "  • InfiniDysk Usenet:     http://localhost:3005"
     Write-Host "  • Comet Scraper:         http://localhost:8000"
-    Write-Host "  • Sootio Multi-Scraper:  http://localhost:55771"
     Write-Host "  • Anime Kitsu:           http://localhost:7005"
     Write-Host "  • Prowlarr Indexers:     http://localhost:9696"
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"

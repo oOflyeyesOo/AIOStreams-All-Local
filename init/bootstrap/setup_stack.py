@@ -3,9 +3,9 @@
 AIOStreams All-Local Unified Stack Bootstrapper & Auto-Provisioner
 Automates zero-touch configuration across all stack services upon launch:
 1. Prowlarr: Registers FlareSolverr Cloudflare bypass and auto-seeds top public torrent trackers.
-3. Comet, InfiniDysk & Sootio: Validates connectivity and internal routing.
+3. Comet & InfiniDysk: Validates connectivity and internal routing.
 4. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
-   template (Comet, Torrentio, Sootio, AIOMetadata, SubSense, InfiniDysk,
+   template (Comet, Torrentio, AIOMetadata, SubSense, InfiniDysk,
    and Debrid Search) with Premiumize & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
 5. Stremio Web: Pre-seeds local storage so the AIOStreams super-addon is already installed out-of-the-box.
 6. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
@@ -124,7 +124,6 @@ FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191"
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
 STREMIO_WEB_URL = os.environ.get("STREMIO_WEB_URL", "http://stremio-web:8080").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
@@ -221,11 +220,15 @@ def resolve_aiometadata_template_path(template_name=""):
     return AIOMETADATA_CONFIG_PATH
 
 TARGET_INDEXERS = [
+    "bitsearch",
+    "solidtorrents",
     "1337x",
     "yts",
     "eztv",
     "thepiratebay",
     "torrentgalaxy",
+    "limetorrents",
+    "magnetdl",
     "kickasstorrents-ws",
     "badass-torrents",
     "torrentdownload",
@@ -474,7 +477,7 @@ def setup_usenet_indexer():
 
 
 # ==============================================================================
-# 2. COMET, INFINIDYSK, SOOTIO STATUS
+# 2. COMET & INFINIDYSK STATUS
 # ==============================================================================
 def wait_for_comet(max_attempts=15, interval=2):
     print(f"[Comet Setup] Checking Comet status at {COMET_URL}...", flush=True)
@@ -487,19 +490,6 @@ def wait_for_comet(max_attempts=15, interval=2):
     print("[Comet Setup] Note: Comet is booting up in background.", flush=True)
     return False
 
-def wait_for_sootio(max_attempts=15, interval=2):
-    print(f"[Sootio Setup] Checking Sootio status at {SOOTIO_URL}...", flush=True)
-    for attempt in range(1, max_attempts + 1):
-        res = make_request(f"{SOOTIO_URL}/manifest.json")
-        if isinstance(res, dict) and ("id" in res or "name" in res):
-            print(f"[Sootio Setup] ✓ Sootio Multi-Scraper is online with auto-configured RealDebrid/Zilean/FlareSolverr! (attempt {attempt})", flush=True)
-            return True
-        if attempt == 3 and not is_url_reachable(SOOTIO_URL, timeout=1.0):
-            print("[Sootio Setup] ℹ️ Sootio is not active in current profile. Skipping...", flush=True)
-            return False
-        time.sleep(interval)
-    print("[Sootio Setup] Note: Sootio is booting up in background.", flush=True)
-    return False
 
 def wait_for_postersplus(max_attempts=20, interval=2):
     print(f"[Posters+ Setup] Waiting for Posters+ at {POSTERSPLUS_URL}...", flush=True)
@@ -886,19 +876,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         },
         {
             "type": "custom",
-            "instanceId": "sootio-local",
-            "enabled": True,
-            "options": {
-                "name": "Sootio (Local Multi-Scraper)",
-                "manifestUrl": "http://sootio:55771/manifest.json",
-                "libraryAddon": False,
-                "resultPassthrough": False,
-                "forceToTop": False,
-                "timeout": 8000
-            }
-        },
-        {
-            "type": "custom",
             "instanceId": "aiometadata-local",
             "enabled": True,
             "options": {
@@ -938,34 +915,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         }
     ])
 
-    # Dynamic Sootio Manifest with Debrid credentials
-    if usenet_active:
-        presets.append({'type':'prowlarr','instanceId':'prowlarr-usenet','enabled':True,'options':{
-            'name':'Usenet (Prowlarr → InfiniDysk)','prowlarrUrl':PROWLARR_URL,'prowlarrApiKey':PROWLARR_API_KEY,
-            'sources':['usenet'],'services':['nzbdav'],'resources':['stream'],'timeout':8000}})
-    sootio_url = f"{SOOTIO_URL}/manifest.json"
-    if REALDEBRID_API_KEY or PREMIUMIZE_API_KEY or TORBOX_API_KEY or ALLDEBRID_API_KEY:
-        debrid_services = []
-        if REALDEBRID_API_KEY:
-            debrid_services.append({"provider": "RealDebrid", "apiKey": REALDEBRID_API_KEY})
-        if PREMIUMIZE_API_KEY:
-            debrid_services.append({"provider": "Premiumize", "apiKey": PREMIUMIZE_API_KEY})
-        if TORBOX_API_KEY:
-            debrid_services.append({"provider": "TorBox", "apiKey": TORBOX_API_KEY})
-        if ALLDEBRID_API_KEY:
-            debrid_services.append({"provider": "AllDebrid", "apiKey": ALLDEBRID_API_KEY})
-        if debrid_services:
-            sootio_cfg = {
-                "DebridServices": debrid_services,
-                "DebridProvider": debrid_services[0]["provider"],
-                "DebridApiKey": debrid_services[0]["apiKey"],
-                "Languages": ["en"],
-                "Resolutions": ["4k", "1080p", "720p"],
-                "ShowCatalog": False,
-                "Scrapers": ["magnetdl", "btdig"],
-                "IndexerScrapers": []
-            }
-            sootio_url = f"{SOOTIO_URL}/{urllib.parse.quote(json.dumps(sootio_cfg))}/manifest.json"
 
     # Ensure knaben is present but disabled by default to prevent slow public tracker debrid cache timeouts
     if not any(p.get("type") == "knaben" for p in presets):
@@ -1071,12 +1020,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         except Exception as e:
             print(f"[AIOStreams Setup] Note encrypting subtitle config: {e}", flush=True)
 
-    sootio_mode = os.environ.get("SOOTIO_MODE")
-    if sootio_mode is None:
-        legacy = os.environ.get("ENABLE_EXTENDED_SCRAPERS")
-        sootio_mode = "off" if legacy == "false" else "fallback"
-    if sootio_mode not in ("off", "fallback", "parallel"):
-        raise ValueError("SOOTIO_MODE must be off, fallback or parallel")
 
     # Post-process presets: verify reachability for custom manifests to prevent
     # AIOStreams from rejecting the profile with USER_INVALID_CONFIG on partial/core profiles.
@@ -1132,7 +1075,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             validated_presets.append(p)
         elif ptype == "easynews-search":
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
-            # Direct EasyNews delivery owns this account; no second Sootio/NNTP route.
+            # Direct EasyNews delivery owns this account.
             opts['services']=['easynews']
             opts['useMultipleInstances']=False
             opts['paginate']=False
@@ -1159,20 +1102,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             # For custom addons, verify reachability before sending to AIOStreams.
             # AIOStreams fetches manifests on startup/save and rejects the entire profile
             # with USER_INVALID_CONFIG if any custom manifest cannot be retrieved.
-            if pid == "sootio-local" or ("sootio" in pid):
-                if not any(s.get('enabled') and s.get('id') in ('premiumize','realdebrid','alldebrid','torbox','debridlink') for s in services):
-                    continue
-                opts["manifestUrl"] = sootio_url
-                opts["resources"] = ["stream"]
-                curr_timeout = int(opts.get("timeout") or 7000)
-                opts["timeout"] = 8000
-                if reachable(sootio_url, timeout=1.0) and sootio_mode != "off":
-                    p["enabled"] = True
-                    print(f"[AIOStreams Setup] ✓ Sootio (Local) is online and active.", flush=True)
-                    validated_presets.append(p)
-                else:
-                    print(f"[AIOStreams Setup] ℹ️ Sootio not reachable in current profile; omitting from active presets.", flush=True)
-            elif pid == "aiometadata-local" or ("aiometadata" in pid):
+            if pid == "aiometadata-local" or ("aiometadata" in pid):
                 if not aiometadata_manifest:
                     print("[AIOStreams Setup] AIOMetadata has no saved profile; omitting its unconfigured manifest.", flush=True)
                     continue
@@ -1213,7 +1143,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             validated_presets.append(p)
 
     config = dict(base_config)
-    # Configure BuiltinProxy so internal Docker scraper streams (Comet, Sootio)
+    # Configure BuiltinProxy so internal Docker scraper streams (Comet)
     # resolve and stream properly through AIOStreams over the single public port (3001)
     existing_proxy = base_config.get("proxy") if isinstance(base_config.get("proxy"), dict) else {}
     proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
@@ -1237,14 +1167,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
     config["addonDescription"] = "Unified all-in-one local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers."
     config["services"] = services
     config["presets"] = validated_presets
-    fallback = [p["instanceId"] for p in validated_presets if p.get("enabled") and p.get("instanceId") == "sootio-local"]
-    primary = [p["instanceId"] for p in validated_presets if p.get("enabled") and p.get("instanceId") not in fallback]
-    if fallback and primary and sootio_mode == "fallback":
-        config["groups"] = {"enabled": True, "behaviour": "sequential", "onConditionFailure": "stop",
-                            "groupings": [{"addons": primary, "condition": "true"},
-                                          {"addons": fallback, "condition": "count(cached(totalStreams)) == 0"}]}
-    else:
-        config.pop("groups", None)
+    config.pop("groups", None)
 
     # Sanitize formatter to ensure compliance with AIOStreams schema
     if "formatter" in config and isinstance(config["formatter"], dict):
@@ -1739,10 +1662,9 @@ def main():
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)
 
-    # 2. Comet, Sootio, InfiniDysk
+    # 2. Comet & InfiniDysk
     try:
         wait_for_comet()
-        wait_for_sootio()
     except Exception as e:
         print(f"[Scraper Checks] Note: {e}", flush=True)
 

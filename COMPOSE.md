@@ -21,7 +21,7 @@ reduce the power of its socket mount. Keep the portal authenticated and on a
 trusted network. Moving maintenance behind controller actions remains planned.
 
 ### Port Exposure & Firewall Protection
-By default, internal microservices (Comet, Prowlarr, Sootio, Zilean,
+By default, internal microservices (Comet, Prowlarr, Zilean,
 StremThru, etc.) bind their host ports to `127.0.0.1` using `INTERNAL_BIND_IP`.
 On a VPS or unfirewalled host, Docker will not expose these internal scrapers to the public
 internet. Only the two player ingress points are published externally:
@@ -53,7 +53,7 @@ alone do not guarantee a paid account has the required entitlement.
 
 For Usenet, enter the server, port, username, password, TLS and connection count on the setup page. Add a Newznab base URL/API key, or use your existing Prowlarr indexers. Connect my stack configures InfiniDysk and one Usenet-only native AIOStreams route automatically. Passwords stay hidden on reload; leaving the saved-password field blank preserves it. Disabling Usenet stops its managed provider connections and indexer polling while retaining credentials. The form replaces InfiniDysk's provider list when enabled. Unmanaged JSON/UI settings remain supported.
 
-Native Torrentio is enabled for debrid configurations and is not repeated inside Sootio. Set `ENABLE_TORRENTIO=false` to omit it, or set `TORRENTIO_URL` to point to a custom endpoint. Additional selectable database enrichments include `ENABLE_REMUXDB=true` (high-precision audio/video probe metadata) and `ENABLE_DMM=true` (Debrid Media Manager hashlist syncing via Zilean). Background next-episode searches are opt-in through `AIO_PRECACHE_NEXT_EPISODE=true`.
+Native Torrentio is enabled for debrid configurations. Set `ENABLE_TORRENTIO=false` to omit it, or set `TORRENTIO_URL` to point to a custom endpoint. Additional selectable database enrichments include `ENABLE_REMUXDB=true` (high-precision audio/video probe metadata) and `ENABLE_DMM=true` (Debrid Media Manager hashlist syncing via Zilean). Background next-episode searches are opt-in through `AIO_PRECACHE_NEXT_EPISODE=true`.
 
 [Measured source coverage and fixture NNTP acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) distinguish authentication/indexer tests from unverified paid article playback.
 
@@ -117,5 +117,5 @@ The setup page can enable Anime Tosho, nekoBT and TsukiHime for anime requests.
 Compatible accounts are selected automatically; unsupported sources stay disabled.
 They are opt-in while incremental coverage and timing acceptance remains pending.
 EasyNews direct search uses `EASYNEWS_USER`/`EASYNEWS_PASSWORD` from the private
-`.env`, and runs once through AIOStreams rather than through Sootio as well.
+`.env`, and runs directly through AIOStreams.
 Native schemas/manifests passed fixture checks; paid EasyNews access remains unverified.

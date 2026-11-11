@@ -35,7 +35,6 @@ jobs:
           python3 scripts/generate_manager_compose.py --check
           docker compose --env-file .env.example -f compose.manager.yml config --quiet
           docker compose -p aio-tests -f compose.test.yml run --rm tests
-          docker compose -p aio-tests -f compose.test.yml run --build --rm sootio-tests
   publish:
     needs: verify
     runs-on: ubuntu-latest
@@ -47,7 +46,6 @@ jobs:
           - {name: portal, target: portal, file: docker/packaged/Dockerfile}
           - {name: controller, target: controller, file: docker/packaged/Dockerfile}
           - {name: aiostreams, target: aiostreams, file: docker/packaged/Dockerfile}
-          - {name: sootio, target: sootio, file: docker/packaged/Dockerfile}
           - {name: stremio-web, target: stremio-web, file: docker/packaged/Dockerfile}
           - {name: bootstrap, target: bootstrap, file: docker/packaged/Dockerfile}
           - {name: postgres-init, target: postgres-init, file: docker/packaged/Dockerfile}

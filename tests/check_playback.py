@@ -16,9 +16,7 @@ try:
     candidate = min(candidates, key=lambda stream: stream.get('behaviorHints', {}).get('videoSize', 1e15))
     parsed = urllib.parse.urlsplit(candidate['url'])
     target = candidate['url']
-    if parsed.hostname in ('localhost', '127.0.0.1') and parsed.port == 55771:
-        target = urllib.parse.urlunsplit(('http', 'sootio:55771', parsed.path, parsed.query, ''))
-    elif parsed.hostname in ('aio.yourdomain.com', 'localhost') and parsed.port in (3000, 3001, None):
+    if parsed.hostname in ('aio.yourdomain.com', 'localhost') and parsed.port in (3000, 3001, None):
         target = urllib.parse.urlunsplit(('http', 'aiostreams:3000', parsed.path, parsed.query, ''))
     request = urllib.request.Request(target, headers={'Range': 'bytes=0-1023'})
     with urllib.request.urlopen(request, timeout=45) as response:

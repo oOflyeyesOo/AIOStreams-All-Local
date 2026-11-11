@@ -378,7 +378,7 @@ def public_service_urls(base_url):
         is_local = host == "localhost" or "." not in host or host.endswith((".local", ".lan"))
     if ":" in host:
         host = f"[{host}]"
-    ports = {"SOOTIO_URL": 55771, "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
+    ports = {"NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
     urls = {key: f"{parsed.scheme}://{host}:{port}" for key, port in ports.items()}
     if is_local:
         urls["AIOMETADATA_HOST"] = f"{parsed.scheme}://{host}:4005"

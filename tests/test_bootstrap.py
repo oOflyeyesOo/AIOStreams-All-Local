@@ -134,21 +134,12 @@ class BootstrapTests(unittest.TestCase):
         )
 
     def test_subtitles_use_configured_path_even_without_optional_keys(self):
-        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"off"}),patch.object(bootstrap,"make_request",return_value={}):
+        with patch.object(bootstrap,"make_request",return_value={}):
             config=bootstrap.build_default_config(probe_services=False)
         subtitle=next(p for p in config['presets'] if p['instanceId']=='subsense-local')
         self.assertNotEqual(subtitle['options']['manifestUrl'],'http://subsense:3100/manifest.json')
         self.assertEqual(subtitle['options']['resources'],['subtitles'])
         self.assertFalse(any(p['instanceId']=='aiometadata-local' for p in config['presets']))
-
-    def test_sootio_is_sequential_fallback_not_parallel_default(self):
-        with patch.dict(bootstrap.os.environ,{"SOOTIO_MODE":"fallback"}), patch.object(bootstrap,'PREMIUMIZE_API_KEY','fixture-provider-key'):
-            config=bootstrap.build_default_config(probe_services=False)
-        self.assertEqual(config['groups']['behaviour'],'sequential')
-        self.assertEqual(config['groups']['groupings'][1]['addons'],['sootio-local'])
-        self.assertEqual(config['groups']['groupings'][1]['condition'],'count(cached(totalStreams)) == 0')
-        anime=next(p for p in config['presets'] if p['instanceId']=='anime-kitsu-local')
-        self.assertEqual(anime['options']['resources'],['catalog','meta'])
 
 
     def test_usenet_uses_native_nzb_route_and_skips_torrent_sources_without_debrid(self):
@@ -176,7 +167,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(any(s['id']=='nzbdav' for s in config['services']))
         preset=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
         self.assertEqual(preset['options']['sources'],['usenet']);self.assertEqual(preset['options']['services'],['nzbdav'])
-        self.assertFalse(any(p['type']=='comet' or p['instanceId']=='sootio-local' for p in config['presets']))
+        self.assertFalse(any(p['type']=='comet' for p in config['presets']))
         self.assertFalse(any(p['type']=='torrentio' for p in config['presets']))
 
     def test_no_metadata_key_does_not_enable_features_that_block_registration(self):
@@ -244,7 +235,6 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn("aiometadata-local", preset_ids)
             # Unreachable custom addons omitted
             self.assertNotIn("debrid-search-local", preset_ids)
-            self.assertNotIn("sootio-local", preset_ids)
             self.assertNotIn("anime-kitsu-local", preset_ids)
             self.assertNotIn("comet-local", preset_ids)
 
@@ -330,7 +320,7 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.object(bootstrap,'EASYNEWS_USER','fixture-easynews-user'),patch.object(bootstrap,'EASYNEWS_PASSWORD','fixture-easynews-pass'):
             config=bootstrap.build_default_config(probe_services=False)
         enabled=[p for p in config['presets'] if p.get('enabled')]
-        self.assertFalse(any(p['type'] in ('comet','torrentio') or p['instanceId']=='sootio-local' for p in enabled))
+        self.assertFalse(any(p['type'] in ('comet','torrentio') for p in enabled))
         route=next(p for p in enabled if p['type']=='easynews-search')
         self.assertEqual(route['options']['services'],['easynews'])
         self.assertFalse(route['options']['paginate'])
@@ -366,7 +356,6 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(config['failover']['allowCrossType'])
         self.assertFalse(any(p['instanceId'] == 'debrid-search-local' for p in config['presets']))
         self.assertFalse(any(p['instanceId'] == 'comet-local' for p in config['presets']))
-        self.assertFalse(any(p['instanceId'] == 'sootio-local' for p in config['presets']))
         self.assertFalse(any(p['type'] == 'torrentio' for p in config['presets']))
         usenet_p = next(p for p in config['presets'] if p['instanceId'] == 'prowlarr-usenet')
         self.assertTrue(usenet_p['enabled'])

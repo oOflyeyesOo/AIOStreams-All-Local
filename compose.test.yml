@@ -1,36 +1,4 @@
 services:
-  sootio-tests:
-    build:
-      context: .
-      dockerfile: docker/sootio/Dockerfile
-    working_dir: /src
-    volumes:
-      - ./:/src:ro
-    command: ["node", "--test", "tests/sootio-performance.test.mjs"]
-    environment:
-      - BTDIG_ENABLED=true
-      - MAGNETDL_ENABLED=true
-      - ZILEAN_ENABLED=false
-      - COMET_ENABLED=false
-      - TORRENTIO_ENABLED=false
-      - STREMTHRU_ENABLED=false
-  browser-tests:
-    image: node:22-alpine
-    working_dir: /app
-    volumes:
-      - ./:/app:ro
-    command: node --test tests/browser-bootstrap.test.cjs tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs
-
-  providers:
-    image: python:3.11-alpine
-    working_dir: /app
-    env_file:
-      - path: .env
-        required: false
-    volumes:
-      - ./tests/check_providers.py:/app/check_providers.py:ro
-    command: python3 check_providers.py
-
   tests:
     image: python:3.11-alpine
     working_dir: /app
@@ -67,6 +35,6 @@ services:
       - |
         sh /init-databases.sh
         sh /init-databases.sh
-        count=$$(psql -h shared-postgres -U postgres -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname IN ('zilean','mediafusion','aiometadata','sootio')")
+        count=$$(psql -h shared-postgres -U postgres -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname IN ('zilean','aiometadata')")
         test "$$count" = 4
         echo 'Database creation and repeat startup passed.'

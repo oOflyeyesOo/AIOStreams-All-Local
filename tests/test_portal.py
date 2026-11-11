@@ -25,7 +25,7 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 15)
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 14)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,
@@ -272,10 +272,9 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(self.request("/api/setup", "POST", auth=True)[0], 503)
 
     def test_public_addresses_follow_base_without_overwriting_custom_hosts(self):
-        portal.save_env_updates({"BASE_URL": "http://oldnas:3000", "SOOTIO_URL": "http://oldnas:55771", "NUVIO_ORIGIN": "https://player.example.org"})
+        portal.save_env_updates({"BASE_URL": "http://oldnas:3000", "KITSU_URL": "http://oldnas:7005", "NUVIO_ORIGIN": "https://player.example.org"})
         self.assertEqual(self.request("/api/save", "POST", {"BASE_URL": "http://newnas:3000"}, True)[0], 200)
         content = (self.root / ".env").read_text()
-        self.assertIn("SOOTIO_URL=http://newnas:55771", content)
         self.assertIn("KITSU_URL=http://newnas:7005", content)
         self.assertIn("NUVIO_ORIGIN=https://player.example.org", content)
 

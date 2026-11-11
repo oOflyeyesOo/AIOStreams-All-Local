@@ -93,7 +93,7 @@ COMPOSE_PROFILES=core
 | **`proxies`** | **~1.8 GB** | **Extended Proxy & Usenet Routing**: Launches `core` plus StremThru proxy router, and InfiniDysk Usenet Engine (`:3005`). |
 | **`web`** | **~1.6 GB** | **Web Players & Sync Hub**: Launches `core` plus Stremio Web Player (`:8082`), Nuvio Web Player (`:8085`), and SlickSync Hub (`:8086`). |
 | **`usenet`** | **~2.2 GB** | **Dedicated Usenet Streaming**: Launches `core` plus InfiniDysk (`:3005`), NZBDav, and Prowlarr configured with Newznab indexers for direct NNTP debrid-free streaming. |
-| **`all`** (Default) | **~3.1 GB** | **Complete Appliance**: Runs all 18 microservices simultaneously on `stremio-net` with zero missing components. |
+| **`all`** (Default) | **~3.1 GB** | **Complete Appliance**: Runs all continuous containers simultaneously on `stremio-net` with zero missing components. |
 
 ---
 

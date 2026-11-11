@@ -22,13 +22,6 @@ FROM ghcr.io/viren070/aiostreams:latest AS aiostreams
 COPY docker/aiostreams/entrypoint.sh /entrypoint.sh
 COPY templates/builtin /app/resources/templates
 
-FROM midnightignite1/sootio-stremio-addon:latest AS sootio
-COPY docker/sootio/bounded-curl.mjs /app/lib/util/bounded-curl.mjs
-COPY docker/sootio/patch-scrapers.mjs /tmp/aio-patch-scrapers.mjs
-RUN node /tmp/aio-patch-scrapers.mjs && rm /tmp/aio-patch-scrapers.mjs
-COPY docker/sootio/configuration.js /app/lib/util/configuration.js
-COPY docker/sootio/landingTemplate.js /app/lib/util/landingTemplate.js
-
 FROM tsaridas/stremio-docker:latest AS stremio-web
 COPY docker/stremio-web/entrypoint.sh /aio-entrypoint.sh
 COPY docker/stremio-web/bootstrap.js /srv/stremio-server/build/aio-bootstrap.js

@@ -40,7 +40,6 @@ services:
       - ./tests/check_playback.py:/check_playback.py:ro
       - ./data/aiostreams:/app/data/aiostreams:ro
     command: python3 /check_stack.py
-    environment:
     networks:
       - stremio-net
 
@@ -164,7 +163,6 @@ services:
 
       # --- Internal Local Scraper Endpoints ---
       - COMET_URL=["http://comet:8000"]
-      - SOOTIO_URL=["http://sootio:55771"]
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
 
       # --- Internal Tracker Integrations ---
@@ -262,71 +260,6 @@ services:
       - ./data/comet:/app/data
     networks:
       - stremio-net
-
-  # Sootio (Multi-source torrent/debrid scraper with FlareSolverr & direct HTML indexing)
-  sootio:
-    build:
-      context: .
-      dockerfile: docker/sootio/Dockerfile
-    container_name: sootio
-    profiles: ["scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${SOOTIO_MEM_LIMIT:-768m}
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_SOOTIO:-55771}:55771"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:55771/manifest.json > /dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    environment:
-      - PORT=55771
-      - NODE_OPTIONS=--max-old-space-size=256
-      - ADDON_URL=${SOOTIO_ADDON_URL:-http://sootio:55771}
-      - LOG_LEVEL=info
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TMDB_FALLBACK_ENABLED=true
-      - ZILEAN_ENABLED=false
-      - COMET_ENABLED=false
-      - TORRENTIO_ENABLED=false
-      - STREMTHRU_ENABLED=false
-      - ZILEAN_URL=http://zilean:8181
-      - ZILEAN_LIMIT=200
-      - FLARESOLVERR_URL=http://flaresolverr:8191
-      - FLARESOLVERR_MAX_CONCURRENT=2
-      - TORRENT_1337X_ENABLED=false
-      - BTDIG_ENABLED=true
-      - BTDIG_MAX_PAGES=${SOOTIO_BTDIG_MAX_PAGES:-5}
-      - MAGNETDL_ENABLED=true
-      - SOOTIO_CURL_TIMEOUT_MS=${SOOTIO_CURL_TIMEOUT_MS:-5000}
-      - SOOTIO_CONNECT_TIMEOUT_MS=${SOOTIO_CONNECT_TIMEOUT_MS:-2000}
-      - SOOTIO_SOURCE_COOLDOWN_MS=${SOOTIO_SOURCE_COOLDOWN_MS:-120000}
-      - SOOTIO_MAX_WORKERS=${SOOTIO_MAX_WORKERS:-4}
-      - SOOTIO_MAX_PENDING=${SOOTIO_MAX_PENDING:-6}
-      - DEFAULT_DEBRID_SERVICE=${DEFAULT_DEBRID_SERVICE:-Premiumize}
-      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-      - RD_API_KEY=${REALDEBRID_API_KEY}
-      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-      - TORBOX_API_KEY=${TORBOX_API_KEY}
-      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-      - DEBRID_API_KEY=${PREMIUMIZE_API_KEY}
-    volumes:
-      - ./docker/sootio/configuration.js:/app/lib/util/configuration.js:ro
-      - ./docker/sootio/landingTemplate.js:/app/lib/util/landingTemplate.js:ro
-      - ./data/sootio:/app/data
-    networks:
-      - stremio-net
-    depends_on:
-      - zilean
-      - flaresolverr
-
-
 
   # ============================================================================
   # 3. FAST DMM TORRENT HASH CACHE (ZILEAN)
@@ -461,8 +394,6 @@ services:
       - FLARESOLVERR_URL=http://flaresolverr:8191
       - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
       - COMET_URL=http://comet:8000
-      - SOOTIO_URL=http://sootio:55771
-      - SOOTIO_MODE=${SOOTIO_MODE:-fallback}
       - AIOSTREAMS_URL=http://aiostreams:3000
       - STREMIO_WEB_URL=http://stremio-web:8080
       - AIOMETADATA_URL=http://aiometadata:4005
@@ -579,6 +510,58 @@ services:
       - stremio-net
     depends_on:
       - shared-redis
+
+  # InfiniDysk (On-demand Usenet streaming engine & WebDAV provider)
+  infinidysk:
+    image: ghcr.io/infinidysk/infinidysk:latest
+    container_name: infinidysk
+    profiles: ["proxies", "usenet", "all"]
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
+    ports:
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - TRUST_PROXY=1
+      - RESET_ADMIN_PASSWORD=${RESET_ADMIN_PASSWORD:-false}
+      - FRONTEND_BACKEND_API_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+      - NZBDAV_CONFIG__API__KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+      - NZBDAV_CONFIG__WEBDAV__USER=admin
+      - NZBDAV_CONFIG__WEBDAV__PASS=${ADDON_PASSWORD:-admin}
+      - WEBDAV_USER=admin
+      - WEBDAV_PASSWORD=${ADDON_PASSWORD:-admin}
+      - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696
+      - NZBDAV_CONFIG__PROWLARR__API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
+      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true
+      - NZBDAV_CONFIG__USENET__PROVIDERS=${INFINIDYSK_USENET_PROVIDERS:-}
+      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1"]
+      interval: 30s
+      retries: 3
+      start_period: 60s
+      timeout: 5s
+    volumes:
+      - ./data/infinidysk:/config
+    networks:
+      - stremio-net
+    depends_on:
+      init-configs:
+        condition: service_completed_successfully
+
+  # Cloudflare Tunnel (Optional Zero-Trust HTTPS ingress without opening router ports)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aio-tunnel
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    logging: *default-logging
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks:
+      - stremio-net
 
   # 6. LOCAL CATALOGS & METADATA
   # ============================================================================
@@ -851,7 +834,7 @@ services:
         else
           echo "[init-postgres] Waiting for shared-postgres..."
           until psql -h shared-postgres -U postgres -d postgres -c "SELECT 1;" >/dev/null 2>&1; do sleep 1; done
-          for db in zilean aiometadata sootio; do
+          for db in zilean aiometadata; do
             psql -h shared-postgres -U postgres -d postgres -c "CREATE DATABASE $$db;" 2>/dev/null || true
           done
           echo "[init-postgres] Done!"

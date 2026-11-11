@@ -2,7 +2,7 @@
   "metadata": {
     "id": "builtin.all-local-selfhosted",
     "name": "All-Local Self-Hosted (Tamtaro SEL Setup)",
-    "description": "Unified self-hosted local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers (Comet, MediaFusion, Sootio, AIOMetadata, SubSense, Debrid Search, InfiniDysk).",
+    "description": "Unified self-hosted local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers (Comet, AIOMetadata, SubSense, Debrid Search, InfiniDysk).",
     "source": "community",
     "author": "AIOStreams-All-Local",
     "version": "1.1.0",
@@ -46,26 +46,6 @@
           ],
           "includeP2P": false,
           "removeTrash": true,
-          "mediaTypes": []
-        }
-      },
-      {
-        "type": "mediafusion",
-        "instanceId": "mediafusion-local",
-        "enabled": false,
-        "options": {
-          "name": "MediaFusion (Local)",
-          "url": "http://mediafusion:8000",
-          "timeout": 20000,
-          "resources": [
-            "stream"
-          ],
-          "useCachedResultsOnly": true,
-          "enableWatchlistCatalogs": false,
-          "downloadViaBrowser": false,
-          "contributorStreams": false,
-          "certificationLevelsFilter": [],
-          "nudityFilter": [],
           "mediaTypes": []
         }
       },
@@ -177,19 +157,6 @@
           ],
           "useMultipleInstances": false,
           "paginate": false
-        }
-      },
-      {
-        "type": "custom",
-        "instanceId": "sootio-local",
-        "enabled": true,
-        "options": {
-          "name": "Sootio (Local Multi-Scraper)",
-          "manifestUrl": "http://sootio:55771/manifest.json",
-          "libraryAddon": false,
-          "resultPassthrough": false,
-          "forceToTop": false,
-          "timeout": 20000
         }
       },
       {
@@ -407,5 +374,6 @@
       "parallel": 1
     }
   },
-  "presets": []
+  "presets": [],
+  "description": ""
 }

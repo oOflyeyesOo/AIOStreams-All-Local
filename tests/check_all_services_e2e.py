@@ -157,30 +157,6 @@ def test_comet():
         record("6. Comet Fast Scraper & Streamer", False, str(e))
 
 
-def test_sootio():
-    try:
-        with urllib.request.urlopen("http://sootio:55771/manifest.json", timeout=5) as resp:
-            m = json.load(resp)
-            name = m.get("name", "")
-
-        # Probe sootio resolve endpoint with dummy or real infohash
-        resolve_url = f"http://sootio:55771/resolve/premiumize/{PREMIUMIZE_API_KEY}/magnet%3A%3Fxt%3Durn%3Abtih%3A11f7c6833b905c21985a4ba0912d72a175f505b1%26dn%3DInception"
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
-        opener = urllib.request.build_opener(NoRedirect)
-        try:
-            opener.open(resolve_url, timeout=15)
-            record("8. Sootio Multi-Scraper & Resolver", True, f"Manifest '{name}' OK, resolve endpoint responded")
-        except urllib.error.HTTPError as he:
-            loc = he.headers.get("Location", "")
-            if he.code == 302 and "cdn" in loc:
-                record("8. Sootio Multi-Scraper & Resolver", True, f"Manifest '{name}' OK, resolve endpoint 302 redirected to Debrid CDN: {loc[:45]}...")
-            else:
-                record("8. Sootio Multi-Scraper & Resolver", True, f"Manifest '{name}' OK, resolve returned HTTP {he.code}")
-    except Exception as e:
-        record("8. Sootio Multi-Scraper & Resolver", False, str(e))
-
 
 def test_aiometadata():
     try:
@@ -315,7 +291,7 @@ def test_aiostreams_and_playback():
 
         unproxied = [
             s.get("url") for s in playable_streams
-            if any(internal in s.get("url") for internal in ["comet:8000", "sootio:55771", "prowlarr:9696", "zilean:8181"])
+            if any(internal in s.get("url") for internal in ["comet:8000", "prowlarr:9696", "zilean:8181"])
             or ("/api/v1/proxy/" not in s.get("url") and not s.get("url").startswith("https://"))
         ]
         if unproxied:
@@ -381,7 +357,6 @@ def main():
     test_flaresolverr()
     test_zilean()
     test_comet()
-    test_sootio()
     test_aiometadata()
     test_postersplus()
     test_subsense()

@@ -54,7 +54,7 @@ for kind,ident in cases:
   report['measurements'].extend(pool.map(lambda _:measure('AIOStreams '+kind,url,'concurrent-2'),range(2)))
  # Direct custom requests use exactly the applied profile's manifest configuration.
  for instance,prefix in custom.items():
-  allowed={'sootio-local'}
+  allowed=set()
   if instance in allowed:report['measurements'].append(measure(instance+' direct '+kind,prefix+f'/stream/{kind}/{ident}.json'))
 
 services=[s for s in profile.get('services',[]) if s.get('enabled') and s.get('credentials',{}).get('apiKey') and s.get('id')!='nzbdav']
@@ -88,7 +88,7 @@ for kind,ident in cases:
   candidates=[s for s in json.loads(body).get('streams',[]) if s.get('url')]
   assert candidates
   target=candidates[0]['url'];parsed=urllib.parse.urlsplit(target)
-  ports={None:('aiostreams',3000),3000:('aiostreams',3000),3001:('aiostreams',3000),55771:('sootio',55771),8080:('stremthru',8080)}
+  ports={None:('aiostreams',3000),3000:('aiostreams',3000),3001:('aiostreams',3000),8080:('stremthru',8080)}
   if parsed.hostname in ('localhost','127.0.0.1','aio.yourdomain.com') and parsed.port in ports:
    host,port=ports[parsed.port];target=urllib.parse.urlunsplit(('http',f'{host}:{port}',parsed.path,parsed.query,''));row['addressOverride']='internal service address; public hostname not validated'
   code,body,ttfb,total,kind_header=get(target,{'Range':'bytes=0-1023'},timeout=45,limit=1024)

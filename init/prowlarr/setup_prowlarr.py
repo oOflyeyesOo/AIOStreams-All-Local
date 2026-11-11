@@ -18,6 +18,8 @@ PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
 
 TARGET_INDEXERS = [
+    "bitsearch",
+    "solidtorrents",
     "1337x",
     "yts",
     "eztv",

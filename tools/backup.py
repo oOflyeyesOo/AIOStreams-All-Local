@@ -2,7 +2,7 @@
 """AIO Local Stack Fast Backup & Restore Utility
 
 Creates clean, lightweight, compressed archives (.tar.gz) of:
-  • PostgreSQL database cluster (atomic pg_dumpall of zilean, aiometadata, sootio)
+  • PostgreSQL database cluster (atomic pg_dumpall of zilean, aiometadata)
   • Primary SQLite databases (AIOStreams db.sqlite, Comet comet.db, Debrid Search)
   • Essential service configurations (Prowlarr, SlickSync, InfiniDysk, Stremio Web)
   • Environment settings (.env)

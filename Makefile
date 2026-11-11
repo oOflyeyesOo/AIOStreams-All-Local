@@ -39,7 +39,7 @@ restore:
 
 .PHONY: package
 package:
-	@for target in portal controller aiostreams sootio stremio-web bootstrap postgres-init search-broker; do \
+	@for target in portal controller aiostreams stremio-web bootstrap postgres-init search-broker; do \
 		docker build -f docker/packaged/Dockerfile --target "$$target" -t "$(IMAGE_PREFIX)-$$target:$(IMAGE_TAG)" . || exit 1; \
 	done
 	docker build -f docker/anime-kitsu/Dockerfile -t "$(IMAGE_PREFIX)-kitsu:$(IMAGE_TAG)" .
