@@ -35,18 +35,16 @@ All media requests flow through a unified Docker bridge network (`stremio-net`).
          |  - Comet (:8000)              |                       |  - Torrentio (Public Index)   |                       |  - BuiltinProxy (:3000)       |
          |  - Zilean DMM Cache (:8181)   |                       |  - RemuxDB (MediaInfo/Codecs) |                       |  - Single-IP Debrid Bridge    |
          |  - Search Broker (:8091)      |                       |  - DMM Community Hashlists    |                       |  - Non-Debrid Host Shield     |
-         |  - Prowlarr & Byparr          |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
-         |  - StremThru Store (:8080)      |                                                                               +---------------+---------------+
-         |  - SubSense Subtitles (:8001) |                                                                                               |
-         |  - Usenet (NZBDav/InfiniDysk) |                                                                                               v
-         |  - MediaFusion (:8003, opt)   |                                                                               +-------------------------------+
-         +---------------+---------------+                                                                               |     Upstream Providers        |
-                         | (on zero cached results)                                                                      |  - Real-Debrid / Premiumize   |
-                         v                                                                                               |  - TorBox / AllDebrid CDN     |
-         +-------------------------------+                                                                               |  - Usenet NNTP Servers        |
-         |  Sequential Fallback Scrapers |                                                                               +-------------------------------+
-         |  - Sootio Multi-Scraper       |
-         +-------------------------------+
+         |  - Prowlarr & Byparr (:8191)  |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
+         |  - StremThru Store (:8080)    |                                                                               +---------------+---------------+
+         |  - SubSense Subtitles (:3100) |                                                                                               |
+         |  - Usenet (InfiniDysk :3005)  |                                                                                               v
+         +-------------------------------+                                                                               +-------------------------------+
+                                                                                                                         |     Upstream Providers        |
+                                                                                                                         |  - Real-Debrid / Premiumize   |
+                                                                                                                         |  - TorBox / AllDebrid CDN     |
+                                                                                                                         |  - Usenet NNTP Servers        |
+                                                                                                                         +-------------------------------+
 ```
 
 ---
@@ -79,7 +77,7 @@ AIOStreams coordinates a parallel query fan-out across configured scrapers:
    - **Comet (`:8000`)**: High-performance torrent crawler querying Prowlarr and Zilean.
    - **Zilean (`:8181`)**: Local SQLite database storing cached Debrid Media Manager (DMM) torrent hashes. Resolves popular releases in <50ms without external tracker requests.
    - **Torrentio Public Index**: When `ENABLE_TORRENTIO=true`, queries Torrentio's cloud index (`https://torrentio.strem.fun` or `TORRENTIO_URL`) in ~30ms to access millions of pre-indexed torrent releases without local crawler overhead.
-   - **Debrid Search (`:8004`)**: Queries the user's personal Real-Debrid / Torbox cloud for files already downloaded to their account.
+   - **StremThru Store (`:8080`)**: Queries the user's personal Real-Debrid / Torbox cloud for files already downloaded to their account.
    - **Usenet Search (Built-in & Prowlarr)**: When enabled, searches configured Newznab indexers and Easynews search.
 
 3. **Native DHT & Meta-Search Indexing (Prowlarr + Byparr)**:
@@ -223,7 +221,7 @@ If a debrid link expires, an upstream CDN node drops connection, or a stream fai
 
 ## 5. Stage 5: In-Player Enhancements
 
-### 1. SubSense Subtitles (`:8001`)
+### 1. SubSense Subtitles (`:3100`)
 - Stremio requests subtitles via SubSense (`http://subsense:3100/{encrypted_config}/manifest.json`).
 - SubSense queries OpenSubtitles, SubDL, and SubSource using server-side encrypted API keys.
 - Matched `.srt` or `.vtt` subtitles are downloaded, sanitized, and injected directly into the player stream.

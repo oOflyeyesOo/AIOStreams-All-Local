@@ -89,7 +89,7 @@ COMPOSE_PROFILES=core
 | Profile | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- |
 | **`core`** | **~1.1 GB** | **Recommended Lean Setup**: Runs AIOStreams, Comet, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, and Setup Portal. Ideal for low-memory VPS or lightweight servers relying on Torrentio and Comet. |
-| **`scrapers`** | **~2.7 GB** | **Full Local Crawlers**: Launches `core` plus Sootio (Multi-Scraper), Zilean (Local DMM Hash Cache), Prowlarr (`:9696`), Byparr (`:8191`), and Anime Kitsu (`:7000`). |
+| **`scrapers`** | **~2.4 GB** | **Full Local Crawlers**: Launches `core` plus Zilean (Local DMM Hash Cache), Prowlarr (`:9696`), and Byparr (`:8191`). |
 | **`proxies`** | **~1.8 GB** | **Extended Proxy & Usenet Routing**: Launches `core` plus StremThru proxy router, and InfiniDysk Usenet Engine (`:3005`). |
 | **`web`** | **~1.6 GB** | **Web Players & Sync Hub**: Launches `core` plus Stremio Web Player (`:8082`), Nuvio Web Player (`:8085`), and SlickSync Hub (`:8086`). |
 | **`usenet`** | **~2.2 GB** | **Dedicated Usenet Streaming**: Launches `core` plus InfiniDysk (`:3005`), NZBDav, and Prowlarr configured with Newznab indexers for direct NNTP debrid-free streaming. |

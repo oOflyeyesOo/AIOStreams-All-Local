@@ -403,7 +403,6 @@ services:
       - STREMTHRU_URL=http://stremthru:8080
       - BASE_URL=${BASE_URL:-http://localhost:3001}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
       - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
       - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
       - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}

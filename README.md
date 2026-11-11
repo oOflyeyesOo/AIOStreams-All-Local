@@ -1,11 +1,11 @@
 # AIO Local
 
-[![Microservices](https://img.shields.io/badge/microservices-18%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
+[![Microservices](https://img.shields.io/badge/microservices-19%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
 [![Regression Tests](https://img.shields.io/badge/regression%20tests-123%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 18 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
+A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 19 bundled continuous services (14 applications + databases & supervisor) together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
 The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
 
@@ -320,7 +320,7 @@ status, updates, resource monitoring, and cache cleanup.
 
 ## 🎛️ Stack Profiles & Configuration Templates
 
-Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 18-microservice appliance:
+Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 19-container appliance (14 integrated applications + databases & supervisor):
 
 ### 1. Docker Compose Resource Profiles
 
@@ -331,7 +331,7 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + StremThru proxy router, InfiniDysk Usenet Engine. |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
 | **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
-| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 17 continuous containers running on `stremio-net`. |
+| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 19 continuous containers running on `stremio-net`. |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
@@ -381,7 +381,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 
 
-The 18-service count covers continuous application and platform containers monitored on `stremio-net`.
+The 19-service count covers continuous application, database, and platform containers monitored on `stremio-net`.
 
 One-shot initialization jobs (database bootstrap, configuration provisioner) run at first boot and exit gracefully.
 
@@ -432,7 +432,7 @@ Every media query and stream playback undergoes a coordinated journey across the
                │
                ▼
   5. In-Player Polish:
-       ├── SubSense (:8001) ──► Subtitles (OpenSubtitles, SubDL, SubSource)
+       ├── SubSense (:3100) ──► Subtitles (OpenSubtitles, SubDL, SubSource)
        └── Portal (:8088) ────► AniSkip intro/outro auto-skip + keyboard shortcut 's'
 ```
 
@@ -471,7 +471,7 @@ Every media query and stream playback undergoes a coordinated journey across the
    - Allows instant seeking, scrubbing, audio/subtitle track selection, and resume without downloading the full video file.
 
 8. **In-Player Enhancements (Subtitles & AniSkip)**:
-   - **SubSense** (`:8001`) injects synchronized subtitles from OpenSubtitles and SubDL on-the-fly.
+   - **SubSense** (`:3100`) injects synchronized subtitles from OpenSubtitles and SubDL on-the-fly.
    - The bundled Stremio Web player (`:8082` / `:3001`) queries `/api/aniskip`, fetching millisecond-accurate intro/outro timestamps and displaying interactive skip badges (`[Skip Intro (s)]`). Pressing `s` jumps past intro songs and recaps immediately.
 
 For full technical specifications, packet header details, and curl diagnostic commands, see the [End-to-End Streaming Path & Transport Architecture Guide](docs/STREAMING-PATH.md).
@@ -498,7 +498,7 @@ AIO Local includes an end-to-end anime pipeline tailored for anime enthusiasts:
   - `←` / `→` or `j` / `l` — Seek backward / forward 10 seconds
   - `f` — Toggle fullscreen
   - `m` — Toggle mute
-- **Anime Kitsu Microservice (`:7000`)**: Local service that maps Kitsu anime IDs to IMDb/TheTVDB IDs, ensuring scrapers locate the correct torrent infohashes and debrid cache files for non-standard season arcs.
+- **Anime Kitsu Microservice (`:7005`)**: Local service that maps Kitsu anime IDs to IMDb/TheTVDB IDs, ensuring scrapers locate the correct torrent infohashes and debrid cache files for non-standard season arcs.
 - **SeaDex Community Scoring**: AIOStreams automatically references the community SeaDex database (`config["enableSeadex"] = True`) to prioritize the best releases from top release groups (Beatrice-raws, Coalgirls, SubsPlease, Erai-raws).
 - **20+ Anime Catalogs & Schedules**: Browse daily airing schedules, top upcoming, season rows, and animation studio spotlights (ufotable, MAPPA, KyoAni, Madhouse) with Posters+ rating badges.
 
@@ -626,5 +626,5 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 * Generates tailored `docker-compose.yml`, `.env`, and `01-init-dbs.sql` files for custom or manual deployments.
 
 
-Current validation: 123 Python regression tests, twelve browser checks and nine Sootio fixture checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode fallback tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks. Sootio now runs as conditional fallback by default; `SOOTIO_MODE=off` disables it and `parallel` opts into simultaneous scraping.
+Current validation: 123 Python regression tests, twelve browser checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode routing tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks.
 

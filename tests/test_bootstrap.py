@@ -221,7 +221,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(config['accessKey'],'fixture-config-access')
 
     def test_unreachable_custom_addons_omitted_from_presets_in_core_profile(self):
-        # In core profile, debrid-search, sootio, etc. are not running.
+        # In core profile, optional services (e.g. Anime Kitsu) may not be running.
         # Ensure build_default_config omits unreachable custom addons so AIOStreams
         # doesn't reject the profile with USER_INVALID_CONFIG.
         def mock_reachable(url, timeout=1.0):

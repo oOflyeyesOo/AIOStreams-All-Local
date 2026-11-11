@@ -166,8 +166,8 @@ documentation link, and an explicit “optional if unavailable” policy.
 | Area | Integrations in this repository | Completion work |
 |---|---|---|
 | Subtitles | SubSense, OpenSubtitles, SubDL, SubSource, Wyzie/YIFY paths | test language selection, fallback ordering, and missing-key behavior |
-| Discovery | Prowlarr, FlareSolverr, Zilean, Comet, MediaFusion, Sootio | fixture indexers; live test only one controlled indexer |
-| Proxies | BuiltinProxy, StremThru, MediaFlow | test signed URLs, redirects, HTTP 206, HLS, and SSRF boundaries |
+| Discovery | Prowlarr, FlareSolverr, Zilean, Comet, Search Broker, Torrentio, RemuxDB | fixture indexers; live test only one controlled indexer |
+| Proxies | BuiltinProxy, StremThru | test signed URLs, redirects, HTTP 206, and multi-IP shield boundaries |
 | Usenet | InfiniDysk, NNTP credentials, NZB/indexer path | complete provider setup and playback or label as experimental |
 | Players | Stremio, Stremio Web, Nuvio Web | test install links, profiles, CORS, range requests, and mobile layouts |
 | Sync | SlickSync, Trakt, Simkl, AniList | test auth lifecycle, token storage, revoke, and conflict behavior |

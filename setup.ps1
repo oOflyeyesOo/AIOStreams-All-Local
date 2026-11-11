@@ -273,7 +273,6 @@ SECRET_KEY=$secretKey
 POSTGRES_PASSWORD=$pgPass
 PROWLARR_API_KEY=$prowlarrKey
 POSTERSPLUS_ACCESS_KEY=$postersKey
-ADMIN_EMAIL=$adminEmail
 STREMTHRU_AUTH=$stremthruAuth
 
 # ==============================================================================

@@ -5,7 +5,7 @@
 This repository is a Docker Compose appliance rather than a conventional single-language application. The root Compose stack wires roughly 20 upstream and local services onto the private `stremio-net` network:
 
 - **Portal and orchestration:** `docker/all-in-one/portal_server.py` serves the setup UI on port 8088, validates/authenticates API requests, safely updates `.env`, reports integration health, and starts provisioning.
-- **Provisioning:** `init/bootstrap/setup_stack.py` waits for optional services, configures Prowlarr/MediaFusion/AIOMetadata/AIOStreams, builds the local AIOStreams profile from `templates/`, pre-seeds Stremio Web, and runs manifest/stream diagnostics.
+- **Provisioning:** `init/bootstrap/setup_stack.py` waits for optional services, configures Prowlarr, Comet, AIOMetadata, and AIOStreams, builds the local AIOStreams profile from `templates/`, pre-seeds Stremio Web, and runs manifest/stream diagnostics.
 - **Runtime services:** `docker-compose.yml` defines AIOStreams, scrapers, indexers/cache, metadata/artwork, subtitles, proxies, players, and shared PostgreSQL/Redis. Most services are upstream images configured through environment variables; local Python/JS code is concentrated in the portal, bootstrapper, entrypoints, and web-player bootstrap.
 - **Configuration data:** `templates/` contains JSON setup profiles, formatters, filtering expressions, regex rankings, and metadata presets. Treat template IDs and manifest URLs as integration contracts.
 - **Frontend/player assets:** `index.html`, `dashboard.html`, `assets/`, and `docker/stremio-web/bootstrap.js` provide the setup UI and browser/player behavior. `docker-compose.aio.yml` is the separately packaged all-in-one image path.

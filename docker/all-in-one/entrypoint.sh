@@ -148,30 +148,6 @@ if [ "$daemon_ready" = "true" ]; then
     # Inject runtime environment variables if passed via -e or --env-file
     if [ -n "$BASE_URL" ]; then
         sed -i "s|^BASE_URL=.*|BASE_URL=${BASE_URL}|" .env
-        if [ -z "$MEDIAFUSION_HOST_URL" ]; then
-            MF_PROTO=$(echo "$BASE_URL" | sed -E 's|^(https?)://.*|\1|')
-            [ -z "$MF_PROTO" ] && MF_PROTO="http"
-            MF_HOST=$(echo "$BASE_URL" | sed -E 's|^https?://([^/:]+).*|\1|')
-            if [ -n "$MF_HOST" ] && [ "$MF_HOST" != "localhost" ] && [ "$MF_HOST" != "127.0.0.1" ]; then
-                if [ "$MF_PROTO" = "https" ]; then
-                    export MEDIAFUSION_HOST_URL="${BASE_URL}"
-                else
-                    export MEDIAFUSION_HOST_URL="${MF_PROTO}://${MF_HOST}:8001"
-                fi
-                if grep -q "^MEDIAFUSION_HOST_URL=" .env; then
-                    sed -i "s|^MEDIAFUSION_HOST_URL=.*|MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL}|" .env
-                else
-                    echo "MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL}" >> .env
-                fi
-            fi
-        fi
-    fi
-    if [ -n "$MEDIAFUSION_HOST_URL" ]; then
-        if grep -q "^MEDIAFUSION_HOST_URL=" .env; then
-            sed -i "s|^MEDIAFUSION_HOST_URL=.*|MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL}|" .env
-        else
-            echo "MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL}" >> .env
-        fi
     fi
     if [ -n "$TMDB_API_KEY" ]; then
         sed -i "s|^TMDB_API_KEY=.*|TMDB_API_KEY=${TMDB_API_KEY}|" .env

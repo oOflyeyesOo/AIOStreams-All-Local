@@ -42,7 +42,7 @@ Keep one native Torrentio preset in AIOStreams. `providers: []` uses the adapter
 default source selection. Returned results included sources such as ThePirateBay,
 1337x, Rutracker, Rutor, TorrentGalaxy, MagnetDL and RARBG; these labels describe
 Torrentio results, not newly deployed local scrapers. Some overlap with Prowlarr
-indexers is expected. Torrentio stays disabled inside Sootio and MediaFusion.
+indexers is expected. Torrentio stays dedicated to AIOStreams native integration.
 Do not add a second copy through Comet or another aggregator. Hash deduplication
 removes duplicate results; global external-site request deduplication is not
 established.
@@ -63,21 +63,16 @@ Title/year matching requires TMDB. Bootstrap disables dependent features without
 Next-episode prefetch is opt-in (`AIO_PRECACHE_NEXT_EPISODE=true`), and failover
 uses one attempt at a time to avoid hidden parallel provider calls.
 
-## MediaFusion
+## Local Indexing Architecture (Streamlined from External Scrapers)
 
-Default: off (`MEDIAFUSION_REPLICAS=0`). The portal switch starts/stops the
-container, retains its storage, updates the AIOStreams preset, and excludes it
-from enabled-service health totals while off.
+Earlier appliance versions evaluated external scrapers (MediaFusion and Sootio).
+Benchmarking revealed high latency costs, scrapers timing out on cold searches,
+and redundant scraper overhead.
 
-The retained instance's torrent-stream table had zero rows. Its cached-only
-native profile returned no candidates for the two comparison titles. It used
-about 24.5 MiB at the sampled time; its 512 MiB limit was not actual usage.
-
-MediaFusion remains useful as an opt-in integration. A configured manifest URL
-passes its custom settings through the native adapter. This is needed for extras
-such as AceStream that the normal native adapter disables. Required external
-engines/accounts remain the operator's responsibility; AceStream playback has
-not been validated. The integration is stream-only to avoid duplicate catalogs.
+The stack has been streamlined to a high-speed local indexing and caching architecture:
+- **Comet** queries local **Prowlarr** indexers and the **Zilean** DMM cache.
+- **Search Broker** coalesces duplicate indexer searches and provides 60s in-memory caching.
+- External multi-crawlers were retired in favor of native **Torrentio**, **RemuxDB**, and curated **DMM** hashlists.
 
 ## Usenet setup
 
@@ -101,7 +96,7 @@ fixture test:
   InfiniDysk authenticated against the fixture (three successes, zero rejections).
 - Reapplying without retyping the password preserved it and created no duplicate
   Newznab indexer. Managed address changes update the existing indexer in place.
-- MediaFusion switched on, reached healthy state, and switched off again.
+- Optional Usenet route switched on, reached healthy state, and switched off again.
 - Disabling Usenet emptied the effective provider list, disabled the managed NZB
   indexer, omitted its native route and retained the saved credentials.
 - Default enabled-service checks passed 21/21. This includes TCP-only probes.
@@ -110,23 +105,12 @@ This verifies configuration, authentication and indexer provisioning. It does no
 verify paid NNTP, TLS against a real provider, article retrieval, repair,
 decompression or Usenet media decoding. Those remain acceptance gates.
 
-## Sootio
+## Retired External Scrapers
 
-The original public-source stream handler took about 30.17 seconds per movie and
-episode and returned no fresh results. BTDig exhausted five failed page requests;
-MagnetDL returned HTML/redirects where JSON was expected.
-
-The bounded wrapper preserves five healthy BTDig pages, ends after a completely
-failed batch, enforces real curl deadlines and backs off failed origins for 120
-seconds. Results in the same unavailable-source conditions: movie 2.969 seconds
-(0.849 warm), episode 2.987 (0.858 warm), zero remaining child processes. Warm
-queries issued no new curl requests. These zero-versus-zero samples do not prove
-healthy-source coverage. Nine real-curl/vendor fixture tests separately verify
-valid JSON, page-five discoveries, surviving-source results, coalescing, cooldown
-recovery and deadline cancellation.
-
-Sootio remains a sequential fallback only when primary cached results are absent.
-It does not run Torrentio, Comet, Zilean or StremThru recursively.
+Slow external multi-scrapers (such as Sootio) were retired in favor of the Intelligent
+Search Broker and native public databases. Rather than sequentially querying slow public
+crawlers, search requests leverage local Prowlarr indexers protected by Byparr Cloudflare
+challenge solving and instant DMM hash cache lookups.
 
 ## Fresh-run routing fixture isolation
 
@@ -155,7 +139,7 @@ services. Extra AnimeTosho/SubsPlease definitions are not seeded again in Prowla
 Existing Prowlarr user configurations are preserved.
 
 EasyNews uses one native `easynews-search` preset, restricted to the EasyNews
-account itself. It is not also injected into Sootio, and an EasyNews-only account
+account itself. An EasyNews-only account
 does not enable unsupported Comet/Torrentio routes. Configure `EASYNEWS_USER`
 and `EASYNEWS_PASSWORD` in the private environment file; these are not generic
 NNTP credentials. Pagination remains off. Actual EasyNews searches and paid

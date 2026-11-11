@@ -261,7 +261,7 @@ def benchmark_stream_proxy_pathways():
     print(" 4. STREAM PLAYBACK & PROXYING PATHWAYS (HTTP 206 Partial Content)")
     print("=" * 78)
 
-    # Step 1: Obtain a live stream from Sootio / Comet
+    # Step 1: Obtain a live stream from Comet / AIOStreams
     stream_url = None
     try:
         url = f"{COMET_URL}/stream/movie/tt1375666.json"

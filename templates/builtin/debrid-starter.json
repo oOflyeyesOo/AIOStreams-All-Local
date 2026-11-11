@@ -81,23 +81,6 @@
           "mediaTypes": [],
           "useMultipleInstances": false
         }
-      },
-      {
-        "type": "mediafusion",
-        "instanceId": "224",
-        "enabled": true,
-        "options": {
-          "name": "MediaFusion",
-          "timeout": 7000,
-          "resources": ["stream", "catalog", "meta"],
-          "useCachedResultsOnly": true,
-          "enableWatchlistCatalogs": false,
-          "downloadViaBrowser": false,
-          "contributorStreams": false,
-          "certificationLevelsFilter": [],
-          "nudityFilter": [],
-          "mediaTypes": []
-        }
       }
     ],
     "formatter": {

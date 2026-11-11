@@ -119,7 +119,7 @@ zero AIOStreams restarts, and all 21 default endpoints passed.
 
 The same pinned deployment passed saved Usenet credentials with special
 characters, actual fixture NNTP authentication (seven successes, zero rejections),
-Newznab repeat setup without duplicates, MediaFusion on/off, managed provider and
+Newznab repeat setup without duplicates, managed provider and
 indexer disabling, and three native optional preset/schema/manifest cases.
 Strict routing passed cached, empty and unavailable primary responses for movie
 and synthetic episode requests, warm/repeated responses, and four simultaneous

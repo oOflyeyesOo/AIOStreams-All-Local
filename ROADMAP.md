@@ -69,7 +69,7 @@ These checks do not establish every external integration as working. Real OAuth 
 - [x] Add resource/caller-aware native-path trace listeners and bounded event storage; only instrumented edges establish call counts.
 - [ ] Investigate Prowlarr TV searches that continue after the player has already received a response.
 - [x] Add bounded search admission, identical-request sharing, cache and failure cooldown; cancelling Prowlarr's server-side work remains outstanding.
-- [x] Validate sequential Sootio fallback in actual AIOStreams: cached primary skips it; empty/failed primary invokes it once. Explicit off/parallel modes remain available.
+- [x] Validate high-performance local indexing and Search Broker coalescing: cached primary skips redundant lookups; cold queries coalesce with 60s in-memory caching and dead-indexer cooldowns.
 - [ ] Measure cold/warm movie, episode and anime lookups, unavailable indexers, concurrent viewers and memory pressure on a documented reference host.
 - [x] Record deterministic movie/episode/error/concurrent routing budgets and broker bounds in [routing validation](docs/ROUTING-VALIDATION.md). Full-host pressure budgets remain outstanding.
 
@@ -102,7 +102,7 @@ These checks do not establish every external integration as working. Real OAuth 
 
 - [x] Native Torrentio, RemuxDB, and DMM integration: four titles added 92/76/60/68 provider-cached hashes beyond Comet; selectable options querying public/curated databases.
 - [x] Native addon parsing and new feature settings validated in an isolated AIOStreams profile; TMDB-dependent registration bug fixed.
-- [x] Background prefetch opt-in; one native Torrentio route and bounded Sootio fallback.
+- [x] Background prefetch opt-in; native Torrentio route, RemuxDB audio/video container profiling, and DMM hash cache.
 - [x] Usenet form configures actual InfiniDysk headless provider settings and a Usenet-only Prowlarr preset.
 - [x] Live fixture NNTP login, special-character credential preservation, Newznab repeat setup, service on/off and managed indexer disable.
 - [ ] Real paid NNTP article retrieval/repair/decoding and AceStream engine/playback.
