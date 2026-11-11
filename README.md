@@ -1,11 +1,11 @@
 # AIO Local
 
-[![Microservices](https://img.shields.io/badge/microservices-22%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
+[![Microservices](https://img.shields.io/badge/microservices-19%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
 [![Regression Tests](https://img.shields.io/badge/regression%20tests-123%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 22 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
+A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 19 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
 MediaFusion is optional and off by default. The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
 
@@ -322,18 +322,18 @@ status, updates, resource monitoring, and cache cleanup.
 
 ## 🎛️ Stack Profiles & Configuration Templates
 
-Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 22-microservice appliance:
+Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 19-microservice appliance:
 
 ### 1. Docker Compose Resource Profiles
 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
 | **`core`** (Recommended Lean) | `docker compose --profile core up -d` | **~1.1 GB** | AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL, Redis, Portal. Ideal for low-memory VPS relying on Comet and Torrentio. |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.5 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, FlareSolverr, and Anime Kitsu. |
+| **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.2 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + StremThru proxy router, InfiniDysk Usenet Engine. |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
 | **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
-| **`all`** (Default) | `docker compose up -d` | **~4.5 GB** | Full appliance with all 22 microservices running on `stremio-net`. |
+| **`all`** (Default) | `docker compose up -d` | **~3.6 GB** | Full appliance with all 19 microservices running on `stremio-net`. |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
@@ -365,7 +365,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Scrapers** | Comet (`:8000`), MediaFusion (`:8001`), Sootio (`:55771`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
 
-| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Search Broker (`:8091`), FlareSolverr (`:8191`) | DMM hash cache (<100ms lookup), intelligent indexer caching/deduplication broker, auto-provisioned indexers, and Cloudflare bypass |
+| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Search Broker (`:8091`), Byparr (`:8191`) | DMM hash cache (<100ms lookup), intelligent indexer caching/deduplication broker, auto-provisioned indexers, and Cloudflare bypass |
 
 | **Metadata & Artwork** | AIOMetadata (`:4005`), Posters+ (`:9039`), Anime Kitsu (`:7005`) | Rich streaming-provider catalogs (Netflix, Disney+, Apple TV+, Max, Prime), rating badges, and local anime metadata |
 
@@ -373,7 +373,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Personal Library & Cloud** | StremThru Store (`:8080/stremio/store`) | Instant library search & direct Stremio catalog mounting for personal Real-Debrid / TorBox / Premiumize cloud files |
 
-| **Stream Proxies** | StremThru (`:8080`)-Proxy (`:8888`), Universal BuiltinProxy | Debrid store caching, stream proxying, multi-IP ban shield, and non-debrid HTTP stream shielding |
+| **Stream Proxies** | StremThru (`:8080`), Universal BuiltinProxy | Debrid store caching, stream proxying, multi-IP ban shield, and non-debrid HTTP stream shielding |
 
 | **Usenet Engine** | InfiniDysk (`:3005`) | High-throughput Usenet and WebDAV streaming engine |
 
@@ -383,7 +383,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 
 
-The 22-service count covers continuous application and platform containers monitored on `stremio-net`.
+The 19-service count covers continuous application and platform containers monitored on `stremio-net`.
 
 One-shot initialization jobs (database bootstrap, configuration provisioner) run at first boot and exit gracefully.
 
@@ -411,7 +411,7 @@ Every media query and stream playback undergoes a coordinated journey across the
                │
                ▼
   2. Select: AIOStreams (:3000 / :3001) Stream Resolution
-       ├── Intelligent Query Broker (:8091) ──► Prowlarr ──► FlareSolverr (Cloudflare bypass)
+       ├── Intelligent Query Broker (:8091) ──► Prowlarr ──► Byparr (Cloudflare bypass)
        ├── Primary Local Scrapers ────────────► Comet (:8000), Zilean DMM (:8181), StremThru Store (:8080)
        ├── Public & Community Databases ──────► Torrentio (~30ms cloud index), RemuxDB (MediaInfo audio/HDR)
        └── Adaptive Sequential Fallback ──────► Sootio (triggers ONLY if 0 cached streams found)
@@ -447,7 +447,7 @@ Every media query and stream playback undergoes a coordinated journey across the
 
 2. **Parallel Scraper Fan-Out & Request Coalescing**:
    - When a title is clicked, AIOStreams queries enabled scrapers in parallel.
-   - The **Intelligent Search Broker** (`:8091`) coalesces identical in-flight indexer queries into one upstream call, caches results in memory for 60s (<20ms response), and bypasses Cloudflare challenges via FlareSolverr (`:8191`).
+   - The **Intelligent Search Broker** (`:8091`) coalesces identical in-flight indexer queries into one upstream call, caches results in memory for 60s (<20ms response), and bypasses Cloudflare challenges via Byparr (`:8191`).
    - Primary local scrapers (**Comet**, **Zilean DMM cache**, **Anime Kitsu**) return instant local results without external scraping delays.
    - Selectable public databases (**Torrentio** cloud index at ~30ms, **RemuxDB** MediaInfo specs) inject massive pre-indexed release coverage without local crawler overhead.
 

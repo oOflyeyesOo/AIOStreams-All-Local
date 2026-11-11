@@ -35,7 +35,7 @@ All media requests flow through a unified Docker bridge network (`stremio-net`).
          |  - Comet (:8000)              |                       |  - Torrentio (Public Index)   |                       |  - BuiltinProxy (:3000)       |
          |  - Zilean DMM Cache (:8181)   |                       |  - RemuxDB (MediaInfo/Codecs) |                       |  - Single-IP Debrid Bridge    |
          |  - Search Broker (:8091)      |                       |  - DMM Community Hashlists    |                       |  - Non-Debrid Host Shield     |
-         |  - Prowlarr & Flaresolverr    |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
+         |  - Prowlarr & Byparr          |                       +-------------------------------+                       |  - HTTP 206 Partial Content   |
          |  - StremThru Store (:8080)      |                                                                               +---------------+---------------+
          |  - SubSense Subtitles (:8001) |                                                                                               |
          |  - Usenet (NZBDav/InfiniDysk) |                                                                                               v
@@ -72,7 +72,7 @@ AIOStreams coordinates a parallel query fan-out across configured scrapers:
 
 1. **Intelligent Query Broker (`:8091`) & Prowlarr (`:9696`)**:
    - Scrapers requiring Torznab/Newznab indexers route queries through the query broker.
-   - The broker performs **request coalescing** (identical in-flight searches share a single upstream query), caches warm results in memory for 60 seconds (<20ms response), and bypasses Cloudflare challenges via FlareSolverr (`:8191`).
+   - The broker performs **request coalescing** (identical in-flight searches share a single upstream query), caches warm results in memory for 60 seconds (<20ms response), and bypasses Cloudflare challenges via Byparr (`:8191`).
    - If an indexer fails repeatedly, the broker applies an automated cooldown to protect search latencies.
 
 2. **Primary Scrapers**:
