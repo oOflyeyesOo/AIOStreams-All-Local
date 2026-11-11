@@ -99,18 +99,38 @@ jobs:
       - name: Start and test the exact pinned images
         timeout-minutes: 20
         run: |
+          set -eo pipefail
           cp .env.example release-bundle/fixture.env
           printf '\nADDON_PASSWORD=package-test-only-password\nBASE_URL=http://127.0.0.1:3001\nAIOMETADATA_HOST=http://127.0.0.1:4005\n' >> release-bundle/fixture.env
+          echo "Starting release stack..."
           docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml up -d --wait --wait-timeout 600
           cid=$(docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml ps -q aiostreams)
           if [ "$(docker inspect --format '{{.RestartCount}}' "$cid")" != 0 ]; then
-            echo 'AIOStreams restarted during first startup; refusing to publish a masked startup failure.'
+            echo '::error::AIOStreams restarted during first startup; refusing to publish a masked startup failure.'
+            echo 'AIOStreams restarted during first startup; refusing to publish a masked startup failure.' >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
-          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_OPTIONAL_TEST_PROJECT=aio-release portal python3 - < tests/check_optional_live.py
-          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_optional_presets_live.py
-          docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py
+
+          run_step() {
+            local step_name="$1"
+            shift
+            echo "::group::Run $step_name"
+            echo "### Run $step_name" >> "$GITHUB_STEP_SUMMARY"
+            if ! "$@"; then
+              local code=$?
+              echo "::error::$step_name failed with exit code $code"
+              echo "❌ **$step_name failed (exit code $code)**" >> "$GITHUB_STEP_SUMMARY"
+              echo "::endgroup::"
+              return $code
+            fi
+            echo "✅ **$step_name passed**" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+          }
+
+          run_step "stack-check" docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
+          run_step "check_optional_live" docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_OPTIONAL_TEST_PROJECT=aio-release portal python3 - < tests/check_optional_live.py
+          run_step "check_optional_presets_live" docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_optional_presets_live.py
+          run_step "check_routing_live" docker compose -p aio-release --env-file release-bundle/fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py
           rm release-bundle/fixture.env
       - uses: actions/upload-artifact@v4
         with:
@@ -120,9 +140,21 @@ jobs:
       - name: Capture failed startup diagnostics
         if: failure()
         run: |
+          echo "### Release Bundle Diagnostics" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -a >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          for svc in portal controller stack-bootstrap aiostreams infinidysk prowlarr; do
+            echo "<details><summary>Logs for $svc</summary>" >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml logs --tail 60 "$svc" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+          done
           cid=$(docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -aq aiostreams)
           if [ -n "$cid" ]; then
-            python3 tests/summarize_startup.py "$cid"
+            python3 tests/summarize_startup.py "$cid" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           fi
       - name: Remove disposable release project
         if: always()
