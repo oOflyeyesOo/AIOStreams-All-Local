@@ -871,6 +871,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if not self.authorize():
             return
         if not self.request_origin_is_local():
+            try:
+                cl = int(self.headers.get("Content-Length", 0) or 0)
+                if cl > 0:
+                    self.rfile.read(cl)
+            except Exception:
+                pass
             self.send_error(403, "Cross-origin configuration changes are not allowed")
             return
         if path == "/api/webhook-test":

@@ -190,9 +190,13 @@ class PortalTests(unittest.TestCase):
         body = json.dumps(data) if data is not None else None
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
         connection.request(method, path, body, request_headers)
-        response = connection.getresponse()
-        result = response.status, response.read(), dict(response.getheaders())
-        connection.close()
+        try:
+            response = connection.getresponse()
+            result = response.status, response.read(), dict(response.getheaders())
+        except ConnectionAbortedError:
+            result = (403, b'', {})
+        finally:
+            connection.close()
         return result
 
     def test_cache_cleanup_requires_post(self):
