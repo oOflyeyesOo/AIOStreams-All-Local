@@ -484,7 +484,7 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8191/health')" || exit 1
+      - curl -fsSL http://localhost:8191/health > /dev/null || exit 1
       interval: 15s
       timeout: 5s
       retries: 5
