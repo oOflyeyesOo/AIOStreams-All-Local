@@ -62,6 +62,7 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
+    local ports=(3000 3001 3005 3100 4005 7005 8000 8080 8082 8085 8088 8181 9696)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -116,7 +117,9 @@ start_stack() {
 ensure_internal_secrets() {
     [ -f .env ] || return 1
     local key current generated
+    for key in SECRET_KEY POSTGRES_PASSWORD PROWLARR_API_KEY STREMTHRU_AUTH POSTERSPLUS_ACCESS_KEY; do
         current=$(grep -E "^${key}=" .env | tail -1 | cut -d '=' -f2-)
+        if [ -z "$current" ] || [ "$current" = "admin" ] || [ "$current" = "postgres_supersecret_db_pass_2026" ] || [ "$current" = "prowlarr_internal_secret_key_99" ]; then
             generated=$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))")
             if grep -qE "^${key}=" .env; then
                 sed -i "s|^${key}=.*|${key}=${generated}|" .env
