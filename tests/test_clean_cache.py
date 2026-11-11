@@ -56,7 +56,10 @@ class TestCleanCache(unittest.TestCase):
         with tempfile.TemporaryDirectory() as outside:
             sentinel=Path(outside)/'preserve.txt';sentinel.write_text('preserve')
             shutil.rmtree(self.hashlists)
-            self.hashlists.symlink_to(outside,target_is_directory=True)
+            try:
+                self.hashlists.symlink_to(outside,target_is_directory=True)
+            except OSError:
+                self.skipTest("Symlinks not permitted in this environment")
             result=clean_stack_cache(self.temp_dir)
             self.assertFalse(result['success'])
             self.assertEqual(sentinel.read_text(),'preserve')
