@@ -249,7 +249,9 @@ def config_export():
 
 
 def optimized_profile_export():
-    """Build the same local profile used by bootstrap for authenticated download."""
+    """Build the same local profile used by bootstrap for authenticated download,
+    preferring live user configuration from AIOStreams when available.
+    """
     import importlib.util
     path = os.path.join(WEB_ROOT, "init", "bootstrap", "setup_stack.py")
     if not os.path.isfile(path):
@@ -259,6 +261,45 @@ def optimized_profile_export():
         raise RuntimeError("Profile builder is unavailable")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+
+    live_config = None
+    aiostreams_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+    candidates = [
+        os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
+        os.path.join(WEB_ROOT, "data", "stremio-web", "aiostreams_install.json"),
+        os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
+        "/data/aiostreams/aiostreams_install.json",
+        "/data/stremio-web/aiostreams_install.json",
+        "/data/aiostreams_install.json",
+    ]
+    install_uuid = None
+    for c in candidates:
+        if os.path.isfile(c):
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    idata = json.load(f)
+                    if idata.get("uuid"):
+                        install_uuid = idata["uuid"]
+                        break
+            except Exception:
+                pass
+
+    if install_uuid:
+        for pw in ("admin_local_secret", os.environ.get("ADDON_PASSWORD", "admin")):
+            try:
+                auth = base64.b64encode(f"{install_uuid}:{pw}".encode()).decode("ascii")
+                req = urllib.request.Request(
+                    f"{aiostreams_url}/api/v1/user",
+                    headers={"Authorization": f"Basic {auth}", "Accept": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    res = json.load(resp)
+                    if isinstance(res, dict) and res.get("success") and "userData" in res.get("data", {}):
+                        live_config = res["data"]["userData"]
+                        break
+            except Exception:
+                pass
+
     return {
         "format": "aio-local-optimized-profile-v1",
         "profile": "all",
@@ -268,7 +309,7 @@ def optimized_profile_export():
                             "OFFCLOUD_API_KEY", "SEEDR_API_KEY", "TMDB_API_KEY", "TVDB_API_KEY")
             if os.environ.get(key) or read_saved_env().get(key)
         ),
-        "config": module.build_default_config(probe_services=False),
+        "config": live_config if live_config is not None else module.build_default_config(probe_services=False),
     }
 def proxy_config(kind, base_url):
     base_url = normalize_base_url(base_url or "https://aio.yourdomain.com")

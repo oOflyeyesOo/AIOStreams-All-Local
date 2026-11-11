@@ -102,6 +102,8 @@ try:
         with lock:observed={name:calls.count(name) for name in expected}
         assert observed==expected,(ident,observed,cold)
         assert cold['streams']>0,(ident,cold)
+        # Allow Redis write-buffer flush (flushInterval 2000ms) to commit before warm/concurrent reads
+        time.sleep(3)
         warm=fetch(ident,kind)
         with ThreadPoolExecutor(max_workers=4) as pool:concurrent=list(pool.map(lambda _:fetch(ident,kind),range(4)))
         assert warm['streams']>0 and all(item['streams']>0 for item in concurrent), ('Repeated fixture response lost streams',ident,warm,concurrent)
