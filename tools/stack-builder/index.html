@@ -1289,7 +1289,8 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
 
         if (s.flaresolverr) {
           lines.push(`\n  flaresolverr:`);
-          lines.push(`    image: ghcr.io/flaresolverr/flaresolverr:latest`);
+          lines.push(`    image: ghcr.io/thephaseless/byparr:latest`);
+          lines.push(`    shm_size: "1gb"`);
           lines.push(`    container_name: flaresolverr`);
           lines.push(`    restart: unless-stopped`);
           lines.push(`    ports:`);

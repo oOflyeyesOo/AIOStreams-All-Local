@@ -572,7 +572,8 @@ services:
       - stremio-net
 
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/thephaseless/byparr:latest
+    shm_size: "1gb"
     container_name: flaresolverr
     profiles: ["scrapers", "all"]
     restart: unless-stopped

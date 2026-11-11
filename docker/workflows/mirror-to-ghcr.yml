@@ -25,7 +25,7 @@ jobs:
             target: "zilean:latest"
           - source: "lscr.io/linuxserver/prowlarr:latest"
             target: "prowlarr:latest"
-          - source: "ghcr.io/flaresolverr/flaresolverr:latest"
+          - source: "ghcr.io/thephaseless/byparr:latest"
             target: "flaresolverr:latest"
           - source: "muniftanjim/stremthru:latest"
             target: "stremthru:latest"
