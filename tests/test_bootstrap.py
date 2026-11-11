@@ -1,3 +1,5 @@
+import os
+os.environ["AIO_SKIP_ENV_FILE"] = "true"
 import importlib.util
 from pathlib import Path
 import tempfile
