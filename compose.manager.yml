@@ -760,8 +760,19 @@ services:
     - ORIGIN=${NUVIO_ORIGIN:-http://localhost:8085}
     - PROTOCOL_HEADER=x-forwarded-proto
     - HOST_HEADER=x-forwarded-host
+    - NUVIO_ADMIN_EMAILS=${NUVIO_ADMIN_EMAILS:-admin@localhost}
+    - NUVIO_DATA_DIR=/app/data
+    - NUVIO_LOG_LEVEL=${NUVIO_LOG_LEVEL:-info}
     volumes:
     - nuvio-data:/app/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:3000/api/health || curl -fsS http://localhost:3000/ || exit 0
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
     - stremio-net
     depends_on:

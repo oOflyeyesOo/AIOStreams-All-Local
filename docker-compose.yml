@@ -345,7 +345,7 @@ services:
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
-    profiles: ["scrapers", "usenet", "all"]
+    profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${PROWLARR_MEM_LIMIT:-384m}
@@ -470,7 +470,7 @@ services:
   stremthru:
     image: muniftanjim/stremthru:latest
     container_name: stremthru
-    profiles: ["proxies", "all"]
+    profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${STREMTHRU_MEM_LIMIT:-768m}
@@ -519,7 +519,7 @@ services:
   infinidysk:
     image: ghcr.io/infinidysk/infinidysk:latest
     container_name: infinidysk
-    profiles: ["proxies", "usenet", "all"]
+    profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
@@ -576,7 +576,7 @@ services:
       context: .
       dockerfile: docker/anime-kitsu/Dockerfile
     container_name: anime-kitsu
-    profiles: ["web", "all"]
+    profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${KITSU_MEM_LIMIT:-256m}
@@ -599,7 +599,7 @@ services:
   aiometadata:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
-    profiles: ["core", "web", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
@@ -655,7 +655,7 @@ services:
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
     container_name: postersplus
-    profiles: ["core", "web", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
@@ -681,7 +681,7 @@ services:
   subsense:
     image: nepiraw/stremio-subsense:latest
     container_name: stremio-subsense
-    profiles: ["core", "web", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${SUBSENSE_MEM_LIMIT:-384m}
@@ -713,7 +713,7 @@ services:
   nuvio:
     image: orochibraru/nuvio-web:latest
     container_name: nuvio-web
-    profiles: ["web", "all"]
+    profiles: ["nuvio", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 256m
@@ -723,8 +723,17 @@ services:
       - ORIGIN=${NUVIO_ORIGIN:-http://localhost:8085}
       - PROTOCOL_HEADER=x-forwarded-proto
       - HOST_HEADER=x-forwarded-host
+      - NUVIO_ADMIN_EMAILS=${NUVIO_ADMIN_EMAILS:-admin@localhost}
+      - NUVIO_DATA_DIR=/app/data
+      - NUVIO_LOG_LEVEL=${NUVIO_LOG_LEVEL:-info}
     volumes:
       - ./data/nuvio:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || curl -fsS http://localhost:3000/ || exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - stremio-net
     depends_on:
@@ -735,7 +744,7 @@ services:
   stremio-web:
     image: tsaridas/stremio-docker:latest
     container_name: stremio-web
-    profiles: ["web", "all"]
+    profiles: ["scrapers", "all"]
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
@@ -762,7 +771,7 @@ services:
   slicksync:
     image: ghcr.io/slicknsliding/slicksync:private
     container_name: slicksync
-    profiles: ["web", "all"]
+    profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${SLICKSYNC_MEM_LIMIT:-384m}

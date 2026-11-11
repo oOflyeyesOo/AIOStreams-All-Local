@@ -326,12 +326,10 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
-| **`core`** (Recommended Lean) | `docker compose --profile core up -d` | **~1.1 GB** | AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL, Redis, Portal. Ideal for low-memory VPS relying on Comet and Torrentio. |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | **~2.7 GB** | Core + Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
-| **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + StremThru proxy router, InfiniDysk Usenet Engine. |
-| **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
-| **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
-| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 19 continuous containers running on `stremio-net`. |
+| **`scrapers`** (Default Complete) | `docker compose --profile scrapers up -d` | **~2.8 GB** | Complete streaming appliance with all scrapers, indexers, proxies, Usenet, Stremio Web, SlickSync, and Anime Kitsu (everything except Nuvio). |
+| **`core`** (Ultra-Lean) | `docker compose --profile core up -d` | **~1.1 GB** | Fast, minimal Debrid stack: AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL 16, Redis 7, Search Broker, and Portal. Ideal for low-memory VPS. |
+| **`nuvio`** (Dedicated Player) | `docker compose --profile nuvio up -d` | **~250 MB** | Standalone Nuvio Web Player (`:8085`) with full features, AniSkip, IntroDB, and admin dashboard (`/admin`). Combine via `COMPOSE_PROFILES=scrapers,nuvio`. |
+| **`all`** | `docker compose --profile all up -d` | **~3.1 GB** | Full appliance running all 19 continuous containers simultaneously (scrapers + nuvio). |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.

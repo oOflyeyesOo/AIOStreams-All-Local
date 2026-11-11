@@ -887,7 +887,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     normalize_base_url(supplied["BASE_URL"])
                 if "COMPOSE_PROFILES" in supplied:
                     profiles = {profile.strip() for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip()}
-                    if not profiles or not profiles.issubset({"core", "scrapers", "proxies", "web", "tunnel", "all"}):
+                    if not profiles or not profiles.issubset({"core", "scrapers", "nuvio", "proxies", "web", "usenet", "tunnel", "all"}):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
                 updates = supplied
