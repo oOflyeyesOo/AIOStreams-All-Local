@@ -116,6 +116,7 @@ function notify(message) {
   toast.textContent = message; toast.hidden = false;
   clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.hidden = true, 5000);
 }
+window.showToast = notify;
 function setProgress(title,message,running=false) {
   document.getElementById('progress-title').textContent = title;
   document.getElementById('progress-description').textContent = message;
@@ -178,6 +179,8 @@ async function loadSettings() {
     document.getElementById(`${key}-remove`).hidden = !saved;
   }
   document.getElementById('player-link').href = `${location.protocol}//${location.hostname}:8082`;
+  const nuvioPlayerLink = document.getElementById('nuvio-player-link');
+  if (nuvioPlayerLink) nuvioPlayerLink.href = `${location.protocol}//${location.hostname}:8085`;
 }
 
 async function loadManifest() {
@@ -191,6 +194,11 @@ async function loadManifest() {
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
+    const installNuvio = document.getElementById('install-nuvio');
+    if (installNuvio) {
+      installNuvio.href = `${location.protocol}//${location.hostname}:8085`;
+      installNuvio.classList.remove('disabled');
+    }
   }
   if (info.aiometadataManifest) {
     currentAiometaManifest = info.aiometadataManifest;
@@ -372,10 +380,10 @@ if (backupSched) {
     try {
       const res = await api('/api/save-env', { method: 'POST', body: JSON.stringify({ BACKUP_SCHEDULE: val }) });
       if (res && res.success) {
-        showToast(`Automated backup schedule set to: ${val}`);
+        notify(`Automated backup schedule set to: ${val}`);
       }
     } catch (e) {
-      showToast('Failed to update backup schedule');
+      notify('Failed to update backup schedule');
     }
   });
 }
@@ -640,6 +648,8 @@ async function refreshHealthTelemetry() {
 
     const cpuEl = document.getElementById('health-cpu-load');
     if (cpuEl) cpuEl.textContent = `${res.total_cpu_percent || 0}%`;
+    const cpuSubEl = document.getElementById('health-cpu-sub');
+    if (cpuSubEl) cpuSubEl.textContent = `Across ${res.container_count || 'active'} containers`;
 
         const zil = data.zilean || {};
     const idx = data.indexer_health || {};

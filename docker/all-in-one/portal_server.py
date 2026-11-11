@@ -38,7 +38,8 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(line_buffering=True)
 
 PORT = int(os.environ.get("PORTAL_PORT", "8088"))
-WEB_ROOT = os.environ.get("WEB_ROOT", "/app")
+repo_root_cand = str(Path(__file__).resolve().parents[2])
+WEB_ROOT = os.environ.get("WEB_ROOT") or (repo_root_cand if os.path.isfile(os.path.join(repo_root_cand, "docker-compose.yml")) else "/app")
 ENV_PATH = os.path.join(WEB_ROOT, ".env")
 ENV_EXAMPLE_PATH = os.path.join(WEB_ROOT, ".env.example")
 APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
@@ -111,15 +112,38 @@ def launch_setup():
     return True
 
 
+HOST_PORT_MAP = {
+    "aiostreams": 3001, "aiometadata": 4005, "comet": 8000, "zilean": 8181,
+    "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
+    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "stremio-web": 8082,
+    "nuvio": 8085, "slicksync": 8086
+}
+
 def probe_integration(item):
     import socket
     name, host, port, group = item
-    try:
-        with socket.create_connection((host, port), timeout=1.5):
-            reachable = True
-    except OSError:
-        reachable = False
-    return {"name": name, "group": group, "reachable": reachable,"enabled":True}
+    env_vars = read_saved_env()
+    profiles = {p.strip() for p in env_vars.get("COMPOSE_PROFILES", "scrapers").split(",") if p.strip()}
+    enabled = True
+    if host == "nuvio" and "nuvio" not in profiles and "all" not in profiles:
+        enabled = False
+    elif host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE") == "debrid":
+        enabled = False
+
+    reachable = False
+    if enabled:
+        try:
+            with socket.create_connection((host, port), timeout=1.5):
+                reachable = True
+        except OSError:
+            host_port = HOST_PORT_MAP.get(host)
+            if host_port:
+                try:
+                    with socket.create_connection(("127.0.0.1", host_port), timeout=1.0):
+                        reachable = True
+                except OSError:
+                    reachable = False
+    return {"name": name, "group": group, "reachable": reachable, "enabled": enabled}
 
 
 def read_saved_env():
@@ -536,7 +560,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return False
 
     def authorize(self):
-        password = os.environ.get("ADDON_PASSWORD")
+        password = os.environ.get("ADDON_PASSWORD") or read_saved_env().get("ADDON_PASSWORD")
         if not password:
             self.send_error(503, "Portal password is not configured")
             return False
@@ -689,7 +713,11 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/export-manifest":
             try:
                 base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-                with urllib.request.urlopen(base + "/stremio/u/local/manifest.json", timeout=10) as response:
+                try:
+                    req = urllib.request.urlopen(base + "/stremio/u/local/manifest.json", timeout=5)
+                except Exception:
+                    req = urllib.request.urlopen("http://localhost:3001/stremio/u/local/manifest.json", timeout=5)
+                with req as response:
                     manifest = json.load(response)
                 if not isinstance(manifest, dict) or not manifest.get("id"):
                     raise ValueError("Manifest not ready")
@@ -711,9 +739,14 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/api/search-status":
             try:
-                with urllib.request.urlopen('http://search-broker:8091/status',timeout=2) as response:
+                with urllib.request.urlopen('http://search-broker:8091/status', timeout=2) as response:
                     self.json_response(json.load(response))
-            except (OSError,ValueError):self.json_response({'status':'unavailable'},503)
+            except Exception:
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:8091/status', timeout=2) as response:
+                        self.json_response(json.load(response))
+                except Exception:
+                    self.json_response({'status': 'unavailable'}, 503)
             return
         if path == "/api/diagnostics":
             self.json_response(diagnostics_snapshot())
@@ -921,7 +954,17 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
                     self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
                     return
-                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "ENABLE_ANIME_SOURCES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
+                allowed = {
+                    "BASE_URL", "AIOMETADATA_HOST", "AIOMETADATA_TEMPLATE", "COMPOSE_PROFILES",
+                    "ENABLE_ANIME_SOURCES", "STREAMING_MODE", "BACKUP_SCHEDULE",
+                    "ENABLE_TORRENTIO", "TORRENTIO_URL", "ENABLE_DMM", "ENABLE_REMUXDB",
+                    "DISCORD_WEBHOOK_URL",
+                    "TMDB_API_KEY", "TVDB_API_KEY", "FANART_API_KEY", "MDBLIST_API_KEY", "GEMINI_API_KEY", "RPDB_API_KEY",
+                    "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY", "OFFCLOUD_API_KEY", "SEEDR_API_KEY",
+                    "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "SIMKL_CLIENT_ID", "SIMKL_CLIENT_SECRET", "ANILIST_CLIENT_ID", "ANILIST_CLIENT_SECRET",
+                    "SUBDL_API_KEY", "SUBSOURCE_API_KEY", "WYZIE_API_KEY",
+                    "USENET_ENABLED", "USENET_HOST", "USENET_PORT", "USENET_USER", "USENET_CONNECTIONS", "USENET_SSL", "NZB_INDEXER_URL", "NZB_INDEXER_API_KEY"
+                }
                 supplied = payload["values"]
                 unknown = sorted(key for key in supplied if key not in allowed)
                 if unknown:
@@ -968,10 +1011,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode("utf-8"))
 
     def json_response(self, data, status=200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
 
     def handle_api_status(self, env_only=False):
         env_vars = {}

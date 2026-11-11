@@ -98,7 +98,7 @@ def main():
     text += yaml.dump(config, Dumper=Dumper, sort_keys=False, width=120)
     target = ROOT / 'compose.manager.yml'
     if '--check' in sys.argv:
-        if not target.exists() or target.read_text() != text:
+        if not target.exists() or target.read_text(encoding='utf-8').replace('\r\n', '\n').strip() != text.replace('\r\n', '\n').strip():
             raise SystemExit('compose.manager.yml is stale; regenerate it')
     else:
         target.write_text(text, encoding='utf-8', newline='\n')

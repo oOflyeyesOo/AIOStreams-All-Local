@@ -32,9 +32,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             empty=('empty' in self.path or 'tt0903747' in self.path) and owner=='primary'
             body={'streams':[] if empty else [{'name':'Fixture [PM+]','title':'Fixture.Movie.2026.1080p.WEB-DL',
                   'url':'http://portal:18881/media/'+owner+'.mp4',
-                  'behaviorHints':{'service':'premiumize','cached':True,'filename':'Fixture.2026.1080p.mkv'}}]}
+                  'behaviorHints':{'service':'premiumize','cached':True,'filename':'Fixture.2026.1080p.mkv'}}],
+                  'cacheMaxAge': 3600}
         encoded=json.dumps(body).encode();self.send_response(200)
-        self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(encoded)))
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(encoded)))
+        self.send_header('Cache-Control','public, max-age=3600')
         self.end_headers();self.wfile.write(encoded)
 
 def request(url,payload=None,method=None,auth=None):
