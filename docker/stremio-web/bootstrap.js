@@ -130,7 +130,7 @@
   let lastQueriedHash = '';
 
   async function checkAniSkip(video) {
-    const hash = window.location.hash || '';
+    const hash = (typeof window !== 'undefined' && window.location ? window.location.hash : '') || '';
     if (hash === lastQueriedHash && currentSkipTimes !== null) return;
     lastQueriedHash = hash;
     currentSkipTimes = null;
@@ -140,7 +140,7 @@
     if (!match) return;
 
     const [_, rawId, s, ep] = match;
-    const portalHost = window.location.hostname || 'localhost';
+    const portalHost = (typeof window !== 'undefined' && window.location ? window.location.hostname : '') || 'localhost';
     const portalUrl = `http://${portalHost}:8088/api/aniskip?id=${encodeURIComponent(rawId)}&season=${s}&episode=${ep}&duration=${Math.round(video.duration || 0)}`;
 
     try {
@@ -225,52 +225,56 @@
   /* ==============================================================================
    * AIO Local Web Player Shortcuts (Space, Seek, Fullscreen, AniSkip)
    * ============================================================================== */
-  window.addEventListener('keydown', (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
-        document.activeElement?.isContentEditable) {
-      return;
-    }
-    const video = document.querySelector('video');
-    if (!video) return;
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
+          document.activeElement?.isContentEditable) {
+        return;
+      }
+      const video = document.querySelector('video');
+      if (!video) return;
 
-    if (e.code === 'Space' || e.key === 'k') {
-      e.preventDefault();
-      if (video.paused) video.play(); else video.pause();
-    } else if (e.code === 'ArrowLeft' || e.key === 'j') {
-      e.preventDefault();
-      video.currentTime = Math.max(0, video.currentTime - 10);
-      showToast('⏪ -10s');
-    } else if (e.code === 'ArrowRight' || e.key === 'l') {
-      e.preventDefault();
-      video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
-      showToast('⏩ +10s');
-    } else if (e.key === 's' || e.key === 'S') {
-      if (activeSkipBtn) {
+      if (e.code === 'Space' || e.key === 'k') {
         e.preventDefault();
-        activeSkipBtn.click();
+        if (video.paused) video.play(); else video.pause();
+      } else if (e.code === 'ArrowLeft' || e.key === 'j') {
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        showToast('⏪ -10s');
+      } else if (e.code === 'ArrowRight' || e.key === 'l') {
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+        showToast('⏩ +10s');
+      } else if (e.key === 's' || e.key === 'S') {
+        if (activeSkipBtn) {
+          e.preventDefault();
+          activeSkipBtn.click();
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          (video.closest('.player-container') || video).requestFullscreen?.().catch(() => {});
+        } else {
+          document.exitFullscreen?.().catch(() => {});
+        }
       }
-    } else if (e.key === 'f' || e.key === 'F') {
-      e.preventDefault();
-      if (!document.fullscreenElement) {
-        (video.closest('.player-container') || video).requestFullscreen?.().catch(() => {});
-      } else {
-        document.exitFullscreen?.().catch(() => {});
-      }
-    }
-  });
+    });
+  }
 
-  setInterval(() => {
-    const video = document.querySelector('video');
-    if (!video) {
-      removeSkipButton();
-      return;
-    }
-    if (!video.dataset.aioHooked) {
-      video.dataset.aioHooked = '1';
-      video.addEventListener('timeupdate', () => handleVideoTimeUpdate(video));
-      video.addEventListener('loadedmetadata', () => checkAniSkip(video));
-      video.addEventListener('play', () => checkAniSkip(video));
-      checkAniSkip(video);
-    }
-  }, 1000);
+  if (typeof setInterval !== 'undefined') {
+    setInterval(() => {
+      const video = document.querySelector('video');
+      if (!video) {
+        removeSkipButton();
+        return;
+      }
+      if (!video.dataset.aioHooked) {
+        video.dataset.aioHooked = '1';
+        video.addEventListener('timeupdate', () => handleVideoTimeUpdate(video));
+        video.addEventListener('loadedmetadata', () => checkAniSkip(video));
+        video.addEventListener('play', () => checkAniSkip(video));
+        checkAniSkip(video);
+      }
+    }, 1000);
+  }
 })();

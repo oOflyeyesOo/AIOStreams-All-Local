@@ -15,7 +15,7 @@ function run(existing, options = {}) {
     open(method, path) { this.path = path; }
     send() { this.status = options.failed ? 503 : 200; this.responseText = JSON.stringify(this.path.includes('defaults') ? defaults : seed); }
   }
-  vm.runInNewContext(source, {XMLHttpRequest: Request, document: {readyState: 'loading'}, setTimeout() {}, console: {warn() {}}, location: {origin: 'http://server:8082', reload() {}},
+  vm.runInNewContext(source, {XMLHttpRequest: Request, window: {location: {origin: 'http://server:8082', hostname: 'server', hash: '', reload() {}}, addEventListener() {}}, document: {readyState: 'loading'}, setTimeout() {}, setInterval() {}, clearInterval() {}, console: {warn() {}}, location: {origin: 'http://server:8082', reload() {}},
     localStorage: {getItem(key) { return store.get(key) ?? null; }, setItem(key, value) { store.set(key, value); }}});
   return store;
 }

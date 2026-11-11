@@ -437,7 +437,9 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(self.request("/api/health-stats", auth=False)[0], 401)
         with patch("tools.resources.get_stack_resources", return_value={"success": True, "container_count": 22, "containers": []}), \
              patch("tools.backup.get_backup_telemetry", return_value={"count": 2, "total_size_mb": 15.4}), \
-             patch("tools.watchdog.get_watchdog_telemetry", return_value={"status": "active", "healthy_count": 14, "total_services": 14, "last_probe": "2026-11-09T00:00:00Z"}):
+             patch("tools.watchdog.get_watchdog_telemetry", return_value={"status": "active", "healthy_count": 14, "total_services": 14, "last_probe": "2026-11-09T00:00:00Z", "zilean_stats": {"healthy": True}, "indexer_health": {"healthy_indexers": 4}}), \
+             patch("tools.watchdog.get_zilean_stats", return_value={"healthy": True, "engine": "DMM Hash Search (Active)", "latency_ms": 12.0}), \
+             patch("tools.watchdog.check_prowlarr_indexers", return_value={"total_indexers": 4, "healthy_indexers": 4, "degraded_indexers": []}):
             status, body, _ = self.request("/api/health-stats", auth=True)
             self.assertEqual(status, 200)
             data = json.loads(body)

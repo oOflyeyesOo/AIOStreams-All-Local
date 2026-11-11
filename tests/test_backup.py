@@ -71,7 +71,10 @@ class BackupTests(unittest.TestCase):
             source=root/'source';source.mkdir()
             (source/'secret').write_text('preserve')
             target=root/'target';target.mkdir()
-            (target/'data').symlink_to(source,target_is_directory=True)
+            try:
+                (target/'data').symlink_to(source,target_is_directory=True)
+            except OSError:
+                self.skipTest("Symlinks require elevated privileges on Windows")
             fixture=root/'fixture';fixture.mkdir()
             (fixture/'secret').write_text('overwrite')
             archive=root/'fixture.tar.gz'
@@ -82,24 +85,38 @@ class BackupTests(unittest.TestCase):
     def test_offline_restore_removes_stale_sqlite_journals(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);source=root/'snapshot.db';target=root/'restored.db'
-            with sqlite3.connect(source) as db:db.execute('CREATE TABLE sentinel(value text)')
+            db = sqlite3.connect(source)
+            try:
+                db.execute('CREATE TABLE sentinel(value text)')
+            finally:
+                db.close()
             for suffix in ('-wal','-shm','-journal'):target.with_name(target.name+suffix).write_bytes(b'stale')
             backup.restore_file(source,target)
             for suffix in ('-wal','-shm','-journal'):self.assertFalse(target.with_name(target.name+suffix).exists())
-            with sqlite3.connect(target) as db:self.assertEqual(db.execute('PRAGMA quick_check').fetchone()[0],'ok')
+            chk = sqlite3.connect(target)
+            try:
+                self.assertEqual(chk.execute('PRAGMA quick_check').fetchone()[0],'ok')
+            finally:
+                chk.close()
 
     def test_sqlite_snapshot_includes_live_wal_transaction(self):
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / "live.sqlite"
             target = Path(folder) / "snapshot.sqlite"
-            with sqlite3.connect(source) as db:
+            db = sqlite3.connect(source)
+            try:
                 db.execute("PRAGMA journal_mode=WAL")
                 db.execute("CREATE TABLE saved(value TEXT)")
                 db.execute("INSERT INTO saved VALUES ('committed')")
                 db.commit()
                 backup.copy_consistent(source, target)
-                with sqlite3.connect(target) as restored:
+                restored = sqlite3.connect(target)
+                try:
                     self.assertEqual(restored.execute("SELECT value FROM saved").fetchone()[0], "committed")
+                finally:
+                    restored.close()
+            finally:
+                db.close()
 
     def test_restore_rejects_links_and_special_files(self):
         for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE):

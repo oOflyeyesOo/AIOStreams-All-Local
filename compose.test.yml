@@ -1,4 +1,11 @@
 services:
+  browser-tests:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app:ro
+    command: node --test tests/browser-bootstrap.test.cjs tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs
+
   tests:
     image: python:3.11-alpine
     working_dir: /app
@@ -36,5 +43,5 @@ services:
         sh /init-databases.sh
         sh /init-databases.sh
         count=$$(psql -h shared-postgres -U postgres -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname IN ('zilean','aiometadata')")
-        test "$$count" = 4
+        test "$$count" = 2
         echo 'Database creation and repeat startup passed.'

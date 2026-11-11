@@ -88,10 +88,16 @@ def copy_consistent(source, destination):
             is_sqlite = handle.read(16) == b"SQLite format 3\x00"
         if is_sqlite:
             try:
-                uri = source.resolve().as_uri() + "?mode=ro&immutable=1"
-                with sqlite3.connect(uri, uri=True) as db:
-                    with sqlite3.connect(str(destination)) as output:
+                uri = source.resolve().as_uri() + "?mode=ro"
+                db = sqlite3.connect(uri, uri=True)
+                try:
+                    output = sqlite3.connect(str(destination))
+                    try:
                         db.backup(output)
+                    finally:
+                        output.close()
+                finally:
+                    db.close()
                 return str(destination)
             except Exception:
                 pass
