@@ -7,7 +7,7 @@ from init.service_inventory import INTEGRATIONS
 
 def main():
     result = subprocess.run(
-        ["docker", "compose", "--env-file", ".env.example", "config", "--services"],
+        ["docker", "compose", "--env-file", ".env.example", "--profile", "all", "config", "--services"],
         check=True,
         capture_output=True,
         text=True,
