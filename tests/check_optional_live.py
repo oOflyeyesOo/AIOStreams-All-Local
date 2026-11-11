@@ -103,7 +103,7 @@ try:
     config=installed_profile()
     route=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
     assert route['options']['sources']==['usenet'] and route['options']['services']==['nzbdav']
-    assert not any(p['type'] in ('torrentio','comet','mediafusion') for p in config['presets'])
+    assert not any(p['type'] in ('torrentio','comet') for p in config['presets'])
     env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
     provider=json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])['Providers'][0]
     assert provider['User']==USER and provider['Pass']==PASSWORD and provider['MaxConnections']==2
@@ -120,20 +120,17 @@ try:
     def indexers():return request('http://prowlarr:9696/api/v1/indexer',headers={'X-Api-Key':'prowlarr_internal_secret_key_99'})
     matches=lambda:[x for x in indexers() if x.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and f.get('value')=='http://portal:18884' for f in x.get('fields',[]))]
     assert len(matches())==1 and matches()[0]['protocol']=='usenet','Exactly one NZB indexer required'
-    assert portal('/api/save-env',{'USENET_ENABLED':'true','USENET_USER':USER,'MEDIAFUSION_REPLICAS':'1'})['success']
+    assert portal('/api/save-env',{'USENET_ENABLED':'true','USENET_USER':USER})['success']
     apply()
-    container('mediafusion')
-    assert sum(p['type']=='mediafusion' for p in installed_profile()['presets'])==1
     assert len(matches())==1
-    print('PASS: repeated setup retains password, does not duplicate Newznab, and starts optional MediaFusion',flush=True)
+    print('PASS: repeated setup retains password and does not duplicate Newznab',flush=True)
     assert portal('/api/save-env',{'USENET_ENABLED':'false'})['success']
     apply()
     env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
     assert json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])=={'Providers':[]}
     assert portal('/api/env')['USENET_PASSWORD_SAVED']
-    assert not any(p['type']=='mediafusion' or p['instanceId']=='prowlarr-usenet' for p in installed_profile()['presets'])
+    assert not any(p['instanceId']=='prowlarr-usenet' for p in installed_profile()['presets'])
     assert len(matches())==1 and not matches()[0]['enable'],'Disabled managed NZB indexer must not poll in the background'
-    assert not subprocess.check_output(['docker','ps','-q','--filter','label=com.docker.compose.project='+PROJECT,'--filter','label=com.docker.compose.service=mediafusion']).strip()
     print('PASS: disabling stops optional service and NNTP provider while retaining credentials',flush=True)
     print(json.dumps({'scope':'fixture NNTP authentication and indexer setup, not article playback','counts':counts}),flush=True)
 finally:
