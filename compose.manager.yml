@@ -123,8 +123,19 @@ services:
     - BASE_URL=${BASE_URL:-}
     - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+    - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+    - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
-    - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-}
+    - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
+    - ENABLE_TORRENTIO=${ENABLE_TORRENTIO:-true}
+    - TORRENTIO_URL=${TORRENTIO_URL:-}
+    - ENABLE_REMUXDB=${ENABLE_REMUXDB:-true}
+    - ENABLE_DMM=${ENABLE_DMM:-true}
+    - DISCORD_WEBHOOK_URL=
+    - ENABLE_ANIME_SOURCES=
     - AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}
     - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
     - PORT_PORTAL=${PORT_PORTAL:-8088}
@@ -140,7 +151,6 @@ services:
     - PORT_ANIME_KITSU=${PORT_ANIME_KITSU:-7005}
     - PORT_AIOMETADATA=${PORT_AIOMETADATA:-4005}
     - PORT_POSTERSPLUS=${PORT_POSTERSPLUS:-9039}
-    - PORT_DEBRID_SEARCH=${PORT_DEBRID_SEARCH:-3011}
     - PORT_SUBSENSE=${PORT_SUBSENSE:-3100}
     - PORT_NUVIO=${PORT_NUVIO:-8085}
     - PORT_STREMIO_WEB=${PORT_STREMIO_WEB:-8082}
@@ -189,6 +199,9 @@ services:
     - CONFIG_ACCESS_KEY=${ADDON_PASSWORD:-admin}
     - AIOSTREAMS_AUTH_REQUIRED=true
     - DATABASE_URI=sqlite:///data/db.sqlite
+    - REDIS_URI=redis://shared-redis:6379/6
+    - REDIS_URL=redis://shared-redis:6379/6
+    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
     - ALLOW_PRIVATE_URLS=true
     - ALIASED_CONFIGURATIONS=${ALIASED_CONFIGURATIONS:-}
     - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
@@ -204,6 +217,7 @@ services:
     - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
     - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
     - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
+    - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
     - ENCRYPT_STREMTHRU_URLS=false
     - TMDB_API_KEY=${TMDB_API_KEY}
     - TVDB_API_KEY=${TVDB_API_KEY}
@@ -266,7 +280,10 @@ services:
     - INDEXER_MANAGER_TYPE=prowlarr
     - INDEXER_MANAGER_URL=http://search-broker:8091
     - INDEXER_MANAGER_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-    - INDEXER_MANAGER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-10}
+    - INDEXER_MANAGER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-8}
+    - COMET_SCRAPING_TIMEOUT=${COMET_SCRAPING_TIMEOUT:-10}
+    - COMET_DEBRID_TIMEOUT=${COMET_DEBRID_TIMEOUT:-8}
+    - COMET_SCRAPE_TORRENT_TITLE_MATCH_THRESHOLD=${COMET_SCRAPE_TORRENT_TITLE_MATCH_THRESHOLD:-0.85}
     - SCRAPE_PROWLARR=true
     - SCRAPE_ZILEAN=true
     - SCRAPE_NYAA=false
@@ -287,13 +304,13 @@ services:
         max-size: 10m
         max-file: '3'
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
-    cpus: ${ZILEAN_CPU_LIMIT:-2.0}
-    mem_limit: ${ZILEAN_MEM_LIMIT:-2048m}
+    cpus: ${ZILEAN_CPU_LIMIT:-1.5}
+    mem_limit: ${ZILEAN_MEM_LIMIT:-3072m}
     deploy:
       resources:
         limits:
-          cpus: ${ZILEAN_CPU_LIMIT:-2.0}
-          memory: ${ZILEAN_MEM_LIMIT:-2048m}
+          cpus: ${ZILEAN_CPU_LIMIT:-1.5}
+          memory: ${ZILEAN_MEM_LIMIT:-3072m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_ZILEAN:-8181}:8181
     healthcheck:
@@ -305,12 +322,12 @@ services:
       retries: 5
       start_period: 15s
     environment:
-    - DOTNET_PROCESSOR_COUNT=${ZILEAN_THREADS:-4}
+    - DOTNET_PROCESSOR_COUNT=${ZILEAN_THREADS:-2}
     - DOTNET_gcServer=1
     - Zilean__Database__Type=postgres
     - Zilean__Database__ConnectionString=Host=shared-postgres;Database=zilean;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
     - Zilean__Dmm__ImportBatched=true
-    - Zilean__Parsing__BatchSize=${ZILEAN_BATCH_SIZE:-1000}
+    - Zilean__Parsing__BatchSize=${ZILEAN_BATCH_SIZE:-500}
     - Zilean__Dmm__EnableScraping=${ENABLE_DMM:-${ZILEAN_ENABLE_SCRAPING:-true}}
     - Zilean__Dmm__ScrapeSchedule=${ZILEAN_SCRAPE_SCHEDULE:-0 4 * * *}
     - Zilean__Dmm__MinimumReDownloadIntervalMinutes=1440
@@ -337,8 +354,8 @@ services:
     - stremio-web-data:/stremio-web
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
-    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus\
-      \ /aiostreams;\n  if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
+    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus /aiostreams;\n\
+      \  if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
       \ fi;\n  if grep -q '\\\"uuid\\\": *null' /stremio-web/aiostreams_install.json 2>/dev/null; then rm -f /stremio-web/aiostreams_install.json;\
       \ fi;\n  if [ ! -f /stremio-web/localStorage.json ]; then\n    echo '{\\\"profile\\\":{\\\"auth\\\":null,\\\"addons\\\
       \":[],\\\"addonsLocked\\\":false,\\\"settings\\\":{\\\"interfaceLanguage\\\":\\\"eng\\\",\\\"streamingServerUrl\\\"\
@@ -349,9 +366,8 @@ services:
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
       \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web\
-      \ /postersplus /aiostreams 2>/dev/null || true;\n  if [ ! -f /stremio-web/localStorage.json ]; then echo\
-      \ '{}' > /stremio-web/localStorage.json; fi;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key\
-      \ 2>/dev/null || true; fi;\n\"\n"
+      \ /postersplus /aiostreams 2>/dev/null || true;\n  if [ ! -f /stremio-web/localStorage.json ]; then echo '{}' > /stremio-web/localStorage.json;\
+      \ fi;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;\n\"\n"
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     restart: unless-stopped
@@ -403,6 +419,7 @@ services:
     environment:
     - PROWLARR_URL=http://prowlarr:9696
     - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
+    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
     - FLARESOLVERR_URL=http://flaresolverr:8191
     - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
     - COMET_URL=http://comet:8000
@@ -412,6 +429,7 @@ services:
     - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
     - POSTERSPLUS_URL=http://postersplus:8000
     - POSTERSPLUS_ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-}
+    - STREMTHRU_URL=http://stremthru:8080
     - BASE_URL=${BASE_URL:-http://localhost:3001}
     - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
     - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@localhost}
@@ -437,13 +455,19 @@ services:
     - FANART_API_KEY=${FANART_API_KEY}
     - GEMINI_API_KEY=${GEMINI_API_KEY}
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+    - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+    - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+    - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
     command: python3 -u /init/setup_stack.py
     networks:
     - stremio-net
   flaresolverr:
     image: ghcr.io/thephaseless/byparr:latest
-    shm_size: "1gb"
+    shm_size: 1gb
     restart: unless-stopped
     logging:
       driver: json-file
@@ -529,7 +553,7 @@ services:
         max-file: '3'
     mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
     ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000
+    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_INFINIDYSK:-3005}:3000
     environment:
     - PUID=1000
     - PGID=1000
@@ -557,6 +581,131 @@ services:
       timeout: 5s
     volumes:
     - infinidysk-data:/config
+    networks:
+    - stremio-net
+    depends_on:
+      init-configs:
+        condition: service_completed_successfully
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles:
+    - tunnel
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks:
+    - stremio-net
+    volumes: []
+  anime-kitsu:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: ${KITSU_MEM_LIMIT:-256m}
+    ports:
+    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_ANIME_KITSU:-7005}:7000
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - node -e "http=require('http');http.get('http://localhost:7000/manifest.json',r=>{process.exit(r.statusCode===200?0:1)})"
+        || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    environment:
+    - PORT=7000
+    - NODE_OPTIONS=--max-old-space-size=128
+    - FANART_APIKEY=${FANART_API_KEY}
+    networks:
+    - stremio-net
+    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-kitsu:${AIO_IMAGE_TAG:-latest}
+    volumes: []
+  aiometadata:
+    image: ghcr.io/jigsawfr/aiometadata-docker:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
+    ports:
+    - ${PORT_AIOMETADATA:-4005}:4005
+    environment:
+    - PORT=4005
+    - HOST_NAME=${AIOMETADATA_HOST:-http://localhost:4005}
+    - TMDB_API_KEY=${TMDB_API_KEY}
+    - TMDB_API=${TMDB_API_KEY}
+    - BUILT_IN_TMDB_API_KEY=${TMDB_API_KEY}
+    - TVDB_API_KEY=${TVDB_API_KEY}
+    - BUILT_IN_TVDB_API_KEY=${TVDB_API_KEY}
+    - FANART_API_KEY=${FANART_API_KEY}
+    - RPDB_API_KEY=${RPDB_API_KEY}
+    - MDBLIST_API_KEY=${MDBLIST_API_KEY}
+    - GEMINI_API_KEY=${GEMINI_API_KEY}
+    - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
+    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+    - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
+    - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
+    - REDIS_URL=redis://shared-redis:6379/5
+    - DATABASE_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/aiometadata
+    - ADMIN_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+    - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
+    - IMAGE_PROXY_SIGNING_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+    - CACHE_WARMUP_ON_STARTUP=true
+    - NODE_ENV=production
+    - NODE_OPTIONS=--max-old-space-size=384
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q --spider http://localhost:4005/health/live || exit 1
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    volumes:
+    - aiometadata-data:/app/addon/data
+    networks:
+    - stremio-net
+    depends_on:
+      shared-redis:
+        condition: service_started
+      shared-postgres:
+        condition: service_started
+      init-postgres:
+        condition: service_completed_successfully
+      init-configs:
+        condition: service_completed_successfully
+  postersplus:
+    image: ghcr.io/umbraprojects/postersplus:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
+    ports:
+    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_POSTERSPLUS:-9039}:8000
+    environment:
+    - PORT=8000
+    - TMDB_API_KEY=${TMDB_API_KEY}
+    - MDBLIST_API_KEY=${MDBLIST_API_KEY}
+    - RPDB_API_KEY=${RPDB_API_KEY}
+    - ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-}
+    - AIOSTREAMS_URL=http://aiostreams:3000
+    - CACHE_DIR=/app/cache
+    volumes:
+    - postersplus-data:/app/cache
     networks:
     - stremio-net
     depends_on:
@@ -657,6 +806,9 @@ services:
     - AIOSTREAMS_URL=http://aiostreams:3000
     - AIOSTREAMS_AUTH_USERNAME=admin
     - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
+    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
+    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     - STREMIO_URL=http://aiostreams:3000
     - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
     - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
@@ -713,8 +865,8 @@ services:
     - -c
     - "if [ -f /init-databases.sh ]; then\n  exec sh /init-databases.sh\nelse\n  echo \"[init-postgres] Waiting for shared-postgres...\"\
       \n  until psql -h shared-postgres -U postgres -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; do sleep 1; done\n  for\
-      \ db in zilean aiometadata; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE\
-      \ $$db;\" 2>/dev/null || true\n  done\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
+      \ db in zilean aiometadata; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE $$db;\" 2>/dev/null\
+      \ || true\n  done\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
     networks:
     - stremio-net
   shared-postgres:
