@@ -117,12 +117,13 @@ jobs:
             shift
             echo "::group::Run $step_name"
             echo "### Run $step_name" >> "$GITHUB_STEP_SUMMARY"
-            if ! "$@"; then
-              local code=$?
+            local code=0
+            "$@" || code=$?
+            if [ "$code" -ne 0 ]; then
               echo "::error title=$step_name failed::$step_name failed with exit code $code"
               echo "❌ **$step_name failed (exit code $code)**" >> "$GITHUB_STEP_SUMMARY"
               echo "::endgroup::"
-              return $code
+              return "$code"
             fi
             echo "✅ **$step_name passed**" >> "$GITHUB_STEP_SUMMARY"
             echo "::endgroup::"

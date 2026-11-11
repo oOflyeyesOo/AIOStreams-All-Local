@@ -178,6 +178,8 @@ services:
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
       - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
+      - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-300}
+      - PIPELINE_CACHE_TTL=${PIPELINE_CACHE_TTL:-300}
       - ENCRYPT_STREMTHRU_URLS=false
 
       # --- Metadata & Debrid Auto-Configuration ---
