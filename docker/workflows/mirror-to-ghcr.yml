@@ -19,8 +19,6 @@ jobs:
             target: "aiostreams:latest"
           - source: "ghcr.io/g0ldyy/comet:latest"
             target: "comet:latest"
-          - source: "mhdzumair/mediafusion:latest"
-            target: "mediafusion:latest"
           - source: "ipromknight/zilean:latest"
             target: "zilean:latest"
           - source: "lscr.io/linuxserver/prowlarr:latest"

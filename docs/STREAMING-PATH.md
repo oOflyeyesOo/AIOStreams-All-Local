@@ -81,7 +81,6 @@ AIOStreams coordinates a parallel query fan-out across configured scrapers:
    - **Torrentio Public Index**: When `ENABLE_TORRENTIO=true`, queries Torrentio's cloud index (`https://torrentio.strem.fun` or `TORRENTIO_URL`) in ~30ms to access millions of pre-indexed torrent releases without local crawler overhead.
    - **Debrid Search (`:8004`)**: Queries the user's personal Real-Debrid / Torbox cloud for files already downloaded to their account.
    - **Usenet Search (Built-in & Prowlarr)**: When enabled, searches configured Newznab indexers and Easynews search.
-   - **MediaFusion (`:8003`)**: Optional secondary scraper for specialized community catalogs and streams.
 
 3. **Adaptive Sequential Fallback (`SOOTIO_MODE=fallback`)**:
    - Rather than hammering external trackers simultaneously, AIOStreams groups scrapers into primary and fallback tiers.

@@ -119,6 +119,6 @@ a Hidden Cinemeta server.
 
 Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_STREMIO_WEB`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
 
-The default request path uses Comet and MediaFusion plus the Debrid Search library. `SOOTIO_MODE=fallback` invokes Sootio sequentially only when primary sources have no cached streams. Use `off` to omit it or `parallel` to request it alongside primary sources, then rerun setup. See [timed routing validation](docs/ROUTING-VALIDATION.md).
+The default request path uses Comet plus the Debrid Search library. `SOOTIO_MODE=fallback` invokes Sootio sequentially only when primary sources have no cached streams. Use `off` to omit it or `parallel` to request it alongside primary sources, then rerun setup. See [timed routing validation](docs/ROUTING-VALIDATION.md).
 
 Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.

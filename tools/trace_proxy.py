@@ -12,7 +12,7 @@ import time
 import urllib.parse
 
 TARGETS = {'comet':('comet',8000), 'sootio':('sootio',55771),
-           'mediafusion':('mediafusion',8000), 'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181),
+           'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181),
            'aiometadata':('aiometadata',4005), 'subsense':('subsense',3100),
            'anime-kitsu':('anime-kitsu',7000), 'postersplus':('postersplus',8000),
            'search-broker':('search-broker',8091)}

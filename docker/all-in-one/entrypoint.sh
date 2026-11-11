@@ -12,7 +12,6 @@ export PYTHONUNBUFFERED=1
 # 1. Setup persistent storage & runtime directories
 mkdir -p /data/aiostreams \
          /data/comet \
-         /data/mediafusion \
          /data/prowlarr \
          /data/subsense \
          /data/sootio \
@@ -224,7 +223,7 @@ if [ "$daemon_ready" = "true" ]; then
     echo "[4/4] Starting all streaming services and local scrapers..."
     docker compose up -d --scale portal=0 --remove-orphans
 
-    # Auto-provision stack (Prowlarr trackers + MediaFusion default admin) in background
+    # Auto-provision stack (Prowlarr trackers) in background
     if [ -f /app/init/bootstrap/setup_stack.py ]; then
         python3 -u /app/init/bootstrap/setup_stack.py > /var/log/stack_setup.log 2>&1 &
     elif [ -f /app/init/prowlarr/setup_prowlarr.py ]; then
@@ -244,7 +243,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • Posters+:              http://localhost:9039"
     echo " • SubSense Subtitles:    http://localhost:3100"
     echo " • InfiniDysk Usenet:     http://localhost:3005"
-    echo " • MediaFusion Scraper:   http://localhost:8001"
     echo " • Comet Scraper:         http://localhost:8000"
     echo " • Sootio Multi-Scraper:  http://localhost:55771"
     echo " • Anime Kitsu:           http://localhost:7005"

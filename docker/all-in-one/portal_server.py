@@ -95,7 +95,7 @@ def launch_setup():
             for line in process.stdout:
                 with SETUP_LOCK:
                     SETUP_JOB["logs"].append(line.rstrip())
-                    for marker, step in (("Prowlarr", "Connecting public indexers"), ("MediaFusion Setup", "Configuring scrapers"),
+                    for marker, step in (("Prowlarr", "Connecting public indexers"), 
                                          ("AIOMetadata Setup", "Preparing metadata"), ("AIOStreams Setup", "Building your manifest"),
                                          ("Stremio Web Pre-Seed", "Connecting your players"), ("Test ", "Checking the result")):
                         if marker in line:
@@ -114,8 +114,6 @@ def launch_setup():
 def probe_integration(item):
     import socket
     name, host, port, group = item
-    if host == 'mediafusion' and read_saved_env().get('MEDIAFUSION_REPLICAS','0') != '1':
-        return {'name':name,'group':group,'reachable':False,'enabled':False}
     try:
         with socket.create_connection((host, port), timeout=1.5):
             reachable = True
@@ -238,7 +236,6 @@ def config_export():
     values = {
         "BASE_URL": env_vars.get("BASE_URL", ""),
         "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
-        "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
         "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
     }
     return {
@@ -381,8 +378,7 @@ def public_service_urls(base_url):
         is_local = host == "localhost" or "." not in host or host.endswith((".local", ".lan"))
     if ":" in host:
         host = f"[{host}]"
-    ports = {"SOOTIO_URL": 55771, "MEDIAFUSION_HOST_URL": 8001,
-             "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
+    ports = {"SOOTIO_URL": 55771, "NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
     urls = {key: f"{parsed.scheme}://{host}:{port}" for key, port in ports.items()}
     if is_local:
         urls["AIOMETADATA_HOST"] = f"{parsed.scheme}://{host}:4005"
@@ -878,7 +874,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
                     self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
                     return
-                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "MEDIAFUSION_REPLICAS", "ENABLE_ANIME_SOURCES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
+                allowed = {"BASE_URL", "AIOMETADATA_HOST", "COMPOSE_PROFILES", "ENABLE_ANIME_SOURCES", "TMDB_API_KEY", "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY"}
                 supplied = payload["values"]
                 unknown = sorted(key for key in supplied if key not in allowed)
                 if unknown:
@@ -895,8 +891,6 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
                 updates = supplied
-                if updates.get('MEDIAFUSION_REPLICAS','0') not in ('0','1'):
-                    raise ValueError('Invalid optional-service state')
                 if updates.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                     raise ValueError('Invalid optional-source state')
                 save_env_updates(updates)
@@ -988,8 +982,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         resp_env = {
             **public_settings(env_vars),
             "STREAMING_MODE": mode_val,
-            "MEDIAFUSION_REPLICAS": env_vars.get("MEDIAFUSION_REPLICAS", "0"),
-            "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
+                "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
             "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
             "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
             "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
@@ -1125,8 +1118,6 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 raise ValueError('Invalid streaming mode; must be debrid, usenet, or hybrid')
             if keys_to_update.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                 raise ValueError('Anime sources must be enabled or disabled')
-            if 'MEDIAFUSION_REPLICAS' in keys_to_update and keys_to_update['MEDIAFUSION_REPLICAS'] not in ('0','1'):
-                raise ValueError('MediaFusion must be enabled (1) or disabled (0)')
             for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
@@ -1138,10 +1129,6 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 tmpl = keys_to_update['AIOMETADATA_TEMPLATE']
                 if not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):
                     raise ValueError('Invalid AIOMetadata template name')
-            if keys_to_update.get('MEDIAFUSION_MANIFEST_URL'):
-                url=urllib.parse.urlsplit(keys_to_update['MEDIAFUSION_MANIFEST_URL'])
-                if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.query or url.fragment or not url.path.endswith('/manifest.json'):
-                    raise ValueError('Enter a configured MediaFusion HTTP(S) manifest URL')
             if "BASE_URL" in keys_to_update:
                 keys_to_update["BASE_URL"] = normalize_base_url(keys_to_update["BASE_URL"])
                 existing = {}

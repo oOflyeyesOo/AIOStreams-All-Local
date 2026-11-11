@@ -13,15 +13,12 @@ HTTP_CHECKS = {
     "portal": ("http://portal:8088/healthz", False),
     "aiostreams": ("http://aiostreams:3000/api/v1/status", False),
     "comet": ("http://comet:8000/manifest.json", True),
-    "mediafusion": ("http://mediafusion:8000/manifest.json", True),
     "anime-kitsu": ("http://anime-kitsu:7000/manifest.json", True),
     "aiometadata": ("http://aiometadata:4005/health/live", False),
     "infinidysk": ("http://infinidysk:3000/healthz", False),
     "prowlarr": ("http://prowlarr:9696/ping", False),
     "stremio-web": ("http://stremio-web:8080/", False),
 }
-if os.environ.get('MEDIAFUSION_REPLICAS','0') != '1':
-    HTTP_CHECKS.pop('mediafusion',None)
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
     host: TCP_PORTS[host] for host in (
         "stremthru", "flaresolverr", "subsense",

@@ -24,14 +24,14 @@ function form(saved){
 }
 
 test('Usenet-only saved account reloads safely and resubmits without clearing its password',async()=>{
-  const env=form({USENET_ENABLED:'true',USENET_HOST:'news.fixture',USENET_PORT:'563',USENET_USER:'fixture-user',USENET_CONNECTIONS:'10',USENET_SSL:'true',USENET_PASSWORD_SAVED:true,MEDIAFUSION_REPLICAS:'0',configuredKeys:['NZB_INDEXER_API_KEY']});
+  const env=form({USENET_ENABLED:'true',USENET_HOST:'news.fixture',USENET_PORT:'563',USENET_USER:'fixture-user',USENET_CONNECTIONS:'10',USENET_SSL:'true',USENET_PASSWORD_SAVED:true,configuredKeys:['NZB_INDEXER_API_KEY']});
   await vm.runInContext('loadSettings()',env.context);
   assert.equal(env.nodes.get('usenet-host').value,'news.fixture');assert.equal(env.nodes.get('usenet-pass').value,'');
   assert.match(env.nodes.get('usenet-pass').placeholder,/Saved/);
-  assert.equal(env.nodes.get('enable-usenet').checked,true);assert.equal(env.nodes.get('enable-mediafusion').checked,false);
+  assert.equal(env.nodes.get('enable-usenet').checked,true);
   await env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
   const save=env.calls.find(c=>c.path==='/api/save-env').payload;
-  assert.equal(save.USENET_ENABLED,'true');assert.equal(save.USENET_SSL,'true');assert.equal(save.MEDIAFUSION_REPLICAS,'0');
+  assert.equal(save.USENET_ENABLED,'true');assert.equal(save.USENET_SSL,'true');
   assert.equal('USENET_PASS' in save,false);assert.equal('NZB_INDEXER_API_KEY' in save,false);
   assert.equal(env.calls.filter(c=>c.path==='/api/setup').length,1);
 });

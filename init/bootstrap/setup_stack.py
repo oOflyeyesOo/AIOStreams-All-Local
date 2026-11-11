@@ -3,10 +3,9 @@
 AIOStreams All-Local Unified Stack Bootstrapper & Auto-Provisioner
 Automates zero-touch configuration across all stack services upon launch:
 1. Prowlarr: Registers FlareSolverr Cloudflare bypass and auto-seeds top public torrent trackers.
-2. MediaFusion: Automatically provisions default admin user (admin / ${ADDON_PASSWORD}).
 3. Comet, InfiniDysk & Sootio: Validates connectivity and internal routing.
 4. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
-   template (Comet, MediaFusion, Torrentio, Sootio, AIOMetadata, SubSense, InfiniDysk,
+   template (Comet, Torrentio, Sootio, AIOMetadata, SubSense, InfiniDysk,
    and Debrid Search) with Premiumize & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
 5. Stremio Web: Pre-seeds local storage so the AIOStreams super-addon is already installed out-of-the-box.
 6. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
@@ -122,7 +121,6 @@ def resolve_path(relative_path, default_path):
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
-MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -132,31 +130,6 @@ AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").r
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000").rstrip("/")
-MEDIAFUSION_HOST_URL = os.environ.get("MEDIAFUSION_HOST_URL", "").rstrip("/")
-
-def resolve_mediafusion_host_url(base_url, explicit_mf_url=""):
-    if explicit_mf_url and explicit_mf_url != "http://localhost:8001":
-        return explicit_mf_url
-    if not base_url:
-        return "http://localhost:8001"
-    try:
-        parsed = urllib.parse.urlparse(base_url)
-        scheme = parsed.scheme or "http"
-        host = parsed.hostname or ""
-        if host and host not in ("localhost", "127.0.0.1"):
-            # If base_url is HTTPS (e.g. Cloudflare tunnel or reverse proxy), do not append port 8001
-            if scheme == "https":
-                return f"https://{host}"
-            return f"{scheme}://{host}:8001"
-    except Exception:
-        pass
-    return "http://localhost:8001"
-
-derived_mf_url = resolve_mediafusion_host_url(BASE_URL, MEDIAFUSION_HOST_URL)
-if derived_mf_url and derived_mf_url != MEDIAFUSION_HOST_URL:
-    MEDIAFUSION_HOST_URL = derived_mf_url
-    os.environ["MEDIAFUSION_HOST_URL"] = derived_mf_url
-    update_env_file("MEDIAFUSION_HOST_URL", derived_mf_url)
 
 AIOMETADATA_HOST = os.environ.get("AIOMETADATA_HOST", "").rstrip("/")
 
@@ -500,67 +473,8 @@ def setup_usenet_indexer():
     print('[Usenet Setup] NZB indexer configured in Prowlarr.',flush=True)
 
 
-# 2. MEDIAFUSION DEFAULT ACCOUNT PROVISIONING
 # ==============================================================================
-def wait_for_mediafusion(max_attempts=15, interval=2):
-    print(f"[MediaFusion Setup] Checking MediaFusion status at {MEDIAFUSION_URL}...", flush=True)
-    for attempt in range(1, max_attempts + 1):
-        res = make_request(f"{MEDIAFUSION_URL}/manifest.json", timeout=2)
-        if isinstance(res, dict) and ("id" in res or "name" in res):
-            print(f"[MediaFusion Setup] ✓ MediaFusion is online! (attempt {attempt})", flush=True)
-            return True
-        if attempt == 3 and not is_url_reachable(MEDIAFUSION_URL, timeout=1.0):
-            print("[MediaFusion Setup] ℹ️ MediaFusion is not active in current profile. Skipping...", flush=True)
-            return False
-        time.sleep(interval)
-    print("[MediaFusion Setup] Note: MediaFusion not immediately responding; continuing...", flush=True)
-    return False
-
-def setup_mediafusion_admin():
-    print("[MediaFusion Setup] Ensuring default administrator account exists...", flush=True)
-    # Check instance status and setup requirement first
-    info = make_request(f"{MEDIAFUSION_URL}/api/v1/instance/info")
-    if isinstance(info, dict) and info.get("setup_required") is False:
-        print("[MediaFusion Setup] ✓ MediaFusion administrator setup already completed.", flush=True)
-        return True
-
-    admin_pass = ADDON_PASSWORD if len(ADDON_PASSWORD) >= 8 else f"{ADDON_PASSWORD}1234"
-    admin_email = ADMIN_EMAIL if ("@" in ADMIN_EMAIL and "." in ADMIN_EMAIL.split("@")[-1]) else "admin@mediafusion.local"
-
-    # MediaFusion v6.0+ Setup Endpoint: POST /api/v1/instance/setup/create-admin
-    payload = {
-        "api_password": ADDON_PASSWORD,
-        "email": admin_email,
-        "username": "admin",
-        "password": admin_pass
-    }
-    res = make_request(f"{MEDIAFUSION_URL}/api/v1/instance/setup/create-admin", method="POST", data=payload)
-    if isinstance(res, dict) and ("access_token" in res or "user" in res or res.get("success")):
-        print(f"[MediaFusion Setup] ✓ Administrator account created successfully: admin ({admin_email})", flush=True)
-        return True
-
-    err_msg = str(res.get("detail", res.get("message", res.get("text", res))))
-    if "already" in err_msg.lower() or "completed" in err_msg.lower() or res.get("error") == 400:
-        print("[MediaFusion Setup] ✓ MediaFusion administrator setup already completed.", flush=True)
-        return True
-
-    # Fallback to legacy registration endpoint for older image versions
-    old_payload = {
-        "email": admin_email,
-        "username": "admin",
-        "password": admin_pass,
-        "newsletter_opt_in": False
-    }
-    res2 = make_request(f"{MEDIAFUSION_URL}/api/v1/auth/register", method="POST", data=old_payload)
-    if isinstance(res2, dict) and "error" not in res2:
-        print(f"[MediaFusion Setup] ✓ Default account created via legacy endpoint: admin ({admin_email})", flush=True)
-        return True
-
-    print(f"[MediaFusion Setup] Notice on user registration: {err_msg}", flush=True)
-    return False
-
-# ==============================================================================
-# 3. COMET, INFINIDYSK, SOOTIO STATUS
+# 2. COMET, INFINIDYSK, SOOTIO STATUS
 # ==============================================================================
 def wait_for_comet(max_attempts=15, interval=2):
     print(f"[Comet Setup] Checking Comet status at {COMET_URL}...", flush=True)
@@ -918,24 +832,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             }
         },
         {
-            "type": "mediafusion",
-            "instanceId": "mediafusion-local",
-            "enabled": True,
-            "options": {
-                "name": "MediaFusion (Local)",
-                "url": "http://mediafusion:8000",
-                "timeout": 8000,
-                "resources": ["stream"],
-                "useCachedResultsOnly": True,
-                "enableWatchlistCatalogs": False,
-                "downloadViaBrowser": False,
-                "contributorStreams": False,
-                "certificationLevelsFilter": [],
-                "nudityFilter": [],
-                "mediaTypes": []
-            }
-        },
-        {
             "type": "knaben",
             "instanceId": "knaben-scraper",
             "enabled": False,
@@ -1201,22 +1097,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             enable_t = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
             p["enabled"] = enable_t
             validated_presets.append(p)
-        elif ptype == "mediafusion":
-            if os.environ.get('MEDIAFUSION_REPLICAS','0') in ('0', 'false', ''):
-                continue
-            if os.environ.get('MEDIAFUSION_MANIFEST_URL'):
-                opts['url']=os.environ['MEDIAFUSION_MANIFEST_URL']
-            opts["useCachedResultsOnly"] = True
-            if reachable(f"{MEDIAFUSION_URL}/manifest.json", timeout=1.0):
-                p["enabled"] = True
-                print(f"[AIOStreams Setup] ✓ MediaFusion (Local) is online and active.", flush=True)
-            else:
-                p["enabled"] = False
-                print(f"[AIOStreams Setup] ℹ️ MediaFusion not active in current profile. Preset disabled.", flush=True)
-            curr_timeout = int(opts.get("timeout") or 10000)
-            if curr_timeout > 8000 or curr_timeout < 5000:
-                opts["timeout"] = 8000
-            validated_presets.append(p)
         elif ptype == "comet":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
@@ -1333,7 +1213,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             validated_presets.append(p)
 
     config = dict(base_config)
-    # Configure BuiltinProxy so internal Docker scraper streams (Comet, Sootio, MediaFusion)
+    # Configure BuiltinProxy so internal Docker scraper streams (Comet, Sootio)
     # resolve and stream properly through AIOStreams over the single public port (3001)
     existing_proxy = base_config.get("proxy") if isinstance(base_config.get("proxy"), dict) else {}
     proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
@@ -1859,15 +1739,7 @@ def main():
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)
 
-    # 2. MediaFusion
-    try:
-        if os.environ.get('MEDIAFUSION_REPLICAS','0') == '1':
-            wait_for_mediafusion()
-            setup_mediafusion_admin()
-    except Exception as e:
-        print(f"[MediaFusion Setup] Error: {e}", flush=True)
-
-    # 3. Comet, Sootio, InfiniDysk
+    # 2. Comet, Sootio, InfiniDysk
     try:
         wait_for_comet()
         wait_for_sootio()

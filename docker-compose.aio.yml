@@ -23,7 +23,6 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"   # Comet Fast Torrent Scraper
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8001"   # MediaFusion Multi-Source Scraper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:55771:55771" # Sootio Multi-Scraper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7005"   # Anime Kitsu Catalog Provider
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"   # Zilean DMM Cache
@@ -54,7 +53,6 @@ services:
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
       - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
-      - MEDIAFUSION_HOST_URL=${MEDIAFUSION_HOST_URL:-}
     volumes:
       - aio-data:/data
 

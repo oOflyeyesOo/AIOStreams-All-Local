@@ -23,7 +23,6 @@ ensure_directories() {
     echo -e "${CYAN}[i] Ensuring directory structures exist...${NC}"
     mkdir -p data/aiostreams \
              data/comet \
-             data/mediafusion \
              data/prowlarr \
              data/subsense \
              data/sootio \
@@ -168,7 +167,6 @@ show_links() {
     echo -e "  • SubSense Subtitles:    http://localhost:3100"
     echo -e "  • InfiniDysk Usenet:     http://localhost:3005"
     echo -e "  • Comet Scraper:         http://localhost:8000"
-    echo -e "  • MediaFusion:           http://localhost:8001"
     echo -e "  • Sootio Multi-Scraper:  http://localhost:55771"
     echo -e "  • Anime Kitsu:           http://localhost:7005"
     echo -e "  • Prowlarr Indexers:     http://localhost:9696"
@@ -270,7 +268,6 @@ SECRET_KEY=${cur_sec}
 POSTGRES_PASSWORD=${cur_pg}
 PROWLARR_API_KEY=${cur_prowl}
 POSTERSPLUS_ACCESS_KEY=${cur_posters:-$(openssl rand -hex 16)}
-ADMIN_EMAIL=admin@mediafusion.local
 STREMTHRU_AUTH=${cur_strem}
 
 # ==============================================================================
@@ -290,7 +287,6 @@ EOF
     mkdir -p init/postgres
     cat <<EOF > init/postgres/01-init-dbs.sql
 SELECT 'CREATE DATABASE zilean' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zilean')\gexec
-SELECT 'CREATE DATABASE mediafusion' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mediafusion')\gexec
 SELECT 'CREATE DATABASE aiometadata' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aiometadata')\gexec
 EOF
     echo -e "${GREEN}[✓] init/postgres/01-init-dbs.sql written.${NC}"

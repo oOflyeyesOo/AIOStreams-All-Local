@@ -3,7 +3,7 @@
 
 Tests all possible communication paths between:
 - AIOStreams (Super-Aggregator)
-- Scrapers (Comet, MediaFusion, Sootio)
+- Scrapers (Comet, Sootio)
 - Indexer Managers & Cache (Prowlarr, Zilean)
 - Personal Debrid Cloud (Debrid Search, StremThru Store)
 
@@ -26,7 +26,6 @@ PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/"
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
-MEDIAFUSION_URL = os.environ.get("MEDIAFUSION_URL", "http://mediafusion:8000").rstrip("/")
 SOOTIO_URL = os.environ.get("SOOTIO_URL", "http://sootio:55771").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -361,7 +360,7 @@ def print_optimal_topology_analysis():
             "Direct Latency": "~550ms",
             "Direct AIOStreams Addon?": "No (Torznab only)",
             "Optimal Pathway": "AIOStreams -> Comet -> Prowlarr",
-            "Why": "Comet acts as the high-speed bridge converting Torznab feeds into debrid-checked streams. MediaFusion can query Prowlarr too, but keeping Prowlarr on Comet avoids duplicate tracker throttling.",
+            "Why": "Comet acts as the high-speed bridge converting Torznab feeds into debrid-checked streams.",
         },
         {
             "Endpoint": "Debrid Search (Cloud Storage)",

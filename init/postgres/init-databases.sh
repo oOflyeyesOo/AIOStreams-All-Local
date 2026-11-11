@@ -16,7 +16,7 @@ done
 
 echo "[init-postgres] shared-postgres is ready! Verifying and provisioning application databases..."
 
-for db in zilean mediafusion aiometadata sootio; do
+for db in zilean aiometadata sootio; do
   echo "[init-postgres] Checking database '$db'..."
   exists=$(psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db';")
   if [ "$exists" != "1" ]; then

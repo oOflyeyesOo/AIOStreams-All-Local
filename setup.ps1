@@ -56,7 +56,6 @@ function Ensure-Directories {
     $dirs = @(
         "data/aiostreams",
         "data/comet",
-        "data/mediafusion",
         "data/prowlarr",
         "data/subsense",
         "data/sootio",
@@ -115,7 +114,6 @@ function Test-SystemPrerequisites {
     $portsToCheck = @(
         @{ Port = 3001; Service = "AIOStreams" },
         @{ Port = 8000; Service = "Comet" },
-        @{ Port = 8001; Service = "MediaFusion" },
         @{ Port = 8181; Service = "Zilean (DMM Cache)" },
         @{ Port = 9696; Service = "Prowlarr" },
         @{ Port = 8191; Service = "FlareSolverr" },
@@ -244,7 +242,6 @@ function Invoke-CLIWizard {
     $stremthruAuth = if ($existingEnv.ContainsKey("STREMTHRU_AUTH") -and $existingEnv["STREMTHRU_AUTH"]) { $existingEnv["STREMTHRU_AUTH"] } else { "admin:" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12) }
     $addonPassword = if ($existingEnv.ContainsKey("ADDON_PASSWORD") -and $existingEnv["ADDON_PASSWORD"]) { $existingEnv["ADDON_PASSWORD"] } else { "aio_" + [System.Guid]::NewGuid().ToString("N").Substring(0, 24) }
     $postersKey = if ($existingEnv.ContainsKey("POSTERSPLUS_ACCESS_KEY") -and $existingEnv["POSTERSPLUS_ACCESS_KEY"]) { $existingEnv["POSTERSPLUS_ACCESS_KEY"] } else { "posters_" + [System.Guid]::NewGuid().ToString("N") }
-    $adminEmail = if ($existingEnv.ContainsKey("ADMIN_EMAIL") -and $existingEnv["ADMIN_EMAIL"]) { $existingEnv["ADMIN_EMAIL"] } else { "admin@mediafusion.local" }
 
     $pmKey = if ($existingEnv.ContainsKey("PREMIUMIZE_API_KEY")) { $existingEnv["PREMIUMIZE_API_KEY"] } else { "" }
     $adKey = if ($existingEnv.ContainsKey("ALLDEBRID_API_KEY")) { $existingEnv["ALLDEBRID_API_KEY"] } else { "" }
@@ -298,7 +295,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
     # Write 01-init-dbs.sql
     $sqlContent = @"
 SELECT 'CREATE DATABASE zilean' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zilean')\gexec
-SELECT 'CREATE DATABASE mediafusion' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mediafusion')\gexec
 SELECT 'CREATE DATABASE aiometadata' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aiometadata')\gexec
 "@
     Set-Content -Path (Join-Path $ScriptDir "init/postgres/01-init-dbs.sql") -Value $sqlContent -Encoding utf8
@@ -396,7 +392,6 @@ function Show-StremioLinks {
     Write-Host "  • SubSense Subtitles:    http://localhost:3100"
     Write-Host "  • InfiniDysk Usenet:     http://localhost:3005"
     Write-Host "  • Comet Scraper:         http://localhost:8000"
-    Write-Host "  • MediaFusion:           http://localhost:8001"
     Write-Host "  • Sootio Multi-Scraper:  http://localhost:55771"
     Write-Host "  • Anime Kitsu:           http://localhost:7005"
     Write-Host "  • Prowlarr Indexers:     http://localhost:9696"

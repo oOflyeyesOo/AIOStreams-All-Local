@@ -103,7 +103,6 @@ These checks do not establish every external integration as working. Real OAuth 
 - [x] Native Torrentio, RemuxDB, and DMM integration: four titles added 92/76/60/68 provider-cached hashes beyond Comet; selectable options querying public/curated databases.
 - [x] Native addon parsing and new feature settings validated in an isolated AIOStreams profile; TMDB-dependent registration bug fixed.
 - [x] Background prefetch opt-in; one native Torrentio route and bounded Sootio fallback.
-- [x] Optional MediaFusion container/preset switch; configured-manifest input for external integrations.
 - [x] Usenet form configures actual InfiniDysk headless provider settings and a Usenet-only Prowlarr preset.
 - [x] Live fixture NNTP login, special-character credential preservation, Newznab repeat setup, service on/off and managed indexer disable.
 - [ ] Real paid NNTP article retrieval/repair/decoding and AceStream engine/playback.

@@ -406,5 +406,6 @@
       "precacheFailover": false,
       "parallel": 1
     }
-  }
+  },
+  "presets": []
 }

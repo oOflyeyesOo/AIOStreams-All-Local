@@ -324,7 +324,7 @@
             <!-- ADDON_PASSWORD -->
             <div>
               <label class="block text-xs font-semibold text-[#edf0ed] mb-1">
-                Master Web Admin Password <span class="text-[#929b9f]">(Protects AIOStreams, SlickSync, AIOMetadata, Comet, MediaFusion)</span>
+                Master Web Admin Password <span class="text-[#929b9f]">(Protects AIOStreams, SlickSync, AIOMetadata, Comet)</span>
               </label>
               <input type="text" id="input-addon-password" value=""
                 onfocus="if(this.value==='admin') this.value=''; else this.select()"
@@ -388,17 +388,6 @@
                 <input type="checkbox" id="svc-comet" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
               </label>
 
-              <!-- MediaFusion -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">MediaFusion</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">:8001</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Multi-source scraper: Movies, Series, Live Sports & Live TV channels.</p>
-                </div>
-                <input type="checkbox" id="svc-mediafusion" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
             </div>
           </div>
 
@@ -766,7 +755,6 @@
       services: {
         aiostreams: true,
         comet: true,
-        mediafusion: true,
         zilean: true,
         prowlarr: true,
         flaresolverr: true,
@@ -785,7 +773,6 @@
     function handleServiceChange() {
       // Sync checkbox state
       state.services.comet = document.getElementById('svc-comet').checked;
-      state.services.mediafusion = document.getElementById('svc-mediafusion').checked;
       state.services.zilean = document.getElementById('svc-zilean').checked;
       state.services.prowlarr = document.getElementById('svc-prowlarr').checked;
       state.services.flaresolverr = document.getElementById('svc-flaresolverr').checked;
@@ -817,7 +804,6 @@
         state.services = {
           aiostreams: true,
           comet: true,
-          mediafusion: false,
           zilean: true,
           prowlarr: true,
           flaresolverr: true,
@@ -834,7 +820,6 @@
         state.services = {
           aiostreams: true,
           comet: false,
-          mediafusion: false,
           zilean: false,
           prowlarr: false,
           flaresolverr: false,
@@ -851,7 +836,6 @@
         state.services = {
           aiostreams: true,
           comet: true,
-          mediafusion: false,
           zilean: true,
           prowlarr: true,
           flaresolverr: false,
@@ -868,7 +852,6 @@
 
       // Update checkboxes in DOM
       document.getElementById('svc-comet').checked = state.services.comet;
-      document.getElementById('svc-mediafusion').checked = state.services.mediafusion;
       document.getElementById('svc-zilean').checked = state.services.zilean;
       document.getElementById('svc-prowlarr').checked = state.services.prowlarr;
       document.getElementById('svc-flaresolverr').checked = state.services.flaresolverr;
@@ -923,8 +906,8 @@
     function calculateDatabases() {
       const s = state.services;
       return {
-        needsPostgres: s.zilean || s.mediafusion || s.aiometadata,
-        needsRedis: s.mediafusion || s.aiometadata || s.subsense || s.slicksync || s.stremthru,
+        needsPostgres: s.zilean || s.aiometadata,
+        needsRedis: s.aiometadata || s.subsense || s.slicksync || s.stremthru,
         needsMongo: false,
         needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb
       };
@@ -971,7 +954,7 @@ MDBLIST_API_KEY=${inp.mdblistKey}
 # Google Gemini API Key (Optional, enables AI episode recaps/plot translations: https://aistudio.google.com/)
 GEMINI_API_KEY=${inp.geminiKey}
 
-# Master password protecting all web configuration pages (AIOStreams, SlickSync, AIOMetadata, Comet, MediaFusion)
+# Master password protecting all web configuration pages (AIOStreams, SlickSync, AIOMetadata, Comet)
 ADDON_PASSWORD=${inp.addonPassword}
 
 # ==============================================================================
@@ -980,7 +963,7 @@ ADDON_PASSWORD=${inp.addonPassword}
 # 64-character encryption secret for AIOStreams & SubSense
 SECRET_KEY=${inp.secretKey}
 
-# Shared Postgres Password (auto-seeds 'zilean', 'mediafusion', and 'aiometadata' databases)
+# Shared Postgres Password (auto-seeds 'zilean' and 'aiometadata' databases)
 POSTGRES_PASSWORD=${inp.postgresPass}
 
 # Pre-matched Tracker API Keys (Automatically seeded into Prowlarr)
@@ -989,7 +972,6 @@ PROWLARR_API_KEY=${inp.prowlarrKey}
 # Pre-matched Local Stream Proxy Credentials
 STREMTHRU_AUTH=${inp.stremthruAuth}
 POSTERSPLUS_ACCESS_KEY=${inp.addonPassword}
-ADMIN_EMAIL=admin@mediafusion.local
 
 # ==============================================================================
 # COMMUNITY TEMPLATES & STREAM EXPRESSION LANGUAGE (SEL) AUTO-SYNC
@@ -1009,9 +991,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       let sql = `-- Auto-generated Postgres database initialization script\n`;
       if (s.zilean) {
         sql += `SELECT 'CREATE DATABASE zilean' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zilean')\\gexec\n`;
-      }
-      if (s.mediafusion) {
-        sql += `SELECT 'CREATE DATABASE mediafusion' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mediafusion')\\gexec\n`;
       }
       if (s.aiometadata) {
         sql += `SELECT 'CREATE DATABASE aiometadata' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aiometadata')\\gexec\n`;
@@ -1047,10 +1026,9 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       lines.push(`      - ALLOW_PRIVATE_URLS=true`);
 
       // Scraper endpoints
-      if (s.comet || s.mediafusion) {
+      if (s.comet) {
         lines.push(`\n      # --- Internal Local Scraper Endpoints ---`);
         if (s.comet) lines.push(`      - COMET_URL=["http://comet:8000"]`);
-        if (s.mediafusion) lines.push(`      - MEDIAFUSION_URL=["http://mediafusion:8000"]`);
         lines.push(`      - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]`);
       }
 
@@ -1114,7 +1092,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       // depends_on for aiostreams
       const aiostreamsDeps = [];
       if (s.comet) aiostreamsDeps.push('comet');
-      if (s.mediafusion) aiostreamsDeps.push('mediafusion');
       if (s.stremthru) aiostreamsDeps.push('stremthru');
       if (s.prowlarr) aiostreamsDeps.push('prowlarr');
       if (s.infinidysk) aiostreamsDeps.push('infinidysk');
@@ -1125,7 +1102,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       }
 
       // 2. SCRAPERS
-      if (s.comet || s.mediafusion) {
+      if (s.comet) {
         lines.push(`\n  # ============================================================================`);
         lines.push(`  # 2. LOCAL SCRAPERS & INDEXERS`);
         lines.push(`  # ============================================================================`);
@@ -1163,47 +1140,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           }
         }
 
-        if (s.mediafusion) {
-          lines.push(`\n  # MediaFusion (Multi-source scraper: Movies, Series, Live TV, Sports)`);
-          lines.push(`  mediafusion:`);
-          lines.push(`    image: mhdzumair/mediafusion:latest`);
-          lines.push(`    container_name: mediafusion`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "8001:8000"`);
-          lines.push(`    environment:`);
-          lines.push(`      - HOST=0.0.0.0`);
-          lines.push(`      - PORT=8000`);
-          lines.push(`      - HOST_URL=\${MEDIAFUSION_HOST_URL:-http://localhost:8001}`);
-          lines.push(`      - POSTGRES_URI=postgresql://postgres:\${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion`);
-          lines.push(`      - DATABASE_URL=postgresql://postgres:\${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion`);
-          lines.push(`      - REDIS_URL=redis://shared-redis:6379/0`);
-          lines.push(`      - SECRET_KEY=\${SECRET_KEY}`);
-          lines.push(`      - API_PASSWORD=\${ADDON_PASSWORD}`);
-          lines.push(`      - TMDB_API_KEY=\${TMDB_API_KEY}`);
-          lines.push(`      - TVDB_API_KEY=\${TVDB_API_KEY}`);
-          lines.push(`      - MDBLIST_API_KEY=\${MDBLIST_API_KEY}`);
-          lines.push(`      - RPDB_API_KEY=\${RPDB_API_KEY}`);
-          lines.push(`      - REALDEBRID_API_KEY=\${REALDEBRID_API_KEY}`);
-          lines.push(`      - PREMIUMIZE_API_KEY=\${PREMIUMIZE_API_KEY}`);
-          lines.push(`      - ALLDEBRID_API_KEY=\${ALLDEBRID_API_KEY}`);
-          lines.push(`      - TORBOX_API_KEY=\${TORBOX_API_KEY}`);
-          lines.push(`      - DEBRIDLINK_API_KEY=\${DEBRIDLINK_API_KEY}`);
-          if (s.prowlarr) {
-            lines.push(`      - PROWLARR_URL=http://prowlarr:9696`);
-            lines.push(`      - PROWLARR_API_KEY=\${PROWLARR_API_KEY}`);
-          }
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/mediafusion:/app/data`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          lines.push(`    depends_on:`);
-          lines.push(`      init-postgres:`);
-          lines.push(`        condition: service_completed_successfully`);
-          lines.push(`      shared-redis:`);
-          lines.push(`        condition: service_started`);
-          if (s.prowlarr) lines.push(`      - prowlarr`);
-        }
       }
 
       // 3. ZILEAN
@@ -1468,7 +1404,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           lines.push(`      - PGPASSWORD=\${POSTGRES_PASSWORD}`);
           let pgCmds = [`until pg_isready -h shared-postgres -U postgres; do sleep 1; done;`];
           if (s.zilean) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'zilean'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE zilean;';`);
-          if (s.mediafusion) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'mediafusion'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE mediafusion;';`);
           if (s.aiometadata) pgCmds.push(`psql -h shared-postgres -U postgres -tc \\"SELECT 1 FROM pg_database WHERE datname = 'aiometadata'\\" | grep -q 1 || psql -h shared-postgres -U postgres -c 'CREATE DATABASE aiometadata;';`);
           lines.push(`    command: >`);
           lines.push(`      sh -c "${pgCmds.join(' ')}"`);
@@ -1547,7 +1482,6 @@ docker run -d \\
       const portMap = [
         { name: 'AIOStreams', port: '3000', enabled: true },
         { name: 'Comet', port: '8000', enabled: s.comet },
-        { name: 'MediaFusion', port: '8001', enabled: s.mediafusion },
         { name: 'Zilean (DMM Cache)', port: '8181', enabled: s.zilean },
         { name: 'Prowlarr', port: '9696', enabled: s.prowlarr },
         { name: 'FlareSolverr', port: '8191', enabled: s.flaresolverr },

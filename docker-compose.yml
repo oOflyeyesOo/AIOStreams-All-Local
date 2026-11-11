@@ -41,7 +41,6 @@ services:
       - ./data/aiostreams:/app/data/aiostreams:ro
     command: python3 /check_stack.py
     environment:
-      - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
     networks:
       - stremio-net
 
@@ -113,7 +112,6 @@ services:
       - TORRENTIO_URL=${TORRENTIO_URL:-}
       - ENABLE_REMUXDB=${ENABLE_REMUXDB:-true}
       - ENABLE_DMM=${ENABLE_DMM:-true}
-      - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-}
       - DISCORD_WEBHOOK_URL=
       - ENABLE_ANIME_SOURCES=
     healthcheck:
@@ -166,8 +164,6 @@ services:
 
       # --- Internal Local Scraper Endpoints ---
       - COMET_URL=["http://comet:8000"]
-      - MEDIAFUSION_URL=["http://mediafusion:8000"]
-      - MEDIAFUSION_API_PASSWORD=${ADDON_PASSWORD:-admin}
       - SOOTIO_URL=["http://sootio:55771"]
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
 
@@ -266,65 +262,6 @@ services:
       - ./data/comet:/app/data
     networks:
       - stremio-net
-
-  # MediaFusion (Multi-source scraper: Movies, Series, Live TV, Sports)
-  mediafusion:
-    image: mhdzumair/mediafusion:latest
-    scale: ${MEDIAFUSION_REPLICAS:-0}
-    container_name: mediafusion
-    profiles: ["core", "scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${MEDIAFUSION_MEM_LIMIT:-512m}
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8000"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL http://localhost:8000/manifest.json > /dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - HOST_URL=${MEDIAFUSION_HOST_URL:-http://localhost:8001}
-      - IS_PUBLIC_INSTANCE=${MEDIAFUSION_PUBLIC:-true}
-      - EGRESS_WATCHDOG_FAIL_THRESHOLD=25
-      - POSTGRES_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}@shared-postgres:5432/mediafusion
-      - REDIS_URL=redis://shared-redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - API_PASSWORD=${ADDON_PASSWORD:-admin}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@mediafusion.local}
-      - PROWLARR_URL=http://prowlarr:9696
-      - BUILTIN_PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - ZILEAN_URL=http://zilean:8181
-      - IS_SCRAP_FROM_PROWLARR=${MEDIAFUSION_SCRAPE_PROWLARR:-false}
-      - IS_SCRAP_FROM_ZILEAN=false
-      - IS_SCRAP_FROM_TORRENTIO=false
-      - IS_SCRAP_FROM_PUBLIC_INDEXERS=false
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-      - TORBOX_API_KEY=${TORBOX_API_KEY}
-      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-    volumes:
-      - ./data/mediafusion:/app/data
-    networks:
-      - stremio-net
-    depends_on:
-      init-postgres:
-        condition: service_completed_successfully
-      shared-redis:
-        condition: service_started
 
   # Sootio (Multi-source torrent/debrid scraper with FlareSolverr & direct HTML indexing)
   sootio:
@@ -522,8 +459,6 @@ services:
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
       - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
       - FLARESOLVERR_URL=http://flaresolverr:8191
-      - MEDIAFUSION_URL=http://mediafusion:8000
-      - MEDIAFUSION_REPLICAS=${MEDIAFUSION_REPLICAS:-0}
       - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
       - COMET_URL=http://comet:8000
       - SOOTIO_URL=http://sootio:55771
@@ -916,7 +851,7 @@ services:
         else
           echo "[init-postgres] Waiting for shared-postgres..."
           until psql -h shared-postgres -U postgres -d postgres -c "SELECT 1;" >/dev/null 2>&1; do sleep 1; done
-          for db in zilean mediafusion aiometadata sootio; do
+          for db in zilean aiometadata sootio; do
             psql -h shared-postgres -U postgres -d postgres -c "CREATE DATABASE $$db;" 2>/dev/null || true
           done
           echo "[init-postgres] Done!"

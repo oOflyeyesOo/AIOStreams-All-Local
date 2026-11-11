@@ -157,17 +157,6 @@ def test_comet():
         record("6. Comet Fast Scraper & Streamer", False, str(e))
 
 
-def test_mediafusion():
-    try:
-        with urllib.request.urlopen("http://mediafusion:8000/manifest.json", timeout=5) as resp:
-            m = json.load(resp)
-            name = m.get("name", "")
-            catalogs = len(m.get("catalogs", []))
-            record("7. MediaFusion Scraper & Catalog", True, f"Manifest OK: '{name}', {catalogs} default catalogs exposed")
-    except Exception as e:
-        record("7. MediaFusion Scraper & Catalog", False, str(e))
-
-
 def test_sootio():
     try:
         with urllib.request.urlopen("http://sootio:55771/manifest.json", timeout=5) as resp:
@@ -326,7 +315,7 @@ def test_aiostreams_and_playback():
 
         unproxied = [
             s.get("url") for s in playable_streams
-            if any(internal in s.get("url") for internal in ["comet:8000", "mediafusion:8000", "sootio:55771", "prowlarr:9696", "zilean:8181"])
+            if any(internal in s.get("url") for internal in ["comet:8000", "sootio:55771", "prowlarr:9696", "zilean:8181"])
             or ("/api/v1/proxy/" not in s.get("url") and not s.get("url").startswith("https://"))
         ]
         if unproxied:
@@ -392,7 +381,6 @@ def main():
     test_flaresolverr()
     test_zilean()
     test_comet()
-    test_mediafusion()
     test_sootio()
     test_aiometadata()
     test_postersplus()

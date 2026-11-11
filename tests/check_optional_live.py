@@ -89,15 +89,13 @@ nntp.daemon_threads=True
 nzb=http.server.ThreadingHTTPServer(('0.0.0.0',18884),Newznab)
 for server in (nntp,nzb):threading.Thread(target=server.serve_forever,daemon=True).start()
 try:
-    assert not subprocess.check_output(['docker','ps','-q','--filter','label=com.docker.compose.project='+PROJECT,'--filter','label=com.docker.compose.service=mediafusion']).strip()
-    print('PASS: MediaFusion default has no running container',flush=True)
     # Remove only stale indexers from this exact isolated fixture address.
     indexer_headers={'X-Api-Key':'prowlarr_internal_secret_key_99'}
     for item in request('http://prowlarr:9696/api/v1/indexer',headers=indexer_headers):
         if item.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and f.get('value')=='http://portal:18884' for f in item.get('fields',[])):
             request('http://prowlarr:9696/api/v1/indexer/'+str(item['id']),headers=indexer_headers,method='DELETE')
     values={'USENET_ENABLED':'true','USENET_HOST':'portal','USENET_PORT':'18883','USENET_USER':USER,'USENET_PASS':PASSWORD,
-            'USENET_SSL':'false','USENET_CONNECTIONS':'2','NZB_INDEXER_URL':'http://portal:18884','NZB_INDEXER_API_KEY':'fixture-indexer-key','MEDIAFUSION_REPLICAS':'0'}
+            'USENET_SSL':'false','USENET_CONNECTIONS':'2','NZB_INDEXER_URL':'http://portal:18884','NZB_INDEXER_API_KEY':'fixture-indexer-key'}
     assert portal('/api/save-env',values)['success']
     saved=portal('/api/env');assert saved['USENET_PASSWORD_SAVED'] and PASSWORD not in json.dumps(saved) and 'USENET_PASS_B64' not in saved
     assert PASSWORD not in Path('/app/.env').read_text()
@@ -128,7 +126,7 @@ try:
     assert sum(p['type']=='mediafusion' for p in installed_profile()['presets'])==1
     assert len(matches())==1
     print('PASS: repeated setup retains password, does not duplicate Newznab, and starts optional MediaFusion',flush=True)
-    assert portal('/api/save-env',{'USENET_ENABLED':'false','MEDIAFUSION_REPLICAS':'0'})['success']
+    assert portal('/api/save-env',{'USENET_ENABLED':'false'})['success']
     apply()
     env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
     assert json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])=={'Providers':[]}

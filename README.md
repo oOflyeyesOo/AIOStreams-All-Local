@@ -1,13 +1,13 @@
 # AIO Local
 
-[![Microservices](https://img.shields.io/badge/microservices-19%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
+[![Microservices](https://img.shields.io/badge/microservices-18%20running-success?logo=server&logoColor=white)](#-what-is-integrated)
 [![Regression Tests](https://img.shields.io/badge/regression%20tests-123%20passed-brightgreen?logo=checkmarx&logoColor=white)](#-automated-testing--verification)
 [![Remote Streaming](https://img.shields.io/badge/remote%20streaming-ports%203001%20%26%204005-blueviolet?logo=cloudflare&logoColor=white)](#-remote-playback--dual-subdomain-architecture)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 19 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
+A 100% self-hosted Docker Compose streaming backend centered on **AIOStreams**. Enter your provider keys in one setup screen, let the stack wire all 18 bundled services together on your private Docker network (stremio-net), and copy your personalized manifest URLs directly into Stremio or any compatible player.
 
-MediaFusion is optional and off by default. The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
+The portal can configure a Usenet provider and a Newznab indexer from input fields. Torrentio runs once through AIOStreams for additional coverage; [source comparisons and Usenet acceptance](docs/OPTIONAL-SOURCES-VALIDATION.md) explain the measured benefits and limits.
 
 Torrentio is an external addon. Its native integration includes enabled provider credentials in its configured addon URL; set ENABLE_TORRENTIO=false to disable it. Treat personalized manifests and profile exports as private.
 
@@ -20,7 +20,7 @@ For reproducible deployments, use the [digest-pinned release bundle and recovery
 
 
 
-[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet/MediaFusion setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
+[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
 
 
 
@@ -110,7 +110,7 @@ For remote playback, route these two endpoints through your reverse proxy or tun
 
 
 
-All other microservices (Comet, MediaFusion, Sootio, Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
+All other microservices (Comet, Sootio, Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
 
 
 
@@ -144,7 +144,6 @@ flowchart LR
 
         Comet["Comet (:8000)"]
 
-        MF["MediaFusion (:8001)"]
 
         Sootio["Sootio (:55771)"]
 
@@ -178,11 +177,11 @@ flowchart LR
 
     
 
-    AIO -->|2. Internal Scrape| Comet & MF & Sootio
+    AIO -->|2. Internal Scrape| Comet & Sootio
 
     AIOMeta -->|Internal Poster Cache| Posters
 
-    Comet & MF & Sootio -->|3. Torrent/Cache Lookup| Zilean & Prowlarr & DB
+    Comet & Sootio -->|3. Torrent/Cache Lookup| Zilean & Prowlarr & DB
 
     AIO -->|4. Resolve & Follow 302 Redirect| CDN
 
@@ -322,18 +321,18 @@ status, updates, resource monitoring, and cache cleanup.
 
 ## 🎛️ Stack Profiles & Configuration Templates
 
-Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 19-microservice appliance:
+Modular Docker Compose profiles allow you to scale your deployment from a lean, ultra-light setup on low-resource machines to the complete 18-microservice appliance:
 
 ### 1. Docker Compose Resource Profiles
 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
 | **`core`** (Recommended Lean) | `docker compose --profile core up -d` | **~1.1 GB** | AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL, Redis, Portal. Ideal for low-memory VPS relying on Comet and Torrentio. |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | **~3.2 GB** | Core + MediaFusion, Sootio, Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
+| **`scrapers`** | `docker compose --profile scrapers up -d` | **~2.7 GB** | Core + Sootio, Zilean (DMM Cache), Prowlarr, Byparr (Cloudflare bypass), and Anime Kitsu. |
 | **`proxies`** | `docker compose --profile proxies up -d` | **~1.8 GB** | Core + StremThru proxy router, InfiniDysk Usenet Engine. |
 | **`web`** | `docker compose --profile web up -d` | **~1.6 GB** | Core + Stremio Web Player (with AniSkip), Nuvio Web Player, SlickSync Hub. |
 | **`usenet`** | `docker compose --profile usenet up -d` | **~2.2 GB** | Core + InfiniDysk (`:3005`), NZBDav, and Prowlarr Newznab indexers for direct NNTP streaming. |
-| **`all`** (Default) | `docker compose up -d` | **~3.6 GB** | Full appliance with all 19 microservices running on `stremio-net`. |
+| **`all`** (Default) | `docker compose up -d` | **~3.1 GB** | Full appliance with all 18 microservices running on `stremio-net`. |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
@@ -363,7 +362,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Management & Watchdog** | AIO Portal (`:8088`), Stack Watchdog | Central setup wizard, dual manifest exporter, automated backups, and live integration monitor |
 
-| **Scrapers** | Comet (`:8000`), MediaFusion (`:8001`), Sootio (`:55771`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
+| **Scrapers** | Comet (`:8000`), Sootio (`:55771`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
 
 | **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Search Broker (`:8091`), Byparr (`:8191`) | DMM hash cache (<100ms lookup), intelligent indexer caching/deduplication broker, auto-provisioned indexers, and Cloudflare bypass |
 
@@ -379,11 +378,11 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Web Players & Sync** | Stremio Web (`:8082`), Nuvio Web (`:8085`), SlickSync (`:8086`) | Modern web players with AniSkip (auto/hotkey skip) & player shortcuts, Trakt sync hub, collections builder |
 
-| **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean, MediaFusion, Comet, and AIOMetadata |
+| **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean, Comet, and AIOMetadata |
 
 
 
-The 19-service count covers continuous application and platform containers monitored on `stremio-net`.
+The 18-service count covers continuous application and platform containers monitored on `stremio-net`.
 
 One-shot initialization jobs (database bootstrap, configuration provisioner) run at first boot and exit gracefully.
 

@@ -22,7 +22,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 AIO_CONTAINERS = {
-    "aiostreams", "comet", "mediafusion", "sootio", "zilean", "prowlarr",
+    "aiostreams", "comet", "sootio", "zilean", "prowlarr",
     "flaresolverr", "stremthru", "infinidysk", "cloudflared",
     "aio-tunnel", "anime-kitsu", "aiometadata", "postersplus", "stremio-subsense",
     "nuvio-web", "stremio-web", "slicksync", "shared-redis", "shared-postgres",

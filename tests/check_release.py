@@ -23,8 +23,7 @@ def internal_url(url):
     # Translate only loopback publication to the matching container endpoint.
     ports = {3001: ('aiostreams', 3000), 13001: ('aiostreams', 3000),
              55771: ('sootio', 55771), 6571: ('sootio', 55771),
-             8000: ('comet', 8000), 18000: ('comet', 8000),
-             8001: ('mediafusion', 8000), 18001: ('mediafusion', 8000)}
+             8000: ('comet', 8000), 18000: ('comet', 8000)}
     if parsed.hostname in ('localhost', '127.0.0.1') and parsed.port in ports:
         host, port = ports[parsed.port]
         return urllib.parse.urlunsplit((parsed.scheme, f'{host}:{port}', parsed.path, parsed.query, ''))

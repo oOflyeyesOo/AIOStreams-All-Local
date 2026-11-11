@@ -126,7 +126,7 @@ def apply():
         services = [name for name, service in rendered['services'].items()
                     if name not in excluded and (not service.get('profiles') or profiles.intersection(service['profiles']))
                     and service.get('restart') != 'no']
-        databases = [name for name in ('shared-postgres', 'shared-redis', 'mediafusion-mongo') if name in services]
+        databases = [name for name in ('shared-postgres', 'shared-redis') if name in services]
         up = ['up', '-d', '--no-deps', '--no-build', '--wait', '--wait-timeout', '600']
         if databases:
             log_command(run + up + databases, 'Applying database settings')

@@ -27,7 +27,7 @@ const extras = [
   ['SEEDR_API_KEY','Seedr','S']
 ];
 const fields = [...providers,...metadata,...trackingKeys,...extras];
-const optionalSecrets=[['MEDIAFUSION_MANIFEST_URL','Configured MediaFusion manifest (optional)','MF'],['NZB_INDEXER_API_KEY','AltHUB / AnimeTosho / NZB API key','NZB']];
+const optionalSecrets=[['NZB_INDEXER_API_KEY','AltHUB / AnimeTosho / NZB API key','NZB']];
 fields.push(...optionalSecrets);
 let usenetPasswordSaved=false;
 let currentManifest = '';
@@ -91,8 +91,7 @@ renderFields('provider-fields',providers);
 renderFields('metadata-fields',metadata);
 renderFields('tracking-fields',trackingKeys);
 renderFields('extra-fields',extras);
-renderFields('mediafusion-manifest-fields',[optionalSecrets[0]]);
-renderFields('usenet-indexer-key-fields',[optionalSecrets[1]]);
+renderFields('usenet-indexer-key-fields',[optionalSecrets[0]]);
 
 async function api(path, options, attempt=0) {
   try {
@@ -134,7 +133,6 @@ async function loadSettings() {
   if (dmmToggle) dmmToggle.checked = env.ENABLE_DMM !== 'false';
   const remuxdbToggle = document.getElementById('enable-remuxdb');
   if (remuxdbToggle) remuxdbToggle.checked = env.ENABLE_REMUXDB !== 'false';
-  document.getElementById('enable-mediafusion').checked = env.MEDIAFUSION_REPLICAS === '1';
   document.getElementById('enable-anime-sources').checked=env.ENABLE_ANIME_SOURCES==='true';
   document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
   for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
@@ -296,7 +294,6 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     TORRENTIO_URL: document.getElementById('torrentio-url')?.value.trim() || '',
     ENABLE_DMM: document.getElementById('enable-dmm')?.checked ? 'true' : 'false',
     ENABLE_REMUXDB: document.getElementById('enable-remuxdb')?.checked ? 'true' : 'false',
-    MEDIAFUSION_REPLICAS: document.getElementById('enable-mediafusion').checked ? '1' : '0',
     ENABLE_ANIME_SOURCES:document.getElementById('enable-anime-sources').checked?'true':'false',
     USENET_ENABLED: document.getElementById('enable-usenet').checked ? 'true' : 'false',
     USENET_HOST: document.getElementById('usenet-host').value.trim(),
@@ -324,8 +321,8 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
       notify('Enter your Usenet server hostname, username, and password.');
       return;
     }
-  } else if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved&&payload.MEDIAFUSION_REPLICAS!=='1') {
-    notify('Add a provider key, enable Usenet or configure MediaFusion.');
+  } else if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved) {
+    notify('Add a provider key or enable Usenet.');
     return;
   }
   const button = document.getElementById('setup-button'); button.disabled = true;

@@ -13,7 +13,7 @@ templates/
 │   └── debrid-starter.json         # Native AIOStreams Debrid Starter template
 │
 ├── setup-templates/            # Complete AIOStreams configurations ready for 1-Click Import
-│   ├── all-local-selfhosted.json           # All-Local Docker stack (Comet, MediaFusion, AIOMetadata, SubSense, etc.)
+│   ├── all-local-selfhosted.json           # All-Local Docker stack (Comet, AIOMetadata, SubSense, etc.)
 │   ├── tamtaro-complete-setup-template.json# Tam-Taro Complete SEL Setup (Debrid/Usenet/P2P detection, failovers)
 │   ├── tamtaro-partial-setup-template.json # Tam-Taro Lean partial setup
 │   ├── tamtaro-all-templates-collection.json# Master collection of all Tamtaro configurations

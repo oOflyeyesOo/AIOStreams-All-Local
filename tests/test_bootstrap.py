@@ -150,12 +150,6 @@ class BootstrapTests(unittest.TestCase):
         anime=next(p for p in config['presets'] if p['instanceId']=='anime-kitsu-local')
         self.assertEqual(anime['options']['resources'],['catalog','meta'])
 
-    def test_mediafusion_is_opt_in_and_can_use_a_configured_manifest(self):
-        with patch.dict(bootstrap.os.environ,{'MEDIAFUSION_REPLICAS':'0'}):
-            self.assertFalse(any(p['type']=='mediafusion' for p in bootstrap.build_default_config(probe_services=False)['presets']))
-        with patch.dict(bootstrap.os.environ,{'MEDIAFUSION_REPLICAS':'1','MEDIAFUSION_MANIFEST_URL':'http://mediafusion:8000/fixture/manifest.json'}):
-            preset=next(p for p in bootstrap.build_default_config(probe_services=False)['presets'] if p['type']=='mediafusion')
-            self.assertEqual(preset['options']['url'],'http://mediafusion:8000/fixture/manifest.json')
 
     def test_usenet_uses_native_nzb_route_and_skips_torrent_sources_without_debrid(self):
         with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', ''), \
