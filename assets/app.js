@@ -56,6 +56,18 @@ function deriveAiometaHost(baseUrl) {
   }
 }
 
+function getProviderCode(key) {
+  if (key === 'REALDEBRID_API_KEY') return 'realdebrid';
+  if (key === 'PREMIUMIZE_API_KEY') return 'premiumize';
+  if (key === 'TORBOX_API_KEY') return 'torbox';
+  if (key === 'ALLDEBRID_API_KEY') return 'alldebrid';
+  if (key === 'DEBRIDLINK_API_KEY') return 'debridlink';
+  if (key === 'EASYDEBRID_API_KEY') return 'easydebrid';
+  if (key === 'TMDB_API_KEY') return 'tmdb';
+  if (key === 'NZB_INDEXER_API_KEY') return 'nzb';
+  return key.toLowerCase().replace(/_api_key|_key|_client_id/, '');
+}
+
 function renderFields(id, values) {
   const target = document.getElementById(id);
   for (const [key,label,icon] of values) {
@@ -71,6 +83,40 @@ function renderFields(id, values) {
     const saved = document.createElement('small');
     saved.id = `${key}-saved`; saved.className = 'saved-indicator';
     title.append(name,saved);
+
+    const testSavedBtn = document.createElement('button');
+    testSavedBtn.type = 'button';
+    testSavedBtn.id = `${key}-test`;
+    testSavedBtn.className = 'test-saved-key';
+    testSavedBtn.textContent = 'Test Saved Key';
+    testSavedBtn.hidden = true;
+    testSavedBtn.title = `Test saved ${label} key without re-entering it`;
+    testSavedBtn.style.cssText = 'background:none;border:1px solid #3b82f6;color:#60a5fa;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;margin-left:6px;';
+    testSavedBtn.addEventListener('click', async event => {
+      event.preventDefault();
+      testSavedBtn.disabled = true;
+      testSavedBtn.textContent = '…';
+      try {
+        const prov = getProviderCode(key);
+        const res = await api('/api/validate-provider', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ provider: prov, key: 'saved' })
+        });
+        notify(res.status === 'ok' ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`);
+        if (saved) {
+          saved.textContent = res.status === 'ok' ? 'SAVED (VALID)' : 'SAVED (INVALID)';
+          saved.style.color = res.status === 'ok' ? '#34d399' : '#f87171';
+        }
+      } catch (err) {
+        notify(`Validation error: ${err.message}`);
+      } finally {
+        testSavedBtn.disabled = false;
+        testSavedBtn.textContent = 'Test Saved Key';
+      }
+    });
+    title.append(testSavedBtn);
+
     const remove = document.createElement('button');
     remove.type = 'button'; remove.id = `${key}-remove`; remove.className = 'clear-key';
     remove.textContent = '×'; remove.hidden = true;
@@ -78,6 +124,7 @@ function renderFields(id, values) {
     remove.addEventListener('click',event=>{
       event.preventDefault();
       savedKeys.delete(key); saved.textContent = ''; remove.hidden = true;
+      testSavedBtn.hidden = true;
       input.value = ''; input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
     });
     title.append(remove);
@@ -154,6 +201,9 @@ async function loadSettings() {
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;
 
+  const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.');
+  if (typeof setAccessScope === 'function') setAccessScope(isLocal ? 'local' : 'remote');
+
   const aiomInput = document.getElementById('aiometadata-host');
   if (aiomInput) {
     if (env.AIOMETADATA_HOST && !env.AIOMETADATA_HOST.includes('yourdomain.com')) {
@@ -176,10 +226,16 @@ async function loadSettings() {
   for (const [key] of fields) {
     const saved = savedKeys.has(key);
     const input = document.getElementById(key);
-    input.value = '';
-    input.placeholder = saved ? 'Saved · enter to replace' : key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
-    document.getElementById(`${key}-saved`).textContent = saved ? 'SAVED' : '';
-    document.getElementById(`${key}-remove`).hidden = !saved;
+    if (input) {
+      input.value = '';
+      input.placeholder = saved ? 'Saved · enter to replace' : key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
+    }
+    const savedEl = document.getElementById(`${key}-saved`);
+    if (savedEl) savedEl.textContent = saved ? 'SAVED' : '';
+    const removeEl = document.getElementById(`${key}-remove`);
+    if (removeEl) removeEl.hidden = !saved;
+    const testEl = document.getElementById(`${key}-test`);
+    if (testEl) testEl.hidden = !saved;
   }
   const stremioPort = (env.ports && env.ports.stremio_web) || env.PORT_STREMIO_WEB || 8082;
   const stremioLink = document.getElementById('player-link');
@@ -244,8 +300,10 @@ async function loadManifest() {
   }
 }
 
+let lastIntegrations = [];
 async function refreshServices() {
   const result = await api('/api/integrations');
+  lastIntegrations = result.integrations || [];
   const grid = document.getElementById('service-grid'); grid.replaceChildren();
   for (const service of result.integrations) {
     const card = document.createElement('div'); card.className = 'service-card';
@@ -262,6 +320,26 @@ async function refreshServices() {
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
+
+  const stremioSvc = result.integrations.find(s => s.name && s.name.toLowerCase().includes('stremio'));
+  const nuvioSvc = result.integrations.find(s => s.name && s.name.toLowerCase().includes('nuvio'));
+  const stremioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.stremio_web) || (cachedEnv && cachedEnv.PORT_STREMIO_WEB) || 8082;
+  const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
+
+  const stremioAction = document.getElementById('player-link-action');
+  if (stremioAction) {
+    stremioAction.href = `${location.protocol}//${location.hostname}:${stremioPort}`;
+    stremioAction.textContent = `Launch Stremio Web (:${stremioPort}) ↗`;
+    stremioAction.style.display = (stremioSvc && stremioSvc.enabled !== false) ? 'block' : 'none';
+  }
+  const nuvioAction = document.getElementById('nuvio-player-action');
+  if (nuvioAction) {
+    nuvioAction.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
+    nuvioAction.textContent = `Launch Nuvio Web (:${nuvioPort}) ↗`;
+    nuvioAction.style.display = (nuvioSvc && nuvioSvc.enabled !== false) ? 'block' : 'none';
+  }
+
+  if (typeof updateStatusOverview === 'function') updateStatusOverview(lastHealthData, result.integrations);
 }
 
 async function pollSetup() {
@@ -386,6 +464,13 @@ if (btnInstallStremio) {
   });
 }
 
+document.getElementById('btn-test-playback')?.addEventListener('click', () => {
+  if (typeof runPlaybackTest === 'function') runPlaybackTest();
+});
+document.getElementById('overview-test-playback-btn')?.addEventListener('click', () => {
+  if (typeof runPlaybackTest === 'function') runPlaybackTest();
+});
+
 const backupSched = document.getElementById('backup-schedule-select');
 if (backupSched) {
   backupSched.addEventListener('change', async () => {
@@ -445,9 +530,11 @@ function setStreamingMode(mode) {
   const hiddenInput = document.getElementById('streaming-mode');
   if (hiddenInput) hiddenInput.value = mode;
 
-  const modePills = document.querySelectorAll('.mode-pill');
+  const modePills = document.querySelectorAll ? document.querySelectorAll('.streaming-mode-section .mode-pill') : [];
   modePills.forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    if (btn.classList && typeof btn.classList.toggle === 'function') {
+      btn.classList.toggle('active', btn.getAttribute?.('data-mode') === mode);
+    }
   });
 
   const debridContainer = document.getElementById('debrid-provider-container');
@@ -455,26 +542,203 @@ function setStreamingMode(mode) {
   const enableUsenet = document.getElementById('enable-usenet');
 
   if (mode === 'usenet') {
-    if (debridContainer) debridContainer.style.display = 'none';
-    if (usenetContainer) usenetContainer.style.display = 'block';
+    if (debridContainer && debridContainer.style) debridContainer.style.display = 'none';
+    if (usenetContainer && usenetContainer.style) usenetContainer.style.display = 'block';
     if (enableUsenet) enableUsenet.checked = true;
   } else if (mode === 'hybrid') {
-    if (debridContainer) debridContainer.style.display = 'block';
-    if (usenetContainer) usenetContainer.style.display = 'block';
+    if (debridContainer && debridContainer.style) debridContainer.style.display = 'block';
+    if (usenetContainer && usenetContainer.style) usenetContainer.style.display = 'block';
     if (enableUsenet) enableUsenet.checked = true;
   } else {
     // debrid
-    if (debridContainer) debridContainer.style.display = 'block';
-    if (usenetContainer) usenetContainer.style.display = 'none';
+    if (debridContainer && debridContainer.style) debridContainer.style.display = 'block';
+    if (usenetContainer && usenetContainer.style) usenetContainer.style.display = 'none';
   }
 }
 
-document.querySelectorAll('.mode-pill').forEach(btn => {
+function setAccessScope(scope) {
+  const scopePills = document.querySelectorAll ? document.querySelectorAll('.access-scope-section .mode-pill') : [];
+  scopePills.forEach(btn => {
+    if (btn.classList && typeof btn.classList.toggle === 'function') {
+      btn.classList.toggle('active', btn.getAttribute?.('data-scope') === scope);
+    }
+  });
+  const baseUrlInput = document.getElementById('base-url');
+  const aiomInput = document.getElementById('aiometadata-host');
+  const baseUrlHelp = document.getElementById('base-url-help');
+  const aiomHelp = document.getElementById('aiometa-url-help');
+  const env = (typeof cachedEnv !== 'undefined') ? cachedEnv : {};
+  const aioPort = (env && env.ports && env.ports.aiostreams) || (env && env.PORT_AIOSTREAMS) || '3001';
+  const aiomPort = (env && env.ports && env.ports.aiometadata) || (env && env.PORT_AIOMETADATA) || '4005';
+
+  if (scope === 'local') {
+    const localBase = `${location.protocol}//${location.hostname}:${aioPort}`;
+    const localAiom = `${location.protocol}//${location.hostname}:${aiomPort}`;
+    if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.includes('yourdomain.com'))) {
+      baseUrlInput.value = localBase;
+    }
+    if (aiomInput && (!aiomInput.value || aiomInput.value.includes('yourdomain.com'))) {
+      aiomInput.value = localAiom;
+    }
+    if (baseUrlHelp) baseUrlHelp.textContent = 'Direct LAN / home server address on port 3001 (no domain required).';
+    if (aiomHelp) aiomHelp.textContent = 'Direct LAN / home server address on port 4005 for rich external catalogs.';
+  } else {
+    if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.';
+    if (aiomHelp) aiomHelp.textContent = 'Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.';
+  }
+}
+
+document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.getAttribute('data-mode');
     setStreamingMode(mode);
   });
 });
+
+document.querySelectorAll('.access-scope-section .mode-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const scope = btn.getAttribute('data-scope');
+    setAccessScope(scope);
+  });
+});
+
+async function runPlaybackTest() {
+  const card = document.getElementById('playback-test-card');
+  const statusEl = document.getElementById('playback-test-status');
+  const iconAuth = document.getElementById('icon-step-auth');
+  const descAuth = document.getElementById('desc-step-auth');
+  const iconRes = document.getElementById('icon-step-resolution');
+  const descRes = document.getElementById('desc-step-resolution');
+  const iconMedia = document.getElementById('icon-step-media');
+  const descMedia = document.getElementById('desc-step-media');
+  const troubleshootEl = document.getElementById('playback-troubleshoot');
+  const testBtns = [document.getElementById('btn-test-playback'), document.getElementById('overview-test-playback-btn')].filter(Boolean);
+
+  if (card && card.style) card.style.display = 'block';
+  if (statusEl) {
+    statusEl.textContent = 'Testing media flow…';
+    if (statusEl.style) statusEl.style.color = '#38bdf8';
+  }
+  if (troubleshootEl && troubleshootEl.style) troubleshootEl.style.display = 'none';
+
+  if (iconAuth) { iconAuth.textContent = '⏳'; if (iconAuth.style) iconAuth.style.color = '#38bdf8'; }
+  if (descAuth) descAuth.textContent = 'Checking provider / server credentials…';
+  if (iconRes) { iconRes.textContent = '○'; if (iconRes.style) iconRes.style.color = '#8fa1a8'; }
+  if (descRes) descRes.textContent = 'Waiting…';
+  if (iconMedia) { iconMedia.textContent = '○'; if (iconMedia.style) iconMedia.style.color = '#8fa1a8'; }
+  if (descMedia) descMedia.textContent = 'Waiting…';
+
+  testBtns.forEach(btn => { if (btn) btn.disabled = true; });
+  const mode = document.getElementById('streaming-mode')?.value || 'debrid';
+
+  try {
+    const res = await api('/api/test-playback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+
+    const s = res.steps || {};
+    if (s.auth) {
+      if (iconAuth) iconAuth.textContent = s.auth.status === 'ok' ? '✓' : (s.auth.status === 'warning' ? '⚠' : '✗');
+      if (iconAuth && iconAuth.style) iconAuth.style.color = s.auth.status === 'ok' ? '#34d399' : (s.auth.status === 'warning' ? '#fbbf24' : '#f87171');
+      if (descAuth) descAuth.textContent = s.auth.detail || s.auth.status;
+    }
+    if (s.stream_resolution) {
+      if (iconRes) iconRes.textContent = s.stream_resolution.status === 'ok' ? '✓' : (s.stream_resolution.status === 'warning' ? '⚠' : '✗');
+      if (iconRes && iconRes.style) iconRes.style.color = s.stream_resolution.status === 'ok' ? '#34d399' : (s.stream_resolution.status === 'warning' ? '#fbbf24' : '#f87171');
+      if (descRes) descRes.textContent = s.stream_resolution.detail || s.stream_resolution.status;
+    }
+    if (s.media_read) {
+      if (iconMedia) iconMedia.textContent = s.media_read.status === 'ok' ? '✓' : (s.media_read.status === 'warning' ? '⚠' : '✗');
+      if (iconMedia && iconMedia.style) iconMedia.style.color = s.media_read.status === 'ok' ? '#34d399' : (s.media_read.status === 'warning' ? '#fbbf24' : '#f87171');
+      if (descMedia) descMedia.textContent = s.media_read.detail || s.media_read.status;
+    }
+
+    if (res.status === 'ok') {
+      if (statusEl) {
+        statusEl.textContent = '✓ Playback Confirmed';
+        if (statusEl.style) statusEl.style.color = '#34d399';
+      }
+      notify('Playback verified: Streams and media range reads confirmed!');
+    } else {
+      if (statusEl) {
+        statusEl.textContent = res.status === 'warning' ? '⚠ Playback Warning' : '✗ Playback Failed';
+        if (statusEl.style) statusEl.style.color = res.status === 'warning' ? '#fbbf24' : '#f87171';
+      }
+      notify(`Playback check: ${res.message || 'Verification issue detected'}`);
+    }
+
+    if (res.troubleshoot && troubleshootEl) {
+      troubleshootEl.textContent = `💡 Action: ${res.troubleshoot}`;
+      if (troubleshootEl.style) troubleshootEl.style.display = 'block';
+    }
+
+    const actionText = document.getElementById('overview-action-text');
+    if (actionText) {
+      if (res.status === 'ok') {
+        actionText.textContent = 'Playback verified! Launch your web player or install in Stremio to start watching.';
+      } else if (res.troubleshoot) {
+        actionText.textContent = res.troubleshoot;
+      }
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = '✗ Check Interrupted';
+      if (statusEl.style) statusEl.style.color = '#f87171';
+    }
+    if (descAuth) descAuth.textContent = `Error: ${err.message}`;
+    if (troubleshootEl) {
+      troubleshootEl.textContent = `💡 Check if portal server and AIOStreams are reachable: ${err.message}`;
+      if (troubleshootEl.style) troubleshootEl.style.display = 'block';
+    }
+    notify(`Playback test failed: ${err.message}`);
+  } finally {
+    testBtns.forEach(btn => { if (btn) btn.disabled = false; });
+  }
+}
+
+function updateStatusOverview(healthData, integrationsList) {
+  const lastCheck = document.getElementById('overview-last-check');
+  if (lastCheck) {
+    lastCheck.textContent = `Checked at ${new Date().toLocaleTimeString()}`;
+  }
+
+  const servicesEl = document.getElementById('overview-services');
+  if (servicesEl && Array.isArray(integrationsList)) {
+    const active = integrationsList.filter(item => item.enabled !== false);
+    const reachable = active.filter(item => item.reachable);
+    servicesEl.textContent = `${reachable.length}/${active.length} Online`;
+    servicesEl.style.color = reachable.length === active.length ? '#10b981' : '#f59e0b';
+  }
+
+  if (healthData) {
+    const wd = healthData.watchdog || {};
+    const bk = healthData.backup || {};
+    const wdEl = document.getElementById('overview-watchdog');
+    if (wdEl) {
+      wdEl.textContent = `${wd.healthy_count || 0}/${wd.total_services || 0} Healthy`;
+      wdEl.style.color = wd.overall === 'healthy' ? '#10b981' : '#f59e0b';
+    }
+    const bkEl = document.getElementById('overview-backup');
+    if (bkEl) {
+      bkEl.textContent = `${bk.count || 0} Saved (${bk.total_size_mb || 0} MB)`;
+    }
+    const badge = document.getElementById('overview-badge');
+    const dot = document.getElementById('overview-status-dot');
+    const isHealthy = wd.overall === 'healthy';
+    if (badge) {
+      badge.textContent = isHealthy ? 'All Systems Operational' : 'Attention Needed';
+      badge.style.color = isHealthy ? '#34d399' : '#fbbf24';
+      badge.style.background = isHealthy ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
+      badge.style.borderColor = isHealthy ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)';
+    }
+    if (dot) {
+      dot.style.background = isHealthy ? '#10b981' : '#f59e0b';
+      dot.style.boxShadow = isHealthy ? '0 0 10px #10b981' : '0 0 10px #f59e0b';
+    }
+  }
+}
 
 const templateSelectEl = document.getElementById('aiometadata-template');
 if (templateSelectEl) {
@@ -637,11 +901,13 @@ async function runOperations() {
 }
 
 let healthInterval = null;
+let lastHealthData = null;
 
 async function refreshHealthTelemetry() {
   try {
     const data = await api('/api/health-stats');
     if (!data || !data.success) return;
+    lastHealthData = data;
 
     const res = data.resources || {};
     const wd = data.watchdog || {};
@@ -697,6 +963,10 @@ async function refreshHealthTelemetry() {
         tbody.appendChild(tr);
       });
     }
+
+    if (typeof updateStatusOverview === 'function') {
+      updateStatusOverview(data, lastIntegrations);
+    }
   } catch (err) {
     console.error('Failed to refresh health telemetry:', err);
   }
@@ -744,6 +1014,25 @@ function initHealthTelemetry() {
     };
     select.addEventListener('change', updateInterval);
     updateInterval();
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (healthInterval) {
+          clearInterval(healthInterval);
+          healthInterval = null;
+        }
+      } else {
+        refreshHealthTelemetry();
+        if (select) {
+          const val = parseInt(select.value, 10);
+          if (val > 0 && !healthInterval) {
+            healthInterval = setInterval(refreshHealthTelemetry, val);
+          }
+        }
+      }
+    });
   }
 }
 

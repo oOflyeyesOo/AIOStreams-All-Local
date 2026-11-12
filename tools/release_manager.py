@@ -61,8 +61,27 @@ def resolve_image(image):
     return repository+'@'+match[1]
 
 def load_compose(path):
-    import yaml
-    return yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+    try:
+        import yaml
+        return yaml.safe_load(Path(path).read_text(encoding='utf-8'))
+    except ImportError:
+        # Fallback parser for service images when pyyaml is not installed
+        services = {}
+        current_service = None
+        for line in Path(path).read_text(encoding='utf-8').splitlines():
+            line_str = line.rstrip()
+            if not line_str or line_str.startswith('#'):
+                continue
+            m_svc = re.match(r'^(?:  |\t)([a-zA-Z0-9_-]+):\s*$', line_str)
+            if m_svc:
+                current_service = m_svc.group(1)
+                services[current_service] = {}
+                continue
+            if current_service:
+                m_img = re.match(r'^\s+image:\s*([^\s#]+)', line_str)
+                if m_img:
+                    services[current_service]['image'] = m_img.group(1).strip('"\'')
+        return {'services': services}
 
 def make_bundle(compose_path,release,output,resolver=resolve_image):
     import yaml

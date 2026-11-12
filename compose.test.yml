@@ -14,7 +14,7 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - AIO_SKIP_ENV_FILE=true
-    command: python3 -m unittest discover -s tests -v
+    command: sh -c "pip install --no-cache-dir pyyaml==6.0.2 && python3 -m unittest discover -s tests -v"
 
   shared-postgres:
     image: postgres:16-alpine

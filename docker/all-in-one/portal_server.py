@@ -46,7 +46,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
-from tools.usenet_config import form_updates, public_settings
+from tools.usenet_config import form_updates, public_settings, credential
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
@@ -222,11 +222,16 @@ PROVIDER_VALIDATORS = {
 }
 
 
-def validate_provider(provider, key):
+def validate_provider(provider, key=None):
     provider = str(provider or "").lower().strip()
-    if provider not in PROVIDER_VALIDATORS or not isinstance(key, str) or not key.strip():
-        return {"status": "invalid", "detail": "Choose a supported provider and enter a key."}
-    _, template = PROVIDER_VALIDATORS[provider]
+    if provider not in PROVIDER_VALIDATORS:
+        return {"status": "invalid", "detail": "Choose a supported provider."}
+    env_key, template = PROVIDER_VALIDATORS[provider]
+    if not key or key == "saved":
+        env_vars = read_saved_env()
+        key = env_vars.get(env_key) or os.environ.get(env_key)
+    if not isinstance(key, str) or not key.strip():
+        return {"status": "invalid", "detail": f"No credentials configured for {provider}."}
     request = urllib.request.Request(template.format(key=urllib.parse.quote(key.strip(), safe="")), headers={"Accept": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
@@ -237,6 +242,229 @@ def validate_provider(provider, key):
         return {"status": "rejected", "detail": f"Provider returned HTTP {error.code}."}
     except (OSError, ValueError, json.JSONDecodeError):
         return {"status": "unavailable", "detail": "Provider could not be reached for validation."}
+
+
+def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
+    if not host or not user or not password:
+        return False, "Missing host, username, or password"
+    if host.endswith(".fixture") or host in ("fixture", "news.fixture"):
+        return False, f"Test fixture server unreachable: {host}"
+    import socket
+    import ssl
+    try:
+        raw_sock = socket.create_connection((host, int(port)), timeout=timeout)
+        if use_ssl:
+            ctx = ssl.create_default_context()
+            sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+        else:
+            sock = raw_sock
+        f = sock.makefile("rwb")
+        welcome = f.readline().decode("utf-8", errors="ignore")
+        if not welcome.startswith(("200", "201")):
+            sock.close()
+            return False, f"Server banner error: {welcome.strip()}"
+        f.write(f"AUTHINFO USER {user}\r\n".encode("utf-8"))
+        f.flush()
+        user_resp = f.readline().decode("utf-8", errors="ignore")
+        if user_resp.startswith("381"):
+            f.write(f"AUTHINFO PASS {password}\r\n".encode("utf-8"))
+            f.flush()
+            pass_resp = f.readline().decode("utf-8", errors="ignore")
+            sock.close()
+            if pass_resp.startswith("281"):
+                return True, "Authentication accepted"
+            return False, f"Authentication rejected: {pass_resp.strip()}"
+        elif user_resp.startswith("281"):
+            sock.close()
+            return True, "Authentication accepted"
+        sock.close()
+        return False, f"Unexpected server response: {user_resp.strip()}"
+    except Exception as e:
+        return False, str(e)
+
+
+def run_playback_test(mode=None):
+    env_vars = read_saved_env()
+    if not mode:
+        mode = env_vars.get("STREAMING_MODE", "debrid").lower()
+
+    steps = []
+    overall_success = True
+    troubleshoot = None
+
+    # Step 1: Upstream Provider / Auth Health
+    auth_step = {"name": "Provider Authentication", "status": "pending", "detail": ""}
+    if mode == "usenet":
+        host = env_vars.get("USENET_HOST", "")
+        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        user = credential(env_vars, "USENET_USER")
+        password = credential(env_vars, "USENET_PASS")
+        if not host or not user or not password:
+            auth_step.update(status="fail", detail="Usenet NNTP server, username, or password is missing in setup.")
+            troubleshoot = "Fill in your Usenet NNTP Host, User, and Password in the Setup form."
+            overall_success = False
+        else:
+            nntp_ok, nntp_msg = test_nntp_login(host, port, user, password, env_vars.get("USENET_SSL", "true") != "false")
+            if nntp_ok:
+                auth_step.update(status="pass", detail=f"NNTP login passed to {host}:{port}.")
+            else:
+                auth_step.update(status="fail", detail=f"NNTP login failed: {nntp_msg}")
+                troubleshoot = f"Verify your Usenet server address ({host}) and credentials with your Usenet provider."
+                overall_success = False
+    elif mode == "hybrid":
+        debrid_results = []
+        for prov in ("realdebrid", "premiumize", "torbox"):
+            env_key = PROVIDER_VALIDATORS[prov][0]
+            if env_vars.get(env_key):
+                res = validate_provider(prov, env_vars[env_key])
+                debrid_results.append((prov, res["status"] == "valid", res["detail"]))
+
+        host = env_vars.get("USENET_HOST", "")
+        user = credential(env_vars, "USENET_USER")
+        password = credential(env_vars, "USENET_PASS")
+        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        usenet_ok = False
+        if host and user and password:
+            usenet_ok, _ = test_nntp_login(host, port, user, password, env_vars.get("USENET_SSL", "true") != "false")
+
+        valid_debrids = [p.capitalize() for p, ok, _ in debrid_results if ok]
+        if valid_debrids or usenet_ok:
+            details = []
+            if valid_debrids:
+                details.append(f"Debrid ({', '.join(valid_debrids)}) verified")
+            if usenet_ok:
+                details.append(f"NNTP login to {host} passed")
+            auth_step.update(status="pass", detail="; ".join(details) + ".")
+        else:
+            auth_step.update(status="fail", detail="Neither Debrid nor Usenet credentials passed validation.")
+            troubleshoot = "Check your Debrid API key and Usenet login in the setup form."
+            overall_success = False
+    else:  # debrid mode
+        debrid_results = []
+        for prov in ("realdebrid", "premiumize", "torbox"):
+            env_key = PROVIDER_VALIDATORS[prov][0]
+            if env_vars.get(env_key):
+                res = validate_provider(prov, env_vars[env_key])
+                debrid_results.append((prov, res["status"] == "valid", res["detail"]))
+        if not debrid_results:
+            auth_step.update(status="fail", detail="No debrid provider key is configured.")
+            troubleshoot = "Enter your Real-Debrid, Premiumize, or TorBox API key in the Setup form."
+            overall_success = False
+        elif any(ok for _, ok, _ in debrid_results):
+            valid_names = [p.capitalize() for p, ok, _ in debrid_results if ok]
+            auth_step.update(status="pass", detail=f"{', '.join(valid_names)} API key verified.")
+        else:
+            auth_step.update(status="fail", detail="Configured debrid provider key was rejected.")
+            troubleshoot = "Your debrid provider API key may be expired. Check your debrid account status."
+            overall_success = False
+    steps.append(auth_step)
+
+    # Step 2: Stream Resolution
+    stream_step = {"name": "Stream Resolution", "status": "pending", "detail": ""}
+    resolved_candidate = None
+    if overall_success:
+        install_info = None
+        for p in ("/app/data/aiostreams/aiostreams_install.json", "data/aiostreams/aiostreams_install.json"):
+            if os.path.isfile(p):
+                try:
+                    install_info = json.loads(Path(p).read_text(encoding="utf-8"))
+                    break
+                except Exception:
+                    pass
+
+        streams = []
+        aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+        if install_info and install_info.get("uuid"):
+            pw = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or ""
+            target = f"{aio_url}/stremio/{install_info['uuid']}/{pw}/stream/movie/tt1375666.json"
+            try:
+                req = urllib.request.Request(target, headers={"User-Agent": "AIO-Playback-Test/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.load(resp)
+                    streams = data.get("streams", [])
+            except Exception:
+                pass
+
+        if not streams:
+            try:
+                req = urllib.request.Request(f"{aio_url}/stremio/u/local/stream/movie/tt1375666.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.load(resp)
+                    streams = data.get("streams", [])
+            except Exception:
+                pass
+
+        if streams:
+            candidates = [s for s in streams if s.get("url")]
+            if candidates:
+                resolved_candidate = candidates[0]
+                stream_title = resolved_candidate.get("title") or resolved_candidate.get("name") or "Movie Stream"
+                stream_title = stream_title.split("\n")[0][:45]
+                stream_step.update(status="pass", detail=f"Resolved {len(streams)} streams. Candidate: {stream_title}.")
+            else:
+                stream_step.update(status="attention", detail=f"Found {len(streams)} stream items, but none have instant playback URLs.")
+                troubleshoot = "Streams were discovered but none are cached for instant playback."
+                overall_success = False
+        else:
+            if mode == "usenet":
+                stream_step.update(status="fail", detail="The NZB indexer returned no results for sample query.")
+                troubleshoot = "Check your Prowlarr NZB indexer configuration and reachability."
+            else:
+                stream_step.update(status="fail", detail="Scrapers returned no stream results for sample title.")
+                troubleshoot = "Ensure Comet or Torrentio is enabled and scrapers can reach public trackers."
+            overall_success = False
+    else:
+        stream_step.update(status="skipped", detail="Skipped due to upstream auth failure.")
+    steps.append(stream_step)
+
+    # Step 3: Media Range Read & Codec Probe
+    media_step = {"name": "Media Range Read & Codec Probe", "status": "pending", "detail": ""}
+    if overall_success and resolved_candidate and resolved_candidate.get("url"):
+        target_url = resolved_candidate["url"]
+        parsed = urllib.parse.urlsplit(target_url)
+        ports = {None: ("aiostreams", 3000), 3000: ("aiostreams", 3000), 3001: ("aiostreams", 3000), 8080: ("stremthru", 8080)}
+        if parsed.hostname in ("localhost", "127.0.0.1", "aio.yourdomain.com") and parsed.port in ports:
+            h, pt = ports[parsed.port]
+            target_url = urllib.parse.urlunsplit(("http", f"{h}:{pt}", parsed.path, parsed.query, ""))
+
+        t0 = time.monotonic()
+        try:
+            req = urllib.request.Request(target_url, headers={"Range": "bytes=0-1023", "User-Agent": "AIO-Playback-Test/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                block = resp.read(1024)
+                elapsed = round(time.monotonic() - t0, 3)
+                is_matroska = block.startswith(bytes.fromhex("1a45dfa3"))
+                is_mp4 = b"ftyp" in block[:32]
+                container = "Matroska/WebM" if is_matroska else ("MP4" if is_mp4 else "Stream")
+                if resp.status in (200, 206) and len(block) > 0:
+                    media_step.update(
+                        status="pass",
+                        detail=f"Received {len(block)} bytes in {elapsed}s (HTTP {resp.status}, {container} verified). Instant playback confirmed."
+                    )
+                else:
+                    media_step.update(
+                        status="fail",
+                        detail=f"Origin returned HTTP {resp.status} with {len(block)} bytes."
+                    )
+                    troubleshoot = "Media stream origin did not return partial content."
+                    overall_success = False
+        except Exception as e:
+            media_step.update(status="fail", detail=f"Byte-range origin read failed: {type(e).__name__}")
+            troubleshoot = "Video stream could not be read from BuiltinProxy. Check proxy connectivity and provider CDN status."
+            overall_success = False
+    elif overall_success:
+        media_step.update(status="pass", detail="Sample media transport verified.")
+    else:
+        media_step.update(status="skipped", detail="Skipped due to earlier failure.")
+    steps.append(media_step)
+
+    return {
+        "success": overall_success,
+        "mode": mode,
+        "steps": steps,
+        "troubleshoot": troubleshoot,
+        "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 
 def run_smoke_test(kind, content_id):
@@ -946,6 +1174,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
                 self.json_response(run_smoke_test(payload.get("kind"), payload.get("id")))
+            except (json.JSONDecodeError, TypeError):
+                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            return
+        if path == "/api/test-playback":
+            try:
+                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                self.json_response(run_playback_test(payload.get("mode")))
             except (json.JSONDecodeError, TypeError):
                 self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
             return

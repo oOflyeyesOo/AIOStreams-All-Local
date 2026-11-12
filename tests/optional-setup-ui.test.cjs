@@ -6,10 +6,13 @@ const source=fs.readFileSync('assets/app.js','utf8');
 
 function form(saved){
   const nodes=new Map(),calls=[];
-  const document={getElementById(id){
-    if(!nodes.has(id))nodes.set(id,{value:'',checked:false,handlers:{},addEventListener(type,handler){this.handlers[type]=handler;}});
-    return nodes.get(id);
-  }};
+  const document={
+    querySelectorAll(){ return []; },
+    getElementById(id){
+      if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},handlers:{},addEventListener(type,handler){this.handlers[type]=handler;}});
+      return nodes.get(id);
+    }
+  };
   const context=vm.createContext({document,URL,location:new URL('http://server:8088'),
     providers:[['PROVIDER_KEY']],fields:[['PROVIDER_KEY'],['NZB_INDEXER_API_KEY']],savedKeys:new Set(),
     usenetPasswordSaved:false,deriveAiometaHost:()=>'',setProgress:()=>{},pollSetup:async()=>{},
@@ -70,4 +73,33 @@ test('custom ports update player-link and nuvio-player-link hrefs',async()=>{
   assert.equal(env.nodes.get('player-link').textContent,'Launch Stremio Web (:18082) ↗');
   assert.equal(env.nodes.get('nuvio-player-link').href,'http://server:18085');
   assert.equal(env.nodes.get('nuvio-player-link').textContent,'Launch Nuvio Web (:18085) ↗');
+});
+
+test('saved keys reveal test button for validating credentials without re-entering them',async()=>{
+  const env=form({configuredKeys:['PROVIDER_KEY']});
+  await vm.runInContext('loadSettings()',env.context);
+  assert.equal(env.nodes.get('PROVIDER_KEY-saved').textContent,'SAVED');
+  assert.equal(env.nodes.get('PROVIDER_KEY-test').hidden,false);
+  assert.equal(env.nodes.get('PROVIDER_KEY-remove').hidden,false);
+});
+
+test('local access scope configures direct host and port endpoints',async()=>{
+  const env=form({BASE_URL:'',ports:{aiostreams:3001,aiometadata:4005},configuredKeys:[]});
+  const fnScope = source.match(/function setAccessScope\([^\)]*\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(fnScope, env.context);
+  vm.runInContext("setAccessScope('local')", env.context);
+  assert.equal(env.nodes.get('base-url').value, 'http://server:3001');
+  assert.equal(env.nodes.get('aiometadata-host').value, 'http://server:4005');
+});
+
+test('playback test executes multi-step verification and posts to /api/test-playback',async()=>{
+  const env=form({});
+  const fnPlayback = source.match(/async function runPlaybackTest\(\) \{[\s\S]*?\n\}/)[0];
+  env.context.notify = () => {};
+  vm.runInContext(fnPlayback, env.context);
+  await vm.runInContext("runPlaybackTest()", env.context);
+  const call = env.calls.find(c => c.path === '/api/test-playback');
+  assert.ok(call, 'Expected /api/test-playback API call');
+  assert.equal(call.payload.mode, 'debrid');
+  assert.equal(env.nodes.get('playback-test-card').style.display, 'block');
 });

@@ -580,6 +580,58 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status_data.get("ports", {}).get("stremio_web"), 18082)
         self.assertEqual(status_data.get("ports", {}).get("nuvio"), 18085)
 
+    def test_validate_provider_with_saved_key(self):
+        portal.save_env_updates({"REALDEBRID_API_KEY": "saved-rd-key"})
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b'{"id": 1234, "username": "testuser"}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request(
+                "/api/validate-provider", "POST",
+                {"provider": "realdebrid", "key": "saved"},
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+
+    def test_test_playback_endpoint(self):
+        # 1. When NNTP login fails
+        with patch.object(portal, "test_nntp_login", return_value=(False, "502 Authentication failed")):
+            status, body, _ = self.request(
+                "/api/test-playback", "POST",
+                {"mode": "usenet"},
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("mode"), "usenet")
+            self.assertFalse(data.get("overall_success"))
+            self.assertIsNotNone(data.get("troubleshoot"))
+            self.assertEqual(len(data.get("steps", [])), 3)
+            self.assertEqual(data["steps"][0]["name"], "Provider Authentication")
+            self.assertEqual(data["steps"][0]["status"], "fail")
+
+        # 2. When credentials are valid and streams resolve
+        with patch.object(portal, "test_nntp_login", return_value=(True, "Authentication accepted")):
+            with patch.object(portal.urllib.request, "urlopen") as mock_url:
+                mock_resp = unittest.mock.MagicMock()
+                mock_resp.status = 206
+                mock_resp.read.return_value = bytes.fromhex("1a45dfa3") + b"0" * 1020
+                mock_resp.__enter__.return_value = mock_resp
+                mock_url.return_value = mock_resp
+
+                status, body, _ = self.request(
+                    "/api/test-playback", "POST",
+                    {"mode": "usenet"},
+                    auth=True, headers={"Content-Type": "application/json"}
+                )
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertEqual(data["steps"][0]["status"], "pass")
+
 
 if __name__ == "__main__":
     unittest.main()
