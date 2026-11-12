@@ -438,7 +438,7 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
 
 document.getElementById('refresh-services').addEventListener('click',()=>refreshServices().catch(error=>notify(error.message)));
 
-async function copyToClipboard(text, successMsg) {
+async function copyToClipboard(text, successMsg, triggerBtn) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
@@ -452,6 +452,16 @@ async function copyToClipboard(text, successMsg) {
     let copied = false;
     try { copied = document.execCommand('copy'); } finally { textarea.remove(); }
     notify(copied ? successMsg : 'Select the URL above and copy it.');
+  }
+  if (triggerBtn && !triggerBtn._origContent) {
+    triggerBtn._origContent = triggerBtn.innerHTML;
+    triggerBtn.textContent = 'Copied! ✓';
+    triggerBtn.classList.add('copied-active');
+    setTimeout(() => {
+      triggerBtn.innerHTML = triggerBtn._origContent;
+      triggerBtn._origContent = null;
+      triggerBtn.classList.remove('copied-active');
+    }, 2000);
   }
 }
 
@@ -487,14 +497,30 @@ if (backupSched) {
   });
 }
 
-document.getElementById('copy-manifest').addEventListener('click', () => {
-  copyToClipboard(currentManifest, 'AIOStreams manifest URL copied. Paste it into your player.');
+document.getElementById('copy-manifest')?.addEventListener('click', e => {
+  copyToClipboard(currentManifest, 'AIOStreams manifest URL copied. Paste it into your player.', e.currentTarget);
 });
 
 const copyAiomBtn = document.getElementById('copy-aiometa-manifest');
 if (copyAiomBtn) {
-  copyAiomBtn.addEventListener('click', () => {
-    copyToClipboard(currentAiometaManifest, 'AIOMetadata manifest URL copied. Paste it into your player.');
+  copyAiomBtn.addEventListener('click', e => {
+    copyToClipboard(currentAiometaManifest, 'AIOMetadata manifest URL copied. Paste it into your player.', e.currentTarget);
+  });
+}
+
+const copyAniskipApi = document.getElementById('copy-aniskip-api');
+if (copyAniskipApi) {
+  copyAniskipApi.addEventListener('click', e => {
+    const endpoint = `${location.protocol}//${location.host}/api/aniskip`;
+    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into Nuvio or outside player.', e.currentTarget);
+  });
+}
+
+const copyAniskipBtn = document.getElementById('copy-aniskip-endpoint-btn');
+if (copyAniskipBtn) {
+  copyAniskipBtn.addEventListener('click', e => {
+    const endpoint = `${location.protocol}//${location.host}/api/aniskip`;
+    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into Nuvio or outside player.', e.currentTarget);
   });
 }
 
@@ -614,8 +640,15 @@ async function runPlaybackTest() {
   const descMedia = document.getElementById('desc-step-media');
   const troubleshootEl = document.getElementById('playback-troubleshoot');
   const testBtns = [document.getElementById('btn-test-playback'), document.getElementById('overview-test-playback-btn')].filter(Boolean);
+  const videoContainer = document.getElementById('playback-video-container');
+  const videoPreview = document.getElementById('playback-video-preview');
+  const streamLink = document.getElementById('playback-direct-stream-link');
 
   if (card && card.style) card.style.display = 'block';
+  if (videoContainer && videoContainer.style) videoContainer.style.display = 'none';
+  if (videoPreview) {
+    try { videoPreview.pause(); videoPreview.removeAttribute('src'); videoPreview.load(); } catch (_) {}
+  }
   if (statusEl) {
     statusEl.textContent = 'Testing media flow…';
     if (statusEl.style) statusEl.style.color = '#38bdf8';
@@ -691,8 +724,14 @@ async function runPlaybackTest() {
         statusEl.textContent = '✓ Playback Confirmed';
         if (statusEl.style) statusEl.style.color = '#34d399';
       }
+      if (res.stream_url && videoContainer && videoContainer.style) {
+        videoContainer.style.display = 'block';
+        if (videoPreview) videoPreview.src = res.stream_url;
+        if (streamLink) streamLink.href = res.stream_url;
+      }
       notify('Playback verified: Streams and media range reads confirmed!');
     } else {
+      if (videoContainer && videoContainer.style) videoContainer.style.display = 'none';
       if (statusEl) {
         statusEl.textContent = res.status === 'warning' ? '⚠ Playback Warning' : '✗ Playback Failed';
         if (statusEl.style) statusEl.style.color = res.status === 'warning' ? '#fbbf24' : '#f87171';
@@ -779,14 +818,14 @@ if (templateSelectEl) {
   templateSelectEl.addEventListener('change', updateTemplateDisplay);
 }
 
-document.getElementById('copy-template-json')?.addEventListener('click', async () => {
+document.getElementById('copy-template-json')?.addEventListener('click', async (e) => {
   const select = document.getElementById('aiometadata-template');
   const val = select ? select.value : 'tamtaro-aiometadata-with-anime.json';
   try {
     const res = await fetch(`/templates/aiometadata-configs/${val}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    await copyToClipboard(text, `Copied ${val} to clipboard!`);
+    await copyToClipboard(text, `Copied ${val} to clipboard!`, e.currentTarget);
   } catch (err) {
     notify(`Failed to copy JSON: ${err.message}`);
   }
@@ -932,6 +971,105 @@ async function runOperations() {
       await loadSettings();
     } catch (error) { output('config-output').textContent = error.message; }
   });
+
+  document.getElementById('btn-fetch-logs')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const container = document.getElementById('logs-container-select')?.value || 'aiostreams';
+    const out = output('container-logs-output');
+    if (out) out.textContent = `Fetching latest logs for ${container}…`;
+    btn.disabled = true;
+    try {
+      const res = await api(`/api/logs?container=${encodeURIComponent(container)}`);
+      if (out) out.textContent = res.logs || 'No recent logs returned.';
+    } catch (err) {
+      if (out) out.textContent = `Error fetching logs: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('btn-probe-flaresolverr')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const out = output('flaresolverr-output');
+    if (out) out.textContent = 'Probing FlareSolverr service on port 8191…';
+    btn.disabled = true;
+    try {
+      const res = await api('/api/flaresolverr');
+      if (out) out.textContent = `${res.status.toUpperCase()}: ${res.message}`;
+    } catch (err) {
+      if (out) out.textContent = `Offline: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('btn-run-benchmark')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const out = output('benchmark-output');
+    if (out) out.textContent = 'Measuring latency across stack components…';
+    btn.disabled = true;
+    try {
+      const res = await api('/api/benchmark');
+      const lines = [];
+      if (res.internal_latencies) {
+        for (const [name, info] of Object.entries(res.internal_latencies)) {
+          lines.push(`• ${name}: ${info.status === 'ok' ? `${info.latency_ms} ms (OK)` : `Unreachable (${info.error})`}`);
+        }
+      }
+      if (res.debrid_latencies && Object.keys(res.debrid_latencies).length > 0) {
+        lines.push('\nUpstream Debrid APIs:');
+        for (const [name, info] of Object.entries(res.debrid_latencies)) {
+          lines.push(`• ${name}: ${info.latency_ms ? `${info.latency_ms} ms` : info.status}`);
+        }
+      }
+      if (out) out.textContent = lines.join('\n') || JSON.stringify(res, null, 2);
+    } catch (err) {
+      if (out) out.textContent = `Benchmark failed: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('btn-test-aniskip')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const resBox = document.getElementById('aniskip-test-results');
+    const id = document.getElementById('aniskip-test-id')?.value || 'tt9335498';
+    const ep = document.getElementById('aniskip-test-ep')?.value || '1';
+    if (resBox) {
+      resBox.style.display = 'block';
+      resBox.textContent = 'Querying AniSkip database…';
+    }
+    btn.disabled = true;
+    try {
+      const res = await api(`/api/aniskip?id=${encodeURIComponent(id)}&episode=${encodeURIComponent(ep)}`);
+      if (res && res.found) {
+        const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+        const parts = [];
+        if (res.skip_times?.op) parts.push(`Opening (OP): ${fmt(res.skip_times.op[0])} – ${fmt(res.skip_times.op[1])}`);
+        if (res.skip_times?.ed) parts.push(`Ending (ED): ${fmt(res.skip_times.ed[0])} – ${fmt(res.skip_times.ed[1])}`);
+        if (resBox) resBox.textContent = `✓ AniSkip Found (MAL ID: ${res.mal_id}): ${parts.join(' · ') || 'Timestamps detected'}`;
+      } else {
+        if (resBox) resBox.textContent = `ℹ ${res.reason || 'No skip intervals indexed yet for this episode.'}`;
+      }
+    } catch (err) {
+      if (resBox) resBox.textContent = `Error querying AniSkip: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const setupForm = document.getElementById('setup-form');
+        const setupBtn = document.getElementById('setup-button');
+        if (setupForm && setupBtn && !setupBtn.disabled) {
+          e.preventDefault();
+          setupBtn.click();
+        }
+      }
+    });
+  }
 }
 
 let healthInterval = null;

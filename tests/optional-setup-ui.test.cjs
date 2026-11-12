@@ -104,6 +104,27 @@ test('playback test executes multi-step verification and posts to /api/test-play
   assert.equal(env.nodes.get('playback-test-card').style.display, 'block');
 });
 
+test('playback test reveals inline video player preview when stream_url is returned',async()=>{
+  const env=form({});
+  env.context.api = async (path) => {
+    if (path === '/api/test-playback') {
+      return { success: true, status: 'ok', stream_url: 'http://server:3000/media/sample.mp4', steps_dict: {
+        auth: { status: 'pass', detail: 'Auth ok' },
+        stream_resolution: { status: 'pass', detail: 'Found stream' },
+        media_read: { status: 'pass', detail: 'Read 1MB' }
+      }};
+    }
+    return { success: true };
+  };
+  const fnPlayback = source.match(/async function runPlaybackTest\(\) \{[\s\S]*?\n\}/)[0];
+  env.context.notify = () => {};
+  vm.runInContext(fnPlayback, env.context);
+  await vm.runInContext("runPlaybackTest()", env.context);
+  assert.equal(env.nodes.get('playback-video-container').style.display, 'block');
+  assert.equal(env.nodes.get('playback-video-preview').src, 'http://server:3000/media/sample.mp4');
+  assert.equal(env.nodes.get('playback-direct-stream-link').href, 'http://server:3000/media/sample.mp4');
+});
+
 test('remote access scope updates helper text for reverse proxy / tunnel setup',async()=>{
   const env=form({BASE_URL:'https://my-aio.domain.com',configuredKeys:[]});
   const fnScope = source.match(/function setAccessScope\([^\)]*\) \{[\s\S]*?\n\}/)[0];

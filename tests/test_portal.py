@@ -683,6 +683,47 @@ class PortalTests(unittest.TestCase):
             req2 = mock_url.call_args[0][0]
             self.assertIn("token=tb-secret-token", req2.full_url)
 
+    def test_flaresolverr_status_endpoint(self):
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b'{"status": "ok", "version": "v3.3.21"}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request("/api/flaresolverr", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data["status"], "online")
+            self.assertIn("v3.3.21", data["version"])
+
+        with patch.object(portal.urllib.request, "urlopen", side_effect=OSError("Connection refused")):
+            status, body, _ = self.request("/api/flaresolverr", auth=True)
+            self.assertEqual(status, 503)
+            data = json.loads(body)
+            self.assertEqual(data["status"], "offline")
+
+    def test_benchmark_endpoint(self):
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b'{"success": true}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request("/api/benchmark", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+            self.assertIn("internal_latencies", data)
+
+    def test_container_logs_endpoint(self):
+        with patch.object(portal.subprocess, "run") as mock_sub:
+            mock_sub.return_value = unittest.mock.MagicMock(returncode=0, stdout="AIOStreams log output line 1\nline 2", stderr="")
+            status, body, _ = self.request("/api/logs?container=aiostreams", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data["container"], "aiostreams")
+            self.assertIn("AIOStreams log output", data["logs"])
+
 
 if __name__ == "__main__":
     unittest.main()

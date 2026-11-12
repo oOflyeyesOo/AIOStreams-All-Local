@@ -44,4 +44,8 @@ select option{background:#121719;color:#e3e8e4}
 .mode-pill.active .mode-pill-title{color:#e6a56b}
 .mode-pill-desc{font-size:9px;color:#859296;line-height:1.3}
 .usenet-primary-card{background:#14191b;border:1px solid #2d363a;border-radius:8px;padding:18px}
-@media(max-width:650px){.mode-selector-pills{grid-template-columns:1fr}}
+.access-scope-section .mode-selector-pills{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:8px}
+.badge-fast{background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.badge-aniskip{background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+.copied-active{background:#10b981!important;color:#fff!important;border-color:#10b981!important}
+@media(max-width:650px){.mode-selector-pills,.access-scope-section .mode-selector-pills{grid-template-columns:1fr}}

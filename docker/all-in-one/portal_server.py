@@ -293,14 +293,19 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
         return False, str(e)
 
 
-def run_playback_test(mode=None):
+def run_playback_test(mode=None, content_id=None, kind=None):
     env_vars = read_saved_env()
     if not mode:
         mode = env_vars.get("STREAMING_MODE", "debrid").lower()
 
+    sample_id = content_id.strip() if content_id and isinstance(content_id, str) and content_id.strip() else "tt1375666"
+    sample_kind = kind.strip().lower() if kind and isinstance(kind, str) and kind.strip().lower() in ("movie", "series", "anime") else "movie"
+
     steps = []
     overall_success = True
     troubleshoot = None
+    stream_title = None
+    target_url = None
 
     # Step 1: Upstream Provider / Auth Health
     auth_step = {"name": "Provider Authentication", "status": "pending", "detail": ""}
@@ -386,7 +391,7 @@ def run_playback_test(mode=None):
         aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
         if install_info and install_info.get("uuid"):
             pw = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or ""
-            target = f"{aio_url}/stremio/{install_info['uuid']}/{pw}/stream/movie/tt1375666.json"
+            target = f"{aio_url}/stremio/{install_info['uuid']}/{pw}/stream/{sample_kind}/{sample_id}.json"
             try:
                 req = urllib.request.Request(target, headers={"User-Agent": "AIO-Playback-Test/1.0"})
                 with urllib.request.urlopen(req, timeout=10) as resp:
@@ -397,7 +402,7 @@ def run_playback_test(mode=None):
 
         if not streams:
             try:
-                req = urllib.request.Request(f"{aio_url}/stremio/u/local/stream/movie/tt1375666.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
+                req = urllib.request.Request(f"{aio_url}/stremio/u/local/stream/{sample_kind}/{sample_id}.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     data = json.load(resp)
                     streams = data.get("streams", [])
@@ -480,6 +485,10 @@ def run_playback_test(mode=None):
         "mode": mode,
         "steps": steps,
         "steps_dict": steps_dict,
+        "stream_url": target_url if (overall_success and target_url) else (resolved_candidate.get("url") if overall_success and resolved_candidate else None),
+        "stream_title": stream_title if resolved_candidate else None,
+        "content_id": sample_id,
+        "kind": sample_kind,
         "troubleshoot": troubleshoot,
         "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -1145,6 +1154,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/backups":
             self.handle_api_backups_list()
             return
+        elif path == "/api/flaresolverr":
+            self.handle_api_flaresolverr()
+            return
+        elif path == "/api/benchmark":
+            self.handle_api_benchmark()
+            return
         elif path == "/api/clean-cache":
             self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
@@ -1216,7 +1231,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if not isinstance(payload, dict):
                     self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
                     return
-                self.json_response(run_playback_test(payload.get("mode")))
+                self.json_response(run_playback_test(payload.get("mode"), payload.get("content_id"), payload.get("kind")))
             except (json.JSONDecodeError, TypeError):
                 self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
             return
@@ -1459,6 +1474,49 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.json_response(resp)
 
     def handle_api_logs(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        query = urllib.parse.parse_qs(url_parts.query)
+        container = (query.get("container") or [""])[0].strip()
+
+        safe_containers = {
+            "aiostreams", "portal", "controller", "flaresolverr", "comet",
+            "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
+            "stremio-web", "nuvio"
+        }
+
+        if container and container in safe_containers:
+            try:
+                tail = int((query.get("tail") or ["60"])[0] or 60)
+            except (ValueError, TypeError):
+                tail = 60
+
+            # 1. Try Docker CLI if available
+            try:
+                res = subprocess.run(["docker", "logs", "--tail", str(min(tail, 200)), container],
+                                     capture_output=True, text=True, timeout=4)
+                if res.returncode == 0 and (res.stdout or res.stderr):
+                    self.json_response({"container": container, "logs": (res.stdout or res.stderr).strip()})
+                    return
+            except Exception:
+                pass
+
+            # 2. Try log files in /var/log/
+            log_path = f"/var/log/{container}.log"
+            if os.path.isfile(log_path):
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = f.readlines()
+                        self.json_response({"container": container, "logs": "".join(lines[-tail:]).strip()})
+                        return
+                except Exception:
+                    pass
+
+            self.json_response({
+                "container": container,
+                "logs": f"[{container}] Service monitored. Direct container log streaming is unavailable in this environment."
+            })
+            return
+
         logs = {}
         for name, path in [("dockerd", "/var/log/dockerd.log"), ("portal", "/var/log/portal_server.log")]:
             if os.path.isfile(path):
@@ -1472,6 +1530,67 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 logs[name] = "Log file not found."
 
         self.json_response(logs)
+
+    def handle_api_flaresolverr(self):
+        flaresolverr_url = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
+        try:
+            req = urllib.request.Request(f"{flaresolverr_url}/", headers={"User-Agent": "AIO-Local-Stack/1.0"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode())
+                version = data.get("version", "v3.3+")
+                self.json_response({
+                    "status": "online",
+                    "reachable": True,
+                    "version": version,
+                    "url": flaresolverr_url,
+                    "message": f"FlareSolverr ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
+                })
+        except Exception as e:
+            self.json_response({
+                "status": "offline",
+                "reachable": False,
+                "url": flaresolverr_url,
+                "message": f"FlareSolverr is not responding at {flaresolverr_url}: {e}"
+            }, 503)
+
+    def handle_api_benchmark(self):
+        results = {}
+        targets = [
+            ("aiostreams", os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/") + "/manifest.json"),
+            ("aiometadata", os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/") + "/manifest.json"),
+            ("flaresolverr", os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/") + "/"),
+            ("prowlarr", "http://prowlarr:9696/ping")
+        ]
+        for name, url in targets:
+            t0 = time.monotonic()
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "AIO-Benchmark/1.0"})
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    resp.read(256)
+                    ms = round((time.monotonic() - t0) * 1000, 1)
+                    results[name] = {"status": "ok", "latency_ms": ms}
+            except Exception as e:
+                results[name] = {"status": "unreachable", "error": type(e).__name__}
+
+        env = read_saved_env()
+        debrid_results = {}
+        for prov in ("realdebrid", "torbox", "premiumize"):
+            env_key = PROVIDER_VALIDATORS[prov][0]
+            if env.get(env_key):
+                t0 = time.monotonic()
+                try:
+                    res = validate_provider(prov, env[env_key])
+                    ms = round((time.monotonic() - t0) * 1000, 1)
+                    debrid_results[prov] = {"status": res.get("status"), "latency_ms": ms}
+                except Exception as e:
+                    debrid_results[prov] = {"status": "error", "error": str(e)}
+
+        self.json_response({
+            "success": True,
+            "internal_latencies": results,
+            "debrid_latencies": debrid_results,
+            "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
 
     def handle_api_save_env(self):
         try:
