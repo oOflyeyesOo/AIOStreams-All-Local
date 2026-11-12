@@ -68,4 +68,4 @@ This tests the recovery machinery; it is not evidence for arbitrary upstream
 database-version downgrades. Provider keys were blank throughout. The retained
 installation and original workspace archive were not changed.
 
-The current [tested bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) is source `1bfec7b543b6a9197d3a9eedb19a40b1f040c01f`. It passed fresh Linux startup, 21 default endpoint checks, optional-service and fixture NNTP acceptance, native preset validation and strict routing/concurrency checks. [Machine-readable evidence](validation/2026-11-08-linux-release.json) records its artifact digest and boundaries.
+The current [tested bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/43020613160/artifacts/13855052857) is source `9f3c526e5de4e2112b8cd920937a05192164892e`. It passed fresh Linux startup, 18 default endpoint checks, optional-service and fixture NNTP acceptance, native preset validation and strict routing/concurrency checks. [Machine-readable evidence](validation/2026-11-11-linux-release.json) records its artifact digest and boundaries.

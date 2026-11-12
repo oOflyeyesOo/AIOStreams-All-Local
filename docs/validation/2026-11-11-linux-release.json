@@ -1,0 +1,229 @@
+{
+  "format": "aio-release-validation-v1",
+  "validatedOn": "2026-11-11",
+  "sourceCommit": "9f3c526e5de4e2112b8cd920937a05192164892e",
+  "workflow": "https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/43020613160",
+  "artifact": {
+    "name": "aio-release-9f3c526e5de4e2112b8cd920937a05192164892e",
+    "id": 13855052857,
+    "url": "https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/43020613160/artifacts/13855052857",
+    "expiresAt": "2027-02-09T00:00:00Z"
+  },
+  "checks": {
+    "pythonTests": 103,
+    "browserTests": 12,
+    "nativeOptionalPresetManifestCases": 3,
+    "defaultEndpointsPassed": 18,
+    "freshStartupAioRestarts": 0,
+    "packagedImagesPublished": 8,
+    "applianceImagePublished": true,
+    "stremthruStoreActive": true,
+    "byparrActive": true,
+    "usenetSavedPasswordPreserved": true,
+    "newznabRepeatedSetupNoDuplicate": true,
+    "managedUsenetDisabled": true
+  },
+  "optionalFixture": {
+    "scope": "fixture NNTP authentication and indexer setup, not article playback",
+    "counts": {
+      "authenticated": 7,
+      "rejected": 0,
+      "indexerRequests": 5
+    }
+  },
+  "routing": {
+    "scope": "deterministic AIOStreams routing; no external providers",
+    "results": [
+      {
+        "case": "movie fixture-cached",
+        "cold": {
+          "seconds": 0.245,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.012,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.011,
+            "streams": 1
+          },
+          {
+            "seconds": 0.015,
+            "streams": 1
+          },
+          {
+            "seconds": 0.018,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "movie fixture-empty",
+        "cold": {
+          "seconds": 0.32,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.014,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.009,
+            "streams": 1
+          },
+          {
+            "seconds": 0.012,
+            "streams": 1
+          },
+          {
+            "seconds": 0.014,
+            "streams": 1
+          },
+          {
+            "seconds": 0.017,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "series fixture-series-cached:2:2",
+        "cold": {
+          "seconds": 0.231,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.011,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.008,
+            "streams": 1
+          },
+          {
+            "seconds": 0.01,
+            "streams": 1
+          },
+          {
+            "seconds": 0.013,
+            "streams": 1
+          },
+          {
+            "seconds": 0.016,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      },
+      {
+        "case": "series fixture-series-empty:2:2",
+        "cold": {
+          "seconds": 0.31,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.013,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.007,
+            "streams": 1
+          },
+          {
+            "seconds": 0.011,
+            "streams": 1
+          },
+          {
+            "seconds": 0.014,
+            "streams": 1
+          },
+          {
+            "seconds": 0.017,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "movie fixture-unavailable",
+        "cold": {
+          "seconds": 0.305,
+          "streams": 1
+        },
+        "warm": {
+          "seconds": 0.014,
+          "streams": 1
+        },
+        "concurrent4": [
+          {
+            "seconds": 0.009,
+            "streams": 1
+          },
+          {
+            "seconds": 0.012,
+            "streams": 1
+          },
+          {
+            "seconds": 0.015,
+            "streams": 1
+          },
+          {
+            "seconds": 0.019,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 1
+        }
+      },
+      {
+        "case": "simultaneous cold viewers",
+        "concurrent4": [
+          {
+            "seconds": 0.28,
+            "streams": 1
+          },
+          {
+            "seconds": 0.285,
+            "streams": 1
+          },
+          {
+            "seconds": 0.291,
+            "streams": 1
+          },
+          {
+            "seconds": 0.295,
+            "streams": 1
+          }
+        ],
+        "upstreamCalls": {
+          "primary": 1,
+          "fallback": 0
+        }
+      }
+    ]
+  }
+}

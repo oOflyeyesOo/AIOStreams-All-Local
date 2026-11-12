@@ -125,9 +125,9 @@ Strict routing passed cached, empty and unavailable primary responses for movie
 and synthetic episode requests, warm/repeated responses, and four simultaneous
 cold viewers making one upstream request with no unnecessary fallback call.
 
-Use the [current tested Compose bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027).
+Use the [current tested Compose bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/43020613160/artifacts/13855052857).
 Artifact digest: `sha256:09c6c9f1ef296f610f0e40f4675f86272d0ac87af271900d0eb60591fe980b3d`.
-[Machine-readable evidence](validation/2026-11-08-linux-release.json) records
+[Machine-readable evidence](validation/2026-11-11-linux-release.json) records
 counts and timings; [source comparison and limits](OPTIONAL-SOURCES-VALIDATION.md)
 explains the earlier intermittent external-ID fixture failure and its isolation.
 Paid NNTP/EasyNews and AceStream playback remain unverified. Optional native anime

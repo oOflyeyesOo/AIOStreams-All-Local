@@ -18,6 +18,17 @@ class ReleaseTests(unittest.TestCase):
     def test_release_preview_is_explicit_about_migrations(self):
         result=releases.preview(self.lock(),self.lock(NEXT))
         self.assertEqual(len(result['changes']),1);self.assertTrue(result['backupRequired']);self.assertIn('not inferred',result['migrations'])
+    def test_preview_detects_removed_retired_services(self):
+        current = {'format': 'aio-release-v1', 'release': 'v1', 'images': {
+            'portal': PIN, 'debrid-search': PIN, 'mediafusion': PIN, 'sootio': PIN
+        }}
+        target = {'format': 'aio-release-v1', 'release': 'v2', 'images': {
+            'portal': NEXT
+        }}
+        res = releases.preview(current, target)
+        self.assertEqual(res['removedServices'], ['debrid-search', 'mediafusion', 'sootio'])
+        self.assertEqual(len(res['changes']), 1)
+        self.assertEqual(res['changes'][0]['service'], 'portal')
     def test_partial_backup_cannot_be_used_for_upgrade(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'.env').write_text('FIXTURE=1')
@@ -44,3 +55,57 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(latest_backup_status(root/'backups')['status'],'partial')
             self.assertFalse(latest_backup_status(root/'backups')['profileIncluded'])
             with self.assertRaises(RuntimeError):releases.verify_backup(archive)
+    def test_rollback_rejects_project_mismatch_and_checksum_tampering(self):
+        import argparse
+        with tempfile.TemporaryDirectory() as folder:
+            state_file = Path(folder) / "upgrade-state.json"
+            archive = Path(folder) / "backup.tar.gz"
+            archive.write_bytes(b"dummy")
+            state = {
+                'format': 'aio-upgrade-v1',
+                'project': 'wrong-project',
+                'archive': str(archive),
+                'backupSha256': 'wrong-sha'
+            }
+            state_file.write_text(json.dumps(state))
+            args = argparse.Namespace(project='my-project', state=str(state_file), allow_local=False, env_file=None)
+            with self.assertRaises(ValueError):
+                releases.rollback(args)
+
+            state['project'] = 'my-project'
+            state_file.write_text(json.dumps(state))
+            with patch.object(releases, 'verify_backup', return_value='correct-sha'):
+                with self.assertRaises(ValueError):
+                    releases.rollback(args)
+    def test_rollback_stops_target_services_and_invokes_restore(self):
+        import argparse
+        with tempfile.TemporaryDirectory() as folder:
+            state_file = Path(folder) / "upgrade-state.json"
+            archive = Path(folder) / "backup.tar.gz"
+            archive.write_bytes(b"dummy")
+            target_compose = Path(folder) / "target.yml"
+            target_compose.write_text("services:\n  portal:\n    image: " + NEXT + "\n  aiostreams:\n    image: " + NEXT + "\n")
+            prev_compose = Path(folder) / "prev.yml"
+            prev_compose.write_text("services:\n  portal:\n    image: " + PIN + "\n")
+            state = {
+                'format': 'aio-upgrade-v1',
+                'project': 'my-proj',
+                'previous': str(prev_compose),
+                'target': str(target_compose),
+                'archive': str(archive),
+                'archiveName': 'backup.tar.gz',
+                'backupSha256': 'valid-sha',
+                'restoreImage': 'ghcr.io/example/portal:latest',
+                'status': 'complete'
+            }
+            state_file.write_text(json.dumps(state))
+            args = argparse.Namespace(project='my-proj', state=str(state_file), allow_local=True, env_file=None)
+            commands = []
+            with patch.object(releases, 'verify_backup', return_value='valid-sha'), \
+                 patch.object(releases, 'portal_id', return_value='portal-123'), \
+                 patch.object(releases, 'command', side_effect=lambda cmd, **kw: commands.append(cmd) or "") as cmd_mock, \
+                 patch.object(releases, 'controller') as ctrl_mock:
+                releases.rollback(args)
+                self.assertTrue(ctrl_mock.called)
+                stop_cmds = [c for c in commands if 'stop' in c]
+                self.assertTrue(any('aiostreams' in c for c in stop_cmds))

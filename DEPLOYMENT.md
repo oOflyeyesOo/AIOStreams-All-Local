@@ -41,7 +41,7 @@ the source deployment for custom Compose definitions.
 ## Image access and versions
 
 Images are built by [Build Docker manager images](../../actions/workflows/build-manager-images.yml)
-on relevant source pushes to `main`. Wait for **all nine builds** to succeed before installing a
+on relevant source pushes to `main`. Wait for **all eight builds** to succeed (`search-broker`, `portal`, `controller`, `aiostreams`, `stremio-web`, `bootstrap`, `postgres-init`, and `kitsu`) before installing a
 new revision. They are published under `ghcr.io/ooflyeyesoo/aio-local-*` with
 `latest` and full commit-SHA tags. Set `AIO_IMAGE_TAG` to a successful commit SHA to
 keep all packaged components on the same release. Upstream services still use
@@ -54,7 +54,7 @@ The source deployment below remains available without these packaged images.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ADDON_PASSWORD` | `admin` | Portal and local application password |
+| `ADDON_PASSWORD` | `admin` | Master secret for portal authentication, protected endpoints, and internal AIOStreams access key |
 | `PORT_PORTAL` | `8088` | Host port for the setup page |
 | `AIO_IMAGE_TAG` | `latest` | Tag shared by packaged components |
 | `AIO_IMAGE_PREFIX` | `ghcr.io/ooflyeyesoo/aio-local` | Image namespace, useful for forks/local builds |
@@ -80,13 +80,26 @@ Existing checkout-based installations use bind-mounted `data/` and `.env`; they
 are not automatically migrated into named volumes. Keep that installation until
 you have backed it up and deliberately migrated its data.
 
+## Stack profiles vs. Manager deployment
+
+### Source Compose Profiles (`docker-compose.yml`)
+When deploying directly from source using `docker-compose.yml`, profiles allow running exactly the components you need:
+- **`core`** (default lean stack): AIOStreams, AIOMetadata, Comet, SubSense, Anime Kitsu, StremThru Store, Stremio Web, and backing databases/cache.
+- **`scrapers`** (recommended full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and Infinidysk Usenet.
+- **`nuvio`** (dedicated player): Standalone Nuvio Web Player (`:8085`) with AniSkip skip intros and multi-stream sync.
+- **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`).
+- **`all`**: Activates all continuous services simultaneously.
+
+### Packaged Manager Deployment (`compose.manager.yml`)
+The packaged manager configuration automatically includes all 19 continuous microservices (combining core, scrapers, and players) without needing profile flags, while granting full host-port customization via `PORT_<SERVICE>` environment variables. Only test harnesses (`stack-check`) and ingress tunnels (`cloudflared`) remain profile-gated.
+
 ## Source Compose option
 
 For custom settings or building locally, clone/download the repository into your
 server's stack folder and use `docker-compose.yml`:
 
 ```sh
-docker compose --profile all up -d --build --remove-orphans
+docker compose --profile scrapers up -d --build --remove-orphans
 ```
 
 Dockge can manage this folder directly when it is inside its configured stacks
@@ -97,7 +110,7 @@ the retired Hidden Cinemeta container from this project.
 To build the manager images locally, tag all targets consistently:
 
 ```sh
-for target in portal controller aiostreams stremio-web bootstrap postgres-init; do
+for target in search-broker portal controller aiostreams stremio-web bootstrap postgres-init; do
   docker build -f docker/packaged/Dockerfile --target "$target" -t "aio-local-$target:local" .
 done
 docker build -f docker/anime-kitsu/Dockerfile -t aio-local-kitsu:local .
@@ -119,6 +132,6 @@ a Hidden Cinemeta server.
 
 Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_STREMIO_WEB`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
 
-The default request path uses Comet plus the Debrid Search library. External scraping is powered by Comet querying local Prowlarr indexers and Zilean DMM hash cache.
+The default request path uses Comet plus the StremThru Store (Debrid Cloud Library) integration. External scraping is powered by Comet querying local Prowlarr indexers and Zilean DMM torrent hash cache. StremThru Store directly replaces the retired Debrid Search container with zero-overhead, instant cloud library lookups.
 
 Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.

@@ -20,7 +20,7 @@ For reproducible deployments, use the [digest-pinned release bundle and recovery
 
 
 
-[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/42454737222/artifacts/13607288027) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
+[Download the tested Compose release bundle](https://github.com/oOflyeyesOo/AIOStreams-All-Local/actions/runs/43020613160/artifacts/13855052857) for management-app deployment. This release passed a fresh Linux install with zero first-start AIOStreams restarts, Usenet setup tests, native preset validation and strict routing/concurrency checks. Extract the archive and use its `compose.release.yml`; retain its lock file for upgrades.
 
 
 
