@@ -35,6 +35,7 @@ jobs:
           python3 scripts/generate_manager_compose.py --check
           docker compose --env-file .env.example -f compose.manager.yml config --quiet
           docker compose -p aio-tests -f compose.test.yml run --rm tests
+          docker compose -p aio-tests -f compose.test.yml run --rm browser-tests
   publish:
     needs: verify
     runs-on: ubuntu-latest

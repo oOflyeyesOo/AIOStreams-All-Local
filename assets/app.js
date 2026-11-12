@@ -250,6 +250,7 @@ async function loadSettings() {
     nuvioPlayerLink.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
     nuvioPlayerLink.textContent = `Launch Nuvio Web (:${nuvioPort}) ↗`;
   }
+  if (typeof setFormDirty === 'function') setFormDirty(false);
 }
 
 async function loadManifest() {
@@ -432,6 +433,7 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     await loadSettings();
     await api('/api/setup',{method:'POST'});
     lastJobStatus = 'running';
+    if (typeof setFormDirty === 'function') setFormDirty(false);
     await pollSetup();
   } catch(error) { setProgress('Setup needs attention',error.message); button.disabled=false; notify(error.message); }
 });
@@ -524,6 +526,33 @@ if (copyAniskipBtn) {
   });
 }
 
+document.getElementById('test-saved-usenet-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Testing…';
+  try {
+    const res = await api('/api/validate-provider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'usenet' })
+    });
+    const isValid = res.status === 'valid' || res.status === 'ok';
+    notify(isValid ? `✓ Usenet NNTP valid: ${res.detail}` : `✗ Usenet: ${res.detail}`);
+  } catch (err) {
+    notify(`Usenet test failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+const setupFormEl = document.getElementById('setup-form');
+if (setupFormEl) {
+  setupFormEl.addEventListener('input', () => { if (typeof setFormDirty === 'function') setFormDirty(true); });
+  setupFormEl.addEventListener('change', () => { if (typeof setFormDirty === 'function') setFormDirty(true); });
+}
+
 function updateTemplateDisplay() {
   const select = document.getElementById('aiometadata-template');
   if (!select) return;
@@ -553,9 +582,30 @@ function updateTemplateDisplay() {
   }
 }
 
+function setFormDirty(dirty) {
+  const syncText = document.getElementById('setup-sync-text');
+  const syncDot = document.getElementById('setup-sync-dot');
+  if (!syncText) return;
+  if (dirty) {
+    syncText.textContent = 'Unsaved changes — click "Connect my stack" to apply and sync.';
+    syncText.style.color = '#f59e0b';
+    if (syncDot) { syncDot.style.background = '#f59e0b'; syncDot.style.boxShadow = '0 0 8px #f59e0b'; }
+  } else {
+    syncText.textContent = 'All settings applied & stack synchronized ✓';
+    syncText.style.color = '#34d399';
+    if (syncDot) { syncDot.style.background = '#10b981'; syncDot.style.boxShadow = '0 0 8px #10b981'; }
+  }
+}
+
 function setStreamingMode(mode) {
   const hiddenInput = document.getElementById('streaming-mode');
   if (hiddenInput) hiddenInput.value = mode;
+
+  const modeBadge = document.getElementById('overview-mode-badge');
+  if (modeBadge) {
+    const labels = { debrid: 'Mode: Debrid', usenet: 'Mode: Usenet Only', hybrid: 'Mode: Hybrid' };
+    modeBadge.textContent = labels[mode] || `Mode: ${mode}`;
+  }
 
   const modePills = document.querySelectorAll ? document.querySelectorAll('.streaming-mode-section .mode-pill') : [];
   modePills.forEach(btn => {
@@ -638,6 +688,8 @@ async function runPlaybackTest() {
   const descRes = document.getElementById('desc-step-resolution');
   const iconMedia = document.getElementById('icon-step-media');
   const descMedia = document.getElementById('desc-step-media');
+  const iconPlayback = document.getElementById('icon-step-playback');
+  const descPlayback = document.getElementById('desc-step-playback');
   const troubleshootEl = document.getElementById('playback-troubleshoot');
   const testBtns = [document.getElementById('btn-test-playback'), document.getElementById('overview-test-playback-btn')].filter(Boolean);
   const videoContainer = document.getElementById('playback-video-container');
@@ -661,6 +713,8 @@ async function runPlaybackTest() {
   if (descRes) descRes.textContent = 'Waiting…';
   if (iconMedia) { iconMedia.textContent = '○'; if (iconMedia.style) iconMedia.style.color = '#8fa1a8'; }
   if (descMedia) descMedia.textContent = 'Waiting…';
+  if (iconPlayback) { iconPlayback.textContent = '○'; if (iconPlayback.style) iconPlayback.style.color = '#8fa1a8'; }
+  if (descPlayback) descPlayback.textContent = 'Waiting…';
 
   testBtns.forEach(btn => { if (btn) btn.disabled = true; });
   const mode = document.getElementById('streaming-mode')?.value || 'debrid';
@@ -724,9 +778,25 @@ async function runPlaybackTest() {
         statusEl.textContent = '✓ Playback Confirmed';
         if (statusEl.style) statusEl.style.color = '#34d399';
       }
+      if (iconPlayback) {
+        iconPlayback.textContent = '▶';
+        if (iconPlayback.style) iconPlayback.style.color = '#38bdf8';
+      }
+      if (descPlayback) descPlayback.textContent = 'Stream ready. Video player preview active.';
+
       if (res.stream_url && videoContainer && videoContainer.style) {
         videoContainer.style.display = 'block';
-        if (videoPreview) videoPreview.src = res.stream_url;
+        if (videoPreview) {
+          videoPreview.src = res.stream_url;
+          videoPreview.onplay = () => {
+            if (iconPlayback) { iconPlayback.textContent = '✓'; if (iconPlayback.style) iconPlayback.style.color = '#34d399'; }
+            if (descPlayback) descPlayback.textContent = 'Confirmed browser video playback.';
+          };
+          videoPreview.onerror = () => {
+            if (iconPlayback) { iconPlayback.textContent = '⚠'; if (iconPlayback.style) iconPlayback.style.color = '#fbbf24'; }
+            if (descPlayback) descPlayback.textContent = 'Direct stream link active (preview codec unsupported in browser).';
+          };
+        }
         if (streamLink) streamLink.href = res.stream_url;
       }
       notify('Playback verified: Streams and media range reads confirmed!');
@@ -736,6 +806,11 @@ async function runPlaybackTest() {
         statusEl.textContent = res.status === 'warning' ? '⚠ Playback Warning' : '✗ Playback Failed';
         if (statusEl.style) statusEl.style.color = res.status === 'warning' ? '#fbbf24' : '#f87171';
       }
+      if (iconPlayback) {
+        iconPlayback.textContent = '✗';
+        if (iconPlayback.style) iconPlayback.style.color = '#8fa1a8';
+      }
+      if (descPlayback) descPlayback.textContent = 'Skipped due to upstream issue.';
       notify(`Playback check: ${res.message || 'Verification issue detected'}`);
     }
 
@@ -775,6 +850,13 @@ function updateStatusOverview(healthData, integrationsList) {
   const lastCheck = document.getElementById('overview-last-check');
   if (lastCheck) {
     lastCheck.textContent = `Checked at ${new Date().toLocaleTimeString()}`;
+  }
+
+  const modeBadge = document.getElementById('overview-mode-badge');
+  if (modeBadge) {
+    const curMode = document.getElementById('streaming-mode')?.value || 'debrid';
+    const labels = { debrid: 'Mode: Debrid', usenet: 'Mode: Usenet Only', hybrid: 'Mode: Hybrid' };
+    modeBadge.textContent = labels[curMode] || `Mode: ${curMode}`;
   }
 
   const servicesEl = document.getElementById('overview-services');
@@ -895,7 +977,22 @@ async function runOperations() {
   document.getElementById('run-diagnostics')?.addEventListener('click', async () => {
     try {
       const result = await api('/api/diagnostics');
-      output('diagnostics-output').textContent = result.checks.map(item => `${item.status.toUpperCase()}: ${item.name} — ${item.detail}`).join('\n');
+      const lines = [];
+      lines.push('=== READINESS & COMPONENT HEALTH ===');
+      for (const item of (result.checks || [])) {
+        const mark = item.status === 'ready' ? '✓' : (item.status === 'attention' ? '⚠' : '✗');
+        lines.push(`${mark} ${item.name.toUpperCase()}: ${item.detail}`);
+      }
+      lines.push('\n=== REACHABLE SERVICES ===');
+      const reachable = (result.integrations || []).filter(i => i.reachable);
+      const unreachable = (result.integrations || []).filter(i => !i.reachable && i.enabled !== false);
+      lines.push(`• Online (${reachable.length}): ` + (reachable.map(i => i.name).join(', ') || 'none'));
+      if (unreachable.length > 0) {
+        lines.push(`• Offline (${unreachable.length}): ` + unreachable.map(i => i.name).join(', '));
+      }
+      lines.push('\n=== SAVED CREDENTIALS (REDACTED) ===');
+      lines.push((result.configuredKeys || []).join(', ') || 'No provider keys configured.');
+      output('diagnostics-output').textContent = lines.join('\n');
     } catch (error) { output('diagnostics-output').textContent = error.message; }
   });
   document.getElementById('run-smoke-test')?.addEventListener('click', async () => {
@@ -1195,8 +1292,15 @@ function initHealthTelemetry() {
           clearInterval(healthInterval);
           healthInterval = null;
         }
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = null;
+        }
       } else {
         refreshHealthTelemetry();
+        if (lastJobStatus === 'running') {
+          pollSetup();
+        }
         if (select) {
           const val = parseInt(select.value, 10);
           if (val > 0 && !healthInterval) {

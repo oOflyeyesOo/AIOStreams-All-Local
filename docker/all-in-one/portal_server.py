@@ -189,14 +189,26 @@ def diagnostics_snapshot():
         "OFFCLOUD_API_KEY", "SEEDR_API_KEY",
     )
     configured = {key: bool(env_vars.get(key)) for key in required_keys + provider_keys}
+    mode = env_vars.get("STREAMING_MODE", "debrid").lower()
+    is_usenet_mode = mode == "usenet" or env_vars.get("USENET_ENABLED") == "true"
+    has_usenet = bool(env_vars.get("USENET_HOST")) and bool(credential(env_vars, "USENET_USER"))
+    has_debrid = any(configured[key] for key in provider_keys)
+
+    provider_ready = (is_usenet_mode and has_usenet) or has_debrid
+    if is_usenet_mode and has_usenet:
+        provider_detail = f"Usenet NNTP server configured ({env_vars.get('USENET_HOST')})"
+    elif has_debrid:
+        provider_detail = "At least one debrid provider is configured"
+    else:
+        provider_detail = "Configure a debrid provider API key or Usenet server"
+
     checks = [
         {"name": "portal", "status": "ready", "detail": "Portal process is responding"},
         {"name": "configuration", "status": "ready" if all(configured[key] for key in required_keys) else "attention",
          "detail": "Base URL and TMDB are configured" if all(configured[key] for key in required_keys)
          else "BASE_URL and TMDB_API_KEY are required for the core path"},
-        {"name": "provider", "status": "ready" if any(configured[key] for key in provider_keys) else "attention",
-         "detail": "At least one debrid provider is configured" if any(configured[key] for key in provider_keys)
-         else "Configure one debrid provider API key"},
+        {"name": "provider", "status": "ready" if provider_ready else "attention",
+         "detail": provider_detail},
     ]
     with ThreadPoolExecutor(max_workers=10) as pool:
         integrations = list(pool.map(probe_integration, INTEGRATIONS))
@@ -214,6 +226,43 @@ def diagnostics_snapshot():
     }
 
 
+def generate_diagnostics_report():
+    diag = diagnostics_snapshot()
+    env = read_saved_env()
+    lines = []
+    lines.append("=" * 60)
+    lines.append("AIO LOCAL · SANITIZED DIAGNOSTIC REPORT")
+    lines.append("Generated at: " + time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()))
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append("1. STACK STATUS & READINESS CHECKS")
+    lines.append("-" * 35)
+    for c in diag.get("checks", []):
+        lines.append(f"• [{c.get('status', '').upper()}] {c.get('name')}: {c.get('detail')}")
+    lines.append("")
+    lines.append("2. STREAMING CONFIGURATION (SECRETS REDACTED)")
+    lines.append("-" * 35)
+    lines.append(f"• Streaming Mode: {env.get('STREAMING_MODE', 'debrid')}")
+    lines.append(f"• Access Scope Base URL: {env.get('BASE_URL', 'not set')}")
+    lines.append(f"• AIOMetadata Host: {env.get('AIOMETADATA_HOST', 'not set')}")
+    lines.append(f"• Torrentio (Public Index): {env.get('ENABLE_TORRENTIO', 'true')}")
+    lines.append(f"• DMM Hashlists: {env.get('ENABLE_DMM', 'true')}")
+    lines.append(f"• RemuxDB Probes: {env.get('ENABLE_REMUXDB', 'true')}")
+    lines.append(f"• Anime Sources: {env.get('ENABLE_ANIME_SOURCES', 'false')}")
+    lines.append(f"• Configured Key Names: {', '.join(diag.get('configuredKeys', []))}")
+    lines.append("")
+    lines.append("3. INTEGRATIONS & REACHABILITY")
+    lines.append("-" * 35)
+    for item in diag.get("integrations", []):
+        st = "ONLINE" if item.get("reachable") else "OFFLINE / UNREACHABLE"
+        lines.append(f"• {item.get('name')} ({item.get('group', 'Core')}): {st}")
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append("END OF REPORT — All credentials strictly redacted.")
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
 PROVIDER_VALIDATORS = {
     "tmdb": ("TMDB_API_KEY", "https://api.themoviedb.org/3/configuration?api_key={key}"),
     "realdebrid": ("REALDEBRID_API_KEY", "https://api.real-debrid.com/rest/1.0/user"),
@@ -227,6 +276,18 @@ PROVIDER_VALIDATORS = {
 
 def validate_provider(provider, key=None):
     provider = str(provider or "").lower().strip()
+    if provider == "usenet":
+        env_vars = read_saved_env()
+        host = env_vars.get("USENET_HOST", "")
+        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        user = credential(env_vars, "USENET_USER")
+        password = credential(env_vars, "USENET_PASS")
+        use_ssl = env_vars.get("USENET_SSL", "true").lower() != "false"
+        if not host or not user or not password:
+            return {"status": "invalid", "detail": "Usenet host, user, or password is not configured."}
+        ok, msg = test_nntp_login(host, port, user, password, use_ssl)
+        return {"status": "valid" if ok else "rejected", "detail": f"Usenet NNTP server ({host}:{port}): {msg}"}
+
     if provider not in PROVIDER_VALIDATORS:
         return {"status": "invalid", "detail": "Choose a supported provider."}
     env_key, template = PROVIDER_VALIDATORS[provider]
@@ -1009,6 +1070,16 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         self.json_response(json.load(response))
                 except Exception:
                     self.json_response({'status': 'unavailable'}, 503)
+            return
+        if path in ("/api/diagnostics/export", "/api/diagnostics-export"):
+            report_text = generate_diagnostics_report()
+            body = report_text.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="aio-diagnostics-report.txt"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if path == "/api/diagnostics":
             self.json_response(diagnostics_snapshot())

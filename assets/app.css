@@ -47,5 +47,8 @@ select option{background:#121719;color:#e3e8e4}
 .access-scope-section .mode-selector-pills{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:8px}
 .badge-fast{background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
 .badge-aniskip{background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+.badge-mode{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;letter-spacing:0.02em}
+.setup-sync-bar{transition:all .2s ease}
+.sync-dot{transition:background .2s ease,box-shadow .2s ease}
 .copied-active{background:#10b981!important;color:#fff!important;border-color:#10b981!important}
 @media(max-width:650px){.mode-selector-pills,.access-scope-section .mode-selector-pills{grid-template-columns:1fr}}

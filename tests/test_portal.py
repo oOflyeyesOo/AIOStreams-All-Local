@@ -597,6 +597,36 @@ class PortalTests(unittest.TestCase):
             data = json.loads(body)
             self.assertEqual(data.get("status"), "valid")
 
+        # Test saved Usenet NNTP validation
+        portal.save_env_updates({
+            "USENET_HOST": "news.customserver.com",
+            "USENET_PORT": "563",
+            "USENET_USER": "nntpuser",
+            "USENET_PASS": "nntppass",
+            "USENET_SSL": "true"
+        })
+        with patch.object(portal, "test_nntp_login", return_value=(True, "Authentication accepted")):
+            status, body, _ = self.request(
+                "/api/validate-provider", "POST",
+                {"provider": "usenet"},
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            self.assertIn("news.customserver.com", data.get("detail", ""))
+
+    def test_diagnostics_export_endpoint(self):
+        with patch.object(portal, "probe_integration", return_value={
+            "name": "Comet", "group": "Scrapers", "reachable": True,
+        }):
+            status, body, headers = self.request("/api/diagnostics/export", "GET", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn("AIO LOCAL · SANITIZED DIAGNOSTIC REPORT", body.decode("utf-8"))
+            self.assertIn("READINESS CHECKS", body.decode("utf-8"))
+            hdr_map = {k.lower(): v for k, v in headers.items()}
+            self.assertIn("attachment", hdr_map.get("content-disposition", "").lower())
+
     def test_test_playback_endpoint(self):
         # 1. When NNTP login fails
         with patch.object(portal, "test_nntp_login", return_value=(False, "502 Authentication failed")):
