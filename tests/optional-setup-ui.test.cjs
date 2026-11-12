@@ -103,3 +103,31 @@ test('playback test executes multi-step verification and posts to /api/test-play
   assert.equal(call.payload.mode, 'debrid');
   assert.equal(env.nodes.get('playback-test-card').style.display, 'block');
 });
+
+test('remote access scope updates helper text for reverse proxy / tunnel setup',async()=>{
+  const env=form({BASE_URL:'https://my-aio.domain.com',configuredKeys:[]});
+  const fnScope = source.match(/function setAccessScope\([^\)]*\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(fnScope, env.context);
+  vm.runInContext("setAccessScope('remote')", env.context);
+  assert.match(env.nodes.get('base-url-help').textContent, /reverse proxy/);
+  assert.match(env.nodes.get('aiometa-url-help').textContent, /subdomain/);
+});
+
+test('updateStatusOverview merges health and integrations data and updates overview card elements',async()=>{
+  const env=form({});
+  const fnStatus = source.match(/function updateStatusOverview\([^\)]*\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext('let lastHealthData = null, lastIntegrations = null;\n' + fnStatus, env.context);
+  const integrations = [
+    { name: 'AIOStreams', group: 'Core', reachable: true, enabled: true },
+    { name: 'Stremio Web', group: 'Core', reachable: true, enabled: true },
+    { name: 'Comet', group: 'Scrapers', reachable: false, enabled: true },
+  ];
+  const healthData = {
+    watchdog: { overall: 'healthy', healthy_count: 14, total_services: 14 },
+    backup: { count: 3, total_size_mb: 42 }
+  };
+  vm.runInContext('updateStatusOverview(' + JSON.stringify(healthData) + ', ' + JSON.stringify(integrations) + ')', env.context);
+  assert.equal(env.nodes.get('overview-services').textContent, '2/3 Online');
+  assert.equal(env.nodes.get('overview-watchdog').textContent, '14/14 Healthy');
+  assert.equal(env.nodes.get('overview-backup').textContent, '3 Saved (42 MB)');
+});

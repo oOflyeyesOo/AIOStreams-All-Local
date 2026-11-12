@@ -631,6 +631,57 @@ class PortalTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 data = json.loads(body)
                 self.assertEqual(data["steps"][0]["status"], "pass")
+                self.assertIn("steps_dict", data)
+                self.assertIn("auth", data["steps_dict"])
+                self.assertIn("stream_resolution", data["steps_dict"])
+                self.assertIn("media_read", data["steps_dict"])
+
+    def test_post_endpoints_reject_non_dict_json_gracefully(self):
+        endpoints = [
+            "/api/validate-provider",
+            "/api/smoke-test",
+            "/api/test-playback",
+            "/api/webhook-test",
+            "/api/backups/prune"
+        ]
+        for ep in endpoints:
+            status, body, _ = self.request(ep, "POST", [1, 2, 3], auth=True, headers={"Content-Type": "application/json"})
+            self.assertEqual(status, 400, f"Endpoint {ep} should return 400 for list JSON payload")
+            data = json.loads(body)
+            self.assertTrue("error" in data or "detail" in data, f"Endpoint {ep} missing error/detail in {data}")
+
+    def test_aniskip_handles_malformed_query_parameters(self):
+        # non-integer season, episode, duration should not throw unhandled 500
+        status, body, _ = self.request("/api/aniskip?id=tt9335498&season=notanint&episode=bad&duration=invalid")
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertIn("found", data)
+
+    def test_status_endpoint_resilient_to_corrupt_port_values(self):
+        portal.save_env_updates({"PORT_STREMIO_WEB": "not-a-port", "PORT_NUVIO": "9999999"})
+        with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
+            status, body, _ = self.request("/api/status", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["ports"]["stremio_web"], 8082)
+        self.assertEqual(data["ports"]["nuvio"], 8085)
+
+    def test_validate_provider_headers_and_urls(self):
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b'{"success": true}'
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            # Real-Debrid requires Bearer token in headers
+            portal.validate_provider("realdebrid", "rd-secret-token")
+            req = mock_url.call_args[0][0]
+            self.assertEqual(req.headers.get("Authorization"), "Bearer rd-secret-token")
+
+            # TorBox requires token query param
+            portal.validate_provider("torbox", "tb-secret-token")
+            req2 = mock_url.call_args[0][0]
+            self.assertIn("token=tb-secret-token", req2.full_url)
 
 
 if __name__ == "__main__":

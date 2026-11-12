@@ -219,6 +219,9 @@ PROVIDER_VALIDATORS = {
     "realdebrid": ("REALDEBRID_API_KEY", "https://api.real-debrid.com/rest/1.0/user"),
     "premiumize": ("PREMIUMIZE_API_KEY", "https://www.premiumize.me/api/account/info?apikey={key}"),
     "torbox": ("TORBOX_API_KEY", "https://api.torbox.app/v1/api/user/me?token={key}"),
+    "alldebrid": ("ALLDEBRID_API_KEY", "https://api.alldebrid.com/v4/user?agent=aio-local&apikey={key}"),
+    "debridlink": ("DEBRIDLINK_API_KEY", "https://debrid-link.com/api/v2/account/infos"),
+    "easydebrid": ("EASYDEBRID_API_KEY", "https://easydebrid.com/api/v1/user/details"),
 }
 
 
@@ -232,11 +235,18 @@ def validate_provider(provider, key=None):
         key = env_vars.get(env_key) or os.environ.get(env_key)
     if not isinstance(key, str) or not key.strip():
         return {"status": "invalid", "detail": f"No credentials configured for {provider}."}
-    request = urllib.request.Request(template.format(key=urllib.parse.quote(key.strip(), safe="")), headers={"Accept": "application/json"})
+    clean_key = key.strip()
+    target_url = template.format(key=urllib.parse.quote(clean_key, safe=""))
+    headers = {"Accept": "application/json", "User-Agent": "AIO-Local/1.0"}
+    if provider in ("realdebrid", "debridlink", "easydebrid"):
+        headers["Authorization"] = f"Bearer {clean_key}"
+    request = urllib.request.Request(target_url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             body = json.load(response)
         valid = isinstance(body, dict) and not body.get("error") and not body.get("success") is False
+        if provider == "alldebrid" and isinstance(body, dict) and body.get("status") == "error":
+            valid = False
         return {"status": "valid" if valid else "rejected", "detail": "Provider accepted the credentials." if valid else "Provider rejected the credentials."}
     except urllib.error.HTTPError as error:
         return {"status": "rejected", "detail": f"Provider returned HTTP {error.code}."}
@@ -458,10 +468,18 @@ def run_playback_test(mode=None):
         media_step.update(status="skipped", detail="Skipped due to earlier failure.")
     steps.append(media_step)
 
+    steps_dict = {
+        "auth": auth_step,
+        "stream_resolution": stream_step,
+        "media_read": media_step
+    }
     return {
         "success": overall_success,
+        "overall_success": overall_success,
+        "status": "ok" if overall_success else ("warning" if any(s.get("status") in ("attention", "warning") for s in steps) else "failed"),
         "mode": mode,
         "steps": steps,
+        "steps_dict": steps_dict,
         "troubleshoot": troubleshoot,
         "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -860,11 +878,17 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path in ("/api/aniskip", "/aniskip"):
             query = urllib.parse.parse_qs(url_parts.query)
             raw_id = (query.get("id") or [""])[0].strip()
-            season = int((query.get("season") or ["1"])[0] or 1)
-            episode = int((query.get("episode") or ["1"])[0] or 1)
+            try:
+                season = int((query.get("season") or ["1"])[0] or 1)
+            except (ValueError, TypeError):
+                season = 1
+            try:
+                episode = int((query.get("episode") or ["1"])[0] or 1)
+            except (ValueError, TypeError):
+                episode = 1
             try:
                 duration = float((query.get("duration") or ["0"])[0] or 0)
-            except ValueError:
+            except (ValueError, TypeError):
                 duration = 0
 
             if ":" in raw_id:
@@ -1145,6 +1169,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 body = self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0)
                 payload = json.loads(body.decode("utf-8")) if body else {}
+                if not isinstance(payload, dict):
+                    self.json_response({"success": False, "error": "Request body must be a JSON object."}, 400)
+                    return
                 url = payload.get("url") or read_saved_env().get("DISCORD_WEBHOOK_URL", "")
                 if not url:
                     self.json_response({"success": False, "error": "No webhook URL provided"}, 400)
@@ -1166,6 +1193,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/validate-provider":
             try:
                 payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                if not isinstance(payload, dict):
+                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
+                    return
                 self.json_response(validate_provider(payload.get("provider"), payload.get("key")))
             except (json.JSONDecodeError, TypeError):
                 self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
@@ -1173,6 +1203,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/smoke-test":
             try:
                 payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                if not isinstance(payload, dict):
+                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
+                    return
                 self.json_response(run_smoke_test(payload.get("kind"), payload.get("id")))
             except (json.JSONDecodeError, TypeError):
                 self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
@@ -1180,6 +1213,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/test-playback":
             try:
                 payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                if not isinstance(payload, dict):
+                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
+                    return
                 self.json_response(run_playback_test(payload.get("mode")))
             except (json.JSONDecodeError, TypeError):
                 self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
@@ -1324,13 +1360,20 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                                      if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
 
+        def safe_port(val, default):
+            try:
+                p = int(val)
+                return p if 1 <= p <= 65535 else default
+            except (ValueError, TypeError):
+                return default
+
         ports = {
-            "stremio_web": int(env_vars.get("PORT_STREMIO_WEB") or os.environ.get("PORT_STREMIO_WEB") or 8082),
-            "nuvio": int(env_vars.get("PORT_NUVIO") or os.environ.get("PORT_NUVIO") or 8085),
-            "portal": int(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL") or 8088),
-            "aiostreams": int(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS") or 3001),
-            "aiometadata": int(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA") or 4005),
-            "slicksync": int(env_vars.get("PORT_SLICKSYNC") or os.environ.get("PORT_SLICKSYNC") or 8086),
+            "stremio_web": safe_port(env_vars.get("PORT_STREMIO_WEB") or os.environ.get("PORT_STREMIO_WEB"), 8082),
+            "nuvio": safe_port(env_vars.get("PORT_NUVIO") or os.environ.get("PORT_NUVIO"), 8085),
+            "portal": safe_port(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL"), 8088),
+            "aiostreams": safe_port(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001),
+            "aiometadata": safe_port(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005),
+            "slicksync": safe_port(env_vars.get("PORT_SLICKSYNC") or os.environ.get("PORT_SLICKSYNC"), 8086),
         }
         for port_key in ("PORT_STREMIO_WEB", "PORT_NUVIO", "PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA", "PORT_SLICKSYNC"):
             val = env_vars.get(port_key) or os.environ.get(port_key)
@@ -1347,10 +1390,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "ports": ports,
             "env": resp_env
         }
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(resp_env if env_only else resp).encode("utf-8"))
+        self.json_response(resp_env if env_only else resp)
 
     def update_env_key(self, key, value):
         try:
@@ -1416,10 +1456,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aiometadataHost": aiom_host,
             "aiometadataManifest": aiom_manifest
         }
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(resp).encode("utf-8"))
+        self.json_response(resp)
 
     def handle_api_logs(self):
         logs = {}
@@ -1434,10 +1471,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 logs[name] = "Log file not found."
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(logs).encode("utf-8"))
+        self.json_response(logs)
 
     def handle_api_save_env(self):
         try:
@@ -1627,7 +1661,16 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0) or 0)
             body = self.rfile.read(length) if length > 0 else b"{}"
             payload = json.loads(body.decode("utf-8")) if body else {}
-            keep_last = int(payload.get("keep_last", 5))
+            if not isinstance(payload, dict):
+                self.json_response({"success": False, "error": "Request body must be a JSON object."}, 400)
+                return
+            try:
+                keep_last = int(payload.get("keep_last", 5))
+                if keep_last < 1:
+                    keep_last = 1
+            except (ValueError, TypeError):
+                self.json_response({"success": False, "error": "keep_last must be a positive integer."}, 400)
+                return
             sys.path.insert(0, str(WEB_ROOT))
             import tools.backup as stack_backup
             res = stack_backup.prune_backups(Path(WEB_ROOT) / "backups", keep_last=keep_last, root=Path(WEB_ROOT))

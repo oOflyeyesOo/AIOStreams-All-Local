@@ -103,10 +103,11 @@ function renderFields(id, values) {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ provider: prov, key: 'saved' })
         });
-        notify(res.status === 'ok' ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`);
+        const isValid = res.status === 'valid' || res.status === 'ok';
+        notify(isValid ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`);
         if (saved) {
-          saved.textContent = res.status === 'ok' ? 'SAVED (VALID)' : 'SAVED (INVALID)';
-          saved.style.color = res.status === 'ok' ? '#34d399' : '#f87171';
+          saved.textContent = isValid ? 'SAVED (VALID)' : 'SAVED (INVALID)';
+          saved.style.color = isValid ? '#34d399' : '#f87171';
         }
       } catch (err) {
         notify(`Validation error: ${err.message}`);
@@ -638,24 +639,54 @@ async function runPlaybackTest() {
       body: JSON.stringify({ mode })
     });
 
-    const s = res.steps || {};
-    if (s.auth) {
-      if (iconAuth) iconAuth.textContent = s.auth.status === 'ok' ? '✓' : (s.auth.status === 'warning' ? '⚠' : '✗');
-      if (iconAuth && iconAuth.style) iconAuth.style.color = s.auth.status === 'ok' ? '#34d399' : (s.auth.status === 'warning' ? '#fbbf24' : '#f87171');
-      if (descAuth) descAuth.textContent = s.auth.detail || s.auth.status;
-    }
-    if (s.stream_resolution) {
-      if (iconRes) iconRes.textContent = s.stream_resolution.status === 'ok' ? '✓' : (s.stream_resolution.status === 'warning' ? '⚠' : '✗');
-      if (iconRes && iconRes.style) iconRes.style.color = s.stream_resolution.status === 'ok' ? '#34d399' : (s.stream_resolution.status === 'warning' ? '#fbbf24' : '#f87171');
-      if (descRes) descRes.textContent = s.stream_resolution.detail || s.stream_resolution.status;
-    }
-    if (s.media_read) {
-      if (iconMedia) iconMedia.textContent = s.media_read.status === 'ok' ? '✓' : (s.media_read.status === 'warning' ? '⚠' : '✗');
-      if (iconMedia && iconMedia.style) iconMedia.style.color = s.media_read.status === 'ok' ? '#34d399' : (s.media_read.status === 'warning' ? '#fbbf24' : '#f87171');
-      if (descMedia) descMedia.textContent = s.media_read.detail || s.media_read.status;
+    let authStep = null, streamStep = null, mediaStep = null;
+    if (res.steps_dict) {
+      authStep = res.steps_dict.auth;
+      streamStep = res.steps_dict.stream_resolution;
+      mediaStep = res.steps_dict.media_read;
+    } else if (Array.isArray(res.steps)) {
+      authStep = res.steps[0];
+      streamStep = res.steps[1];
+      mediaStep = res.steps[2];
+    } else if (res.steps && typeof res.steps === 'object') {
+      authStep = res.steps.auth;
+      streamStep = res.steps.stream_resolution;
+      mediaStep = res.steps.media_read;
     }
 
-    if (res.status === 'ok') {
+    const checkPass = step => step && (step.status === 'pass' || step.status === 'ok');
+    const checkWarn = step => step && (step.status === 'warning' || step.status === 'attention');
+
+    if (authStep) {
+      const isPass = checkPass(authStep);
+      const isWarn = checkWarn(authStep);
+      if (iconAuth) {
+        iconAuth.textContent = isPass ? '✓' : (isWarn ? '⚠' : '✗');
+        if (iconAuth.style) iconAuth.style.color = isPass ? '#34d399' : (isWarn ? '#fbbf24' : '#f87171');
+      }
+      if (descAuth) descAuth.textContent = authStep.detail || authStep.status;
+    }
+    if (streamStep) {
+      const isPass = checkPass(streamStep);
+      const isWarn = checkWarn(streamStep);
+      if (iconRes) {
+        iconRes.textContent = isPass ? '✓' : (isWarn ? '⚠' : '✗');
+        if (iconRes.style) iconRes.style.color = isPass ? '#34d399' : (isWarn ? '#fbbf24' : '#f87171');
+      }
+      if (descRes) descRes.textContent = streamStep.detail || streamStep.status;
+    }
+    if (mediaStep) {
+      const isPass = checkPass(mediaStep);
+      const isWarn = checkWarn(mediaStep);
+      if (iconMedia) {
+        iconMedia.textContent = isPass ? '✓' : (isWarn ? '⚠' : '✗');
+        if (iconMedia.style) iconMedia.style.color = isPass ? '#34d399' : (isWarn ? '#fbbf24' : '#f87171');
+      }
+      if (descMedia) descMedia.textContent = mediaStep.detail || mediaStep.status;
+    }
+
+    const testPassed = res.status === 'ok' || res.success === true || res.overall_success === true;
+    if (testPassed) {
       if (statusEl) {
         statusEl.textContent = '✓ Playback Confirmed';
         if (statusEl.style) statusEl.style.color = '#34d399';
@@ -699,22 +730,25 @@ async function runPlaybackTest() {
 }
 
 function updateStatusOverview(healthData, integrationsList) {
+  if (healthData) lastHealthData = healthData;
+  if (Array.isArray(integrationsList) && integrationsList.length > 0) lastIntegrations = integrationsList;
+
   const lastCheck = document.getElementById('overview-last-check');
   if (lastCheck) {
     lastCheck.textContent = `Checked at ${new Date().toLocaleTimeString()}`;
   }
 
   const servicesEl = document.getElementById('overview-services');
-  if (servicesEl && Array.isArray(integrationsList)) {
-    const active = integrationsList.filter(item => item.enabled !== false);
+  if (servicesEl && Array.isArray(lastIntegrations) && lastIntegrations.length > 0) {
+    const active = lastIntegrations.filter(item => item.enabled !== false);
     const reachable = active.filter(item => item.reachable);
     servicesEl.textContent = `${reachable.length}/${active.length} Online`;
-    servicesEl.style.color = reachable.length === active.length ? '#10b981' : '#f59e0b';
+    servicesEl.style.color = (active.length > 0 && reachable.length === active.length) ? '#10b981' : '#f59e0b';
   }
 
-  if (healthData) {
-    const wd = healthData.watchdog || {};
-    const bk = healthData.backup || {};
+  if (lastHealthData) {
+    const wd = lastHealthData.watchdog || {};
+    const bk = lastHealthData.backup || {};
     const wdEl = document.getElementById('overview-watchdog');
     if (wdEl) {
       wdEl.textContent = `${wd.healthy_count || 0}/${wd.total_services || 0} Healthy`;

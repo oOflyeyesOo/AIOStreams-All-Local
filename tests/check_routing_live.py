@@ -23,7 +23,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         bits=self.path.split('/');owner=bits[1]
         if self.path.endswith('manifest.json'):
             body={'id':'fixture.'+owner,'name':owner,'version':'1.0.0','description':'Routing fixture',
-                  'types':['movie','series','anime'],'resources':['stream'],'catalogs':[]}
+                  'types':['movie','series','anime'],'resources':['stream'],'catalogs':[],'cacheMaxAge':3600}
         else:
             with lock:calls.append(owner)
             time.sleep(.12 if owner=='primary' else .2)
@@ -106,7 +106,7 @@ try:
         assert observed==expected,(ident,observed,cold)
         assert cold['streams']>0,(ident,cold)
         # Allow Redis write-buffer flush (flushInterval 2000ms) to commit before warm/concurrent reads
-        time.sleep(3)
+        time.sleep(4)
         warm=fetch(ident,kind)
         with ThreadPoolExecutor(max_workers=4) as pool:concurrent=list(pool.map(lambda _:fetch(ident,kind),range(4)))
         assert warm['streams']>0 and all(item['streams']>0 for item in concurrent), ('Repeated fixture response lost streams',ident,warm,concurrent)

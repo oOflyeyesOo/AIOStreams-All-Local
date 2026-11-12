@@ -26,6 +26,8 @@ def run_gate(name, cmd):
 def main():
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
     os.environ["AIO_SKIP_ENV_FILE"] = "true"
 
     # 1. Compose manager freshness
@@ -53,6 +55,37 @@ def main():
             "tests/maintenance-ui.test.cjs",
             "tests/optional-setup-ui.test.cjs"
         ]):
+            return 1
+
+    # 6. Compose definitions & profile validation (if docker is available)
+    if shutil.which("docker"):
+        compose_files = [
+            "docker-compose.yml",
+            "docker-compose.aio.yml",
+            "compose.manager.yml",
+            "compose.test.yml",
+            "compose.tools.yml",
+        ]
+        for cf in compose_files:
+            if not run_gate(f"Compose Config Validation ({cf})", ["docker", "compose", "--env-file", ".env.example", "-f", cf, "config", "--quiet"]):
+                return 1
+
+        for profile in ["core", "scrapers", "nuvio", "tunnel", "all"]:
+            if not run_gate(f"Compose Profile Validation ({profile})", ["docker", "compose", "--env-file", ".env.example", "--profile", profile, "config", "--quiet"]):
+                return 1
+
+    # 7. Release Manager compose parsing verification
+    from tools import release_manager
+    try:
+        release_manager.load_compose("compose.manager.yml")
+        release_manager.load_compose("docker-compose.yml")
+    except Exception as e:
+        print(f"\n==> [ERROR] Release Manager Compose Parsing failed: {e}!", file=sys.stderr, flush=True)
+        return 1
+
+    # 8. PowerShell update script check (if pwsh is available on Windows/Linux)
+    if shutil.which("pwsh"):
+        if not run_gate("PowerShell Update Scripts Check", ["pwsh", "./tests/check_update_scripts.ps1"]):
             return 1
 
     print("\n==> [SUCCESS] All pre-push release gates passed cleanly!", flush=True)
