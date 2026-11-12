@@ -165,7 +165,7 @@ class PortalTests(unittest.TestCase):
                                      ENV_PATH=str(cls.root / ".env"),
                                      ENV_EXAMPLE_PATH=str(cls.root / ".env.example"))
         cls.settings.start()
-        cls.auth_env = patch.dict(os.environ, {"ADDON_PASSWORD": "test-password"})
+        cls.auth_env = patch.dict(os.environ, {"ADDON_PASSWORD": "test-password", "PORTAL_AUTH_REQUIRED": "true"})
         cls.auth_env.start()
         cls.server = portal.ThreadingHTTPServer(("127.0.0.1", 0), portal.AppliancePortalHandler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -246,6 +246,16 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(self.request(path)[0], 401)
         self.assertEqual(self.request("/api/save", "POST", {})[0], 401)
         self.assertEqual(self.request("/api/setup", "POST")[0], 401)
+
+    def test_open_portal_access_when_auth_disabled(self):
+        # When PORTAL_AUTH_REQUIRED is false (default), portal opens freely without passwords or 503 errors
+        with patch.dict(os.environ, {"PORTAL_AUTH_REQUIRED": "false", "ADDON_PASSWORD": ""}):
+            with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
+                for path in ("/", "/dashboard", "/api/env", "/api/status"):
+                    status, body, _ = self.request(path, auth=False)
+                    self.assertEqual(status, 200, f"Path {path} failed with status {status}")
+                status, _, _ = self.request("/api/save-env", "POST", {"BASE_URL": "http://127.0.0.1:3001"}, auth=False)
+                self.assertEqual(status, 200)
 
     def test_setup_launch_status(self):
         with patch.object(portal, "launch_setup", return_value=True):
