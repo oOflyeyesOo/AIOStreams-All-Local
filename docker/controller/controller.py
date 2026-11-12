@@ -182,7 +182,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.respond(202, {'success': True})
 
 
-class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+UnixStreamServer = getattr(socketserver, 'UnixStreamServer', socketserver.TCPServer)
+
+
+class Server(socketserver.ThreadingMixIn, UnixStreamServer):
     daemon_threads = True
 
 

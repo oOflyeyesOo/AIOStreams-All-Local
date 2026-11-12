@@ -136,7 +136,8 @@ def probe_integration(item):
             with socket.create_connection((host, port), timeout=1.5):
                 reachable = True
         except OSError:
-            host_port = HOST_PORT_MAP.get(host)
+            custom_port_var = f"PORT_{host.upper().replace('-', '_')}"
+            host_port = int(env_vars.get(custom_port_var) or os.environ.get(custom_port_var) or HOST_PORT_MAP.get(host, 0))
             if host_port:
                 try:
                     with socket.create_connection(("127.0.0.1", host_port), timeout=1.0):
@@ -1088,12 +1089,27 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                                      if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
 
+        ports = {
+            "stremio_web": int(env_vars.get("PORT_STREMIO_WEB") or os.environ.get("PORT_STREMIO_WEB") or 8082),
+            "nuvio": int(env_vars.get("PORT_NUVIO") or os.environ.get("PORT_NUVIO") or 8085),
+            "portal": int(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL") or 8088),
+            "aiostreams": int(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS") or 3001),
+            "aiometadata": int(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA") or 4005),
+            "slicksync": int(env_vars.get("PORT_SLICKSYNC") or os.environ.get("PORT_SLICKSYNC") or 8086),
+        }
+        for port_key in ("PORT_STREMIO_WEB", "PORT_NUVIO", "PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA", "PORT_SLICKSYNC"):
+            val = env_vars.get(port_key) or os.environ.get(port_key)
+            if val:
+                resp_env[port_key] = val
+        resp_env["ports"] = ports
+
         resp = {
             "appliance": True,
             "status": "online",
             "docker_ready": docker_ready,
             "aggregator_ready": aggregator_ready,
             "version": "1.1.0",
+            "ports": ports,
             "env": resp_env
         }
         self.send_response(200)

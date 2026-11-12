@@ -122,8 +122,11 @@ function setProgress(title,message,running=false) {
   document.getElementById('progress-description').textContent = message;
   document.getElementById('progress-panel').classList.toggle('running',running);
 }
+let cachedEnv = {};
 async function loadSettings() {
   const env = await api('/api/env');
+  cachedEnv = env;
+  if (typeof window !== 'undefined') window.cachedEnv = env;
   const schedSelect = document.getElementById('backup-schedule-select');
   if (schedSelect && env.BACKUP_SCHEDULE) schedSelect.value = env.BACKUP_SCHEDULE;
   const torrentioToggle = document.getElementById('enable-torrentio');
@@ -146,7 +149,7 @@ async function loadSettings() {
   const modeVal = env.STREAMING_MODE || (env.USENET_ENABLED === 'true' && !providers.some(([k]) => savedKeys.has(k) || env[k]) ? 'usenet' : (env.USENET_ENABLED === 'true' ? 'hybrid' : 'debrid'));
   if (typeof setStreamingMode === 'function') setStreamingMode(modeVal);
   const detectedServer = new URL(location.origin);
-  detectedServer.port = '3001';
+  detectedServer.port = (env.ports && env.ports.aiostreams) || env.PORT_AIOSTREAMS || '3001';
   const defaultBase = detectedServer.origin;
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;
@@ -178,9 +181,18 @@ async function loadSettings() {
     document.getElementById(`${key}-saved`).textContent = saved ? 'SAVED' : '';
     document.getElementById(`${key}-remove`).hidden = !saved;
   }
-  document.getElementById('player-link').href = `${location.protocol}//${location.hostname}:8082`;
+  const stremioPort = (env.ports && env.ports.stremio_web) || env.PORT_STREMIO_WEB || 8082;
+  const stremioLink = document.getElementById('player-link');
+  if (stremioLink) {
+    stremioLink.href = `${location.protocol}//${location.hostname}:${stremioPort}`;
+    stremioLink.textContent = `Launch Stremio Web (:${stremioPort}) ↗`;
+  }
+  const nuvioPort = (env.ports && env.ports.nuvio) || env.PORT_NUVIO || 8085;
   const nuvioPlayerLink = document.getElementById('nuvio-player-link');
-  if (nuvioPlayerLink) nuvioPlayerLink.href = `${location.protocol}//${location.hostname}:8085`;
+  if (nuvioPlayerLink) {
+    nuvioPlayerLink.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
+    nuvioPlayerLink.textContent = `Launch Nuvio Web (:${nuvioPort}) ↗`;
+  }
 }
 
 async function loadManifest() {
@@ -196,7 +208,8 @@ async function loadManifest() {
     install.classList.remove('disabled');
     const installNuvio = document.getElementById('install-nuvio');
     if (installNuvio) {
-      installNuvio.href = `${location.protocol}//${location.hostname}:8085`;
+      const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
+      installNuvio.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
       installNuvio.classList.remove('disabled');
     }
   }

@@ -557,5 +557,29 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status, 400)
 
 
+    def test_custom_ports_in_status_and_env(self):
+        status, body, _ = self.request(
+            "/api/save-env", "POST",
+            {"PORT_STREMIO_WEB": "18082", "PORT_NUVIO": "18085"},
+            auth=True, headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(status, 200)
+
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        env_data = json.loads(body)
+        self.assertEqual(env_data.get("PORT_STREMIO_WEB"), "18082")
+        self.assertEqual(env_data.get("PORT_NUVIO"), "18085")
+        self.assertEqual(env_data.get("ports", {}).get("stremio_web"), 18082)
+        self.assertEqual(env_data.get("ports", {}).get("nuvio"), 18085)
+
+        with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
+            status, body, _ = self.request("/api/status", auth=True)
+        self.assertEqual(status, 200)
+        status_data = json.loads(body)
+        self.assertEqual(status_data.get("ports", {}).get("stremio_web"), 18082)
+        self.assertEqual(status_data.get("ports", {}).get("nuvio"), 18085)
+
+
 if __name__ == "__main__":
     unittest.main()

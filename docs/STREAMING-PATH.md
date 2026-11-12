@@ -219,6 +219,27 @@ If a debrid link expires, an upstream CDN node drops connection, or a stream fai
 
 ---
 
+### Usenet & Hybrid Failover Verification Matrix
+
+| Mode | Provider Setting | Preferred Source | Secondary Fallback | `allowCrossType` | Seeking & Byte Range Behavior | Failover Outcome |
+|---|---|---|---|---|---|---|
+| **Usenet Only** | `STREAMING_MODE=usenet` | InfiniDysk NZBDAV (`:3005`) | Alternate NZB candidate | `False` (NZB-only) | InfiniDysk maps byte offsets to NNTP article IDs; HTTP 206 | Fallback stays on Usenet; no torrent queries |
+| **Direct EasyNews** | `EASYNEWS_USER` + `PASS` | EasyNews Search (`easynews-search`) | Alternate EasyNews match | `False` (Direct) | Direct HTTP range to EasyNews CDN; zero local unpack | Fallback to next resolution/codec match |
+| **Hybrid Mode** | `STREAMING_MODE=hybrid` | Debrid Cached Release (Comet/Torrentio) | InfiniDysk NZBDAV / EasyNews | `True` (Cross-Type) | Both sources support HTTP 206 Partial Content | Uncached/stalled debrid seamlessly falls back to Usenet |
+| **Incomplete Release** | Any | Damaged / Missing NZB articles | Healthy NZB release | Inherited | Player probes first 1024 bytes; aborts and advances on CRC fail | Auto-switches to candidate #2 in <1.2s |
+
+#### Key Route Differences: Direct EasyNews vs. InfiniDysk NZBDAV:
+- **Direct EasyNews (`easynews-search`)**:
+  - Connects directly to EasyNews' proprietary web search API.
+  - Returns authenticated web video URLs hosted directly on EasyNews CDN nodes.
+  - Zero local disk or memory consumption; no unpacking or RAR assembly required.
+- **InfiniDysk NZBDAV (`:3005`)**:
+  - Bridges standard Usenet providers (Eweka, Newshosting, UsenetServer, Astraweb) with Prowlarr Newznab indexers (NZBGeek, DrunkenSlug, etc.).
+  - Reads `.nzb` metadata and streams articles in real-time over WebDAV.
+  - Maps byte-range requests (`Range: bytes=X-Y`) to specific NNTP article message-IDs, enabling instant video seeking without prior downloading.
+
+---
+
 ## 5. Stage 5: In-Player Enhancements
 
 ### 1. SubSense Subtitles (`:3100`)

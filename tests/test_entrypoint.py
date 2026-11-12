@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 
+@unittest.skipUnless(shutil.which("sh"), "sh shell required")
 class EntrypointTests(unittest.TestCase):
     def run_entrypoint(self, secret):
         with tempfile.TemporaryDirectory() as directory:

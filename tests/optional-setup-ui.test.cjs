@@ -62,3 +62,12 @@ test('native anime switch reloads and is saved with the selected account',async(
   await env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
   assert.equal(env.calls.find(c=>c.path==='/api/save-env').payload.ENABLE_ANIME_SOURCES,'true');
 });
+
+test('custom ports update player-link and nuvio-player-link hrefs',async()=>{
+  const env=form({PORT_STREMIO_WEB:'18082',PORT_NUVIO:'18085',ports:{stremio_web:18082,nuvio:18085},configuredKeys:[]});
+  await vm.runInContext('loadSettings()',env.context);
+  assert.equal(env.nodes.get('player-link').href,'http://server:18082');
+  assert.equal(env.nodes.get('player-link').textContent,'Launch Stremio Web (:18082) ↗');
+  assert.equal(env.nodes.get('nuvio-player-link').href,'http://server:18085');
+  assert.equal(env.nodes.get('nuvio-player-link').textContent,'Launch Nuvio Web (:18085) ↗');
+});
