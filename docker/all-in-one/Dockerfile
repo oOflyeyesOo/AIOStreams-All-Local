@@ -2,8 +2,13 @@ FROM docker:27-dind
 
 LABEL maintainer="oOflyeyesOo"
 LABEL description="AIOStreams 100% Self-Hosted All-In-One Streaming Appliance Container"
+LABEL org.opencontainers.image.url="http://localhost:8088"
+LABEL port="8088"
+LABEL virtual.port="8088"
+LABEL docktun.port="8088"
 
-# Disable TLS certificate generation to prevent sed write errors in nested/LXC environments
+ENV PORT=8088
+ENV VIRTUAL_PORT=8088
 ENV DOCKER_TLS_CERTDIR=""
 
 # Install runtime dependencies and compatibility drivers
