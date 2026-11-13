@@ -1,7 +1,9 @@
 """Verify that the shared application inventory matches the Compose services."""
+from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from init.service_inventory import INTEGRATIONS
 
 

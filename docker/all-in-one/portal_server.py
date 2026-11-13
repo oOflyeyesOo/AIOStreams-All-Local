@@ -28,6 +28,7 @@ import socket
 import sqlite3
 import http.client
 import platform
+import math
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
@@ -959,6 +960,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 episode = 1
             try:
                 duration = float((query.get("duration") or ["0"])[0] or 0)
+                if math.isnan(duration) or math.isinf(duration) or duration < 0:
+                    duration = 0
             except (ValueError, TypeError):
                 duration = 0
 
@@ -1561,6 +1564,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 tail = int((query.get("tail") or ["60"])[0] or 60)
             except (ValueError, TypeError):
                 tail = 60
+            tail = max(1, min(tail, 500))
 
             # 1. Try Docker CLI if available
             try:
@@ -1690,6 +1694,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
+            port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_STREMIO_WEB', 'PORT_NUVIO', 'PORT_SLICKSYNC', 'PORT_SUBSENSE', 'USENET_PORT')
+            for pkey in port_keys:
+                if pkey in keys_to_update and keys_to_update[pkey]:
+                    try:
+                        pval = int(keys_to_update[pkey])
+                        if not (1 <= pval <= 65535):
+                            raise ValueError(f'{pkey} must be a valid port number between 1 and 65535')
+                    except (ValueError, TypeError):
+                        raise ValueError(f'{pkey} must be a valid port number between 1 and 65535')
             if keys_to_update.get('TORRENTIO_URL'):
                 t_url = urllib.parse.urlsplit(keys_to_update['TORRENTIO_URL'])
                 if t_url.scheme not in ('http', 'https') or not t_url.hostname or t_url.username or t_url.password:

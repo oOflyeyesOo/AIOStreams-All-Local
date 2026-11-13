@@ -9,7 +9,7 @@ import time
 import urllib.request
 import urllib.parse
 
-ROOT = Path(os.environ.get('WEB_ROOT', '/app'))
+ROOT = Path(os.environ.get('WEB_ROOT', Path(__file__).resolve().parent.parent))
 CASES = [('movie', 'tt1375666'), ('series', 'tt0944947:1:1')]
 
 
@@ -75,7 +75,10 @@ def main():
     output = ROOT/'data/stremio-web/playback-candidates.json'
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(candidates))
-    os.chmod(output,0o600)
+    try:
+        os.chmod(output,0o600)
+    except OSError:
+        pass
     print(json.dumps(report,indent=2))
     return 0 if report and all(row['passed'] for row in report) else 1
 

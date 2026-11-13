@@ -764,6 +764,75 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(data["container"], "aiostreams")
             self.assertIn("AIOStreams log output", data["logs"])
 
+    def test_container_logs_tail_clamping(self):
+        with patch.object(portal.subprocess, "run") as mock_sub:
+            mock_sub.return_value = unittest.mock.MagicMock(returncode=0, stdout="log output", stderr="")
+            # Test negative tail clamped
+            status, _, _ = self.request("/api/logs?container=aiostreams&tail=-10", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn("1", mock_sub.call_args[0][0])  # min(1, 200) -> 1
+
+            # Test excessive tail clamped to max limit
+            status, _, _ = self.request("/api/logs?container=aiostreams&tail=9999", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn("200", mock_sub.call_args[0][0])  # min(500, 200) -> 200
+
+            # Test invalid non-integer tail
+            status, _, _ = self.request("/api/logs?container=aiostreams&tail=invalid", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn("60", mock_sub.call_args[0][0])
+
+    def test_save_env_port_validation(self):
+        # Valid ports
+        status, body, _ = self.request("/api/save-env", "POST", {
+            "PORT_PORTAL": "8088",
+            "PORT_AIOSTREAMS": "3001",
+            "PORT_AIOMETADATA": "4005",
+            "PORT_STREMIO_WEB": "8082",
+            "PORT_NUVIO": "8085"
+        }, auth=True)
+        self.assertEqual(status, 200)
+
+        # Invalid port: out of range high
+        status, body, _ = self.request("/api/save-env", "POST", {
+            "PORT_PORTAL": "70000"
+        }, auth=True)
+        self.assertEqual(status, 400)
+        self.assertIn(b"must be a valid port number", body)
+
+        # Invalid port: zero
+        status, body, _ = self.request("/api/save-env", "POST", {
+            "PORT_AIOSTREAMS": "0"
+        }, auth=True)
+        self.assertEqual(status, 400)
+        self.assertIn(b"must be a valid port number", body)
+
+        # Invalid port: non-numeric string
+        status, body, _ = self.request("/api/save-env", "POST", {
+            "PORT_NUVIO": "notaport"
+        }, auth=True)
+        self.assertEqual(status, 400)
+        self.assertIn(b"must be a valid port number", body)
+
+    def test_aniskip_edge_cases(self):
+        # Test duration=nan or inf does not crash
+        with patch.object(portal, "resolve_mal_id", return_value="21"):
+            with patch.object(portal, "get_aniskip_times", return_value={"found": False}):
+                status, body, _ = self.request("/api/aniskip?id=kitsu:12&duration=nan", auth=True)
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertFalse(data.get("found"))
+
+                status, body, _ = self.request("/api/aniskip?id=kitsu:12&duration=inf", auth=True)
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertFalse(data.get("found"))
+
+                status, body, _ = self.request("/api/aniskip?id=kitsu:12&duration=-50", auth=True)
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertFalse(data.get("found"))
+
 
 if __name__ == "__main__":
     unittest.main()
