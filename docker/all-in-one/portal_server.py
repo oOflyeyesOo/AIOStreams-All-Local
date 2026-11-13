@@ -627,7 +627,7 @@ def optimized_profile_export():
                 pass
 
     if install_uuid:
-        for pw in ("admin_local_secret", os.environ.get("ADDON_PASSWORD", "admin")):
+        for pw in ("admin_local_secret", os.environ.get("ADDON_PASSWORD") or "admin"):
             try:
                 auth = base64.b64encode(f"{install_uuid}:{pw}".encode()).decode("ascii")
                 req = urllib.request.Request(
@@ -1114,7 +1114,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 aiom_base = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
                 env_vars = read_saved_env()
                 profile_uuid = env_vars.get("AIOMETADATA_PROFILE_UUID")
-                addon_pw = env_vars.get("ADDON_PASSWORD", os.environ.get("ADDON_PASSWORD", "admin"))
+                addon_pw = env_vars.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
                 config_data = None
                 if profile_uuid:
                     try:

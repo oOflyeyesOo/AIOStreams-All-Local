@@ -211,6 +211,7 @@ Run the entire self-hosted stack (Portal, AIOStreams, Scrapers, Indexers, Debrid
 ```bash
 docker run -d \
   --name aio-stack \
+  --pull always \
   --privileged \
   --restart unless-stopped \
   --label port=8088 \

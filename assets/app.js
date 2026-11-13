@@ -28,6 +28,16 @@ const extras = [
 ];
 const fields = [...providers,...metadata,...trackingKeys,...extras];
 const optionalSecrets=[['NZB_INDEXER_API_KEY','AltHUB / AnimeTosho / NZB API key','NZB']];
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 fields.push(...optionalSecrets);
 let usenetPasswordSaved=false;
 let currentManifest = '';
@@ -784,7 +794,7 @@ async function runPlaybackTest() {
       }
       if (descPlayback) descPlayback.textContent = 'Stream ready. Video player preview active.';
 
-      if (res.stream_url && videoContainer && videoContainer.style) {
+      if (res.stream_url && typeof res.stream_url === 'string' && /^https?:\/\//i.test(res.stream_url) && videoContainer && videoContainer.style) {
         videoContainer.style.display = 'block';
         if (videoPreview) {
           videoPreview.src = res.stream_url;
@@ -1220,13 +1230,14 @@ async function refreshHealthTelemetry() {
       tbody.innerHTML = '';
       res.containers.forEach(c => {
         const tr = document.createElement('tr');
-        const cpuClass = c.cpu_percent > 60 ? 'text-red' : (c.cpu_percent > 20 ? 'text-amber' : 'text-green');
+        const cpuNum = parseFloat(c.cpu_percent) || 0;
+        const cpuClass = cpuNum > 60 ? 'text-red' : (cpuNum > 20 ? 'text-amber' : 'text-green');
         tr.innerHTML = `
-          <td><strong>${c.name}</strong></td>
-          <td class="${cpuClass}"><strong>${c.cpu_percent}%</strong></td>
-          <td>${c.mem_used_mb} MB <span class="muted">/ ${c.mem_limit_mb} MB</span></td>
-          <td>${c.mem_percent}%</td>
-          <td class="muted">${c.net_io}</td>
+          <td><strong>${escapeHtml(c.name)}</strong></td>
+          <td class="${cpuClass}"><strong>${escapeHtml(c.cpu_percent)}%</strong></td>
+          <td>${escapeHtml(c.mem_used_mb)} MB <span class="muted">/ ${escapeHtml(c.mem_limit_mb)} MB</span></td>
+          <td>${escapeHtml(c.mem_percent)}%</td>
+          <td class="muted">${escapeHtml(c.net_io)}</td>
           <td><span class="badge-healthy">● RUNNING</span></td>
         `;
         tbody.appendChild(tr);

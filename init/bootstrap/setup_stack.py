@@ -164,7 +164,7 @@ if derived_aiom_url and derived_aiom_url != AIOMETADATA_HOST:
     os.environ["AIOMETADATA_HOST"] = derived_aiom_url
     update_env_file("AIOMETADATA_HOST", derived_aiom_url)
 
-ADDON_PASSWORD = os.environ.get("ADDON_PASSWORD", "admin")
+ADDON_PASSWORD = os.environ.get("ADDON_PASSWORD") or "admin"
 SECRET_KEY = os.environ.get("SECRET_KEY", "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09")
 PREMIUMIZE_API_KEY = os.environ.get("PREMIUMIZE_API_KEY", "")
 REALDEBRID_API_KEY = os.environ.get("REALDEBRID_API_KEY", "")
