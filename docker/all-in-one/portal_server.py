@@ -872,9 +872,16 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if not origin:
             return True
-        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
+        host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")).split(",")[0].strip().lower()
         try:
-            return urllib.parse.urlsplit(origin).netloc.lower() == host.lower()
+            origin_split = urllib.parse.urlsplit(origin)
+            origin_netloc = origin_split.netloc.lower()
+            if origin_netloc == host:
+                return True
+            # Normalize implicit vs explicit standard HTTP/HTTPS ports (80/443)
+            clean_host = host.split(":")[0] if (host.endswith(":80") or host.endswith(":443")) else host
+            clean_origin = origin_netloc.split(":")[0] if (origin_netloc.endswith(":80") or origin_netloc.endswith(":443")) else origin_netloc
+            return clean_origin == clean_host
         except ValueError:
             return False
 
@@ -1188,8 +1195,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return super().do_GET()
         elif path == "/manifest.json":
             # If client requests root manifest on appliance portal, redirect to AIOStreams master manifest
-            host = self.headers.get("Host", "localhost:3000").split(":")[0]
-            target = f"http://{host}:3000/stremio/u/local/manifest.json"
+            env_vars = read_saved_env()
+            base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL")
+            if base_url and not any(h in base_url for h in ("localhost:3000", "127.0.0.1:3000", "aiostreams:3000")):
+                target = f"{base_url.rstrip('/')}/stremio/u/local/manifest.json"
+            else:
+                raw_host = self.headers.get("Host", "localhost").split(":")[0]
+                aio_port = env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS", "3001")
+                proto = "https" if self.headers.get("X-Forwarded-Proto") == "https" else "http"
+                target = f"{proto}://{raw_host}:{aio_port}/stremio/u/local/manifest.json"
             self.send_response(302)
             self.send_header("Location", target)
             self.end_headers()

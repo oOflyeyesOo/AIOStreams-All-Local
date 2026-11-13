@@ -833,6 +833,41 @@ class PortalTests(unittest.TestCase):
                 data = json.loads(body)
                 self.assertFalse(data.get("found"))
 
+    def test_manifest_redirect_endpoint(self):
+        # 1. With local default (maps to port 3001)
+        with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "http://localhost:3000"}):
+            status, _, headers = self.request("/manifest.json", headers={"Host": "192.168.1.100:8088"})
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("Location"), "http://192.168.1.100:3001/stremio/u/local/manifest.json")
+
+        # 2. With custom public BASE_URL
+        with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://aio.mydomain.com"}):
+            status, _, headers = self.request("/manifest.json", headers={"Host": "192.168.1.100:8088"})
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("Location"), "https://aio.mydomain.com/stremio/u/local/manifest.json")
+
+    def test_reverse_proxy_origin_normalization(self):
+        # 1. Matching host with explicit standard port :443
+        status, _, _ = self.request(
+            "/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, auth=True,
+            headers={"Origin": "https://portal.example.com", "X-Forwarded-Host": "portal.example.com:443"}
+        )
+        self.assertEqual(status, 200)
+
+        # 2. Chained proxy X-Forwarded-Host
+        status, _, _ = self.request(
+            "/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, auth=True,
+            headers={"Origin": "https://portal.example.com", "X-Forwarded-Host": "portal.example.com, internal-lb:8088"}
+        )
+        self.assertEqual(status, 200)
+
+        # 3. Malicious / untrusted origin rejected
+        status, _, _ = self.request(
+            "/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, auth=True,
+            headers={"Origin": "https://attacker.example.org", "X-Forwarded-Host": "portal.example.com"}
+        )
+        self.assertEqual(status, 403)
+
 
 if __name__ == "__main__":
     unittest.main()
