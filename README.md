@@ -219,15 +219,6 @@ docker run -d \
   -p 4005:4005 \
   -p 8082:8082 \
   -p 8085:8085 \
-  -p 8086:8086 \
-  -p 3005:3005 \
-  -p 9039:9039 \
-  -p 3100:3100 \
-  -p 8000:8000 \
-  -p 7005:7005 \
-  -p 8181:8181 \
-  -p 9696:9696 \
-  -p 8080:8080 \
   -v aio-data:/data \
   ghcr.io/ooflyeyesoo/aiostreams-aio:latest
 ```
@@ -240,15 +231,7 @@ docker run -d \
   * `4005`: AIOMetadata Catalogs & Streaming Badges (Standalone Manifest)
   * `8082`: Stremio Web Player
   * `8085`: Nuvio Web Player
-  * `8086`: SlickSync Hub
-  * `3005`: InfiniDysk Usenet Engine
-  * `9039`: Posters+ Artwork & Badges
-  * `3100`: SubSense Subtitle Aggregator
-  * `8000`: Comet Torrent Scraper
-  * `7005`: Anime Kitsu Catalog Provider
-  * `8181`: Zilean DMM Cache
-  * `9696`: Prowlarr Indexer Manager
-  * `8080`: StremThru Debrid Proxy
+  *(All backend scrapers, indexers, proxies, and databases communicate securely inside the container and require no host ports).*
 
 ### Option B: Docker Compose
 
