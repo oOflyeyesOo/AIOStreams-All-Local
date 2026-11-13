@@ -206,7 +206,7 @@ flowchart LR
 
 ### Option A: 1-Command Appliance (`docker run` — Recommended)
 
-Run the entire self-hosted stack (Portal, AIOStreams, Scrapers, Indexers, Debrid Cache) inside a single container with zero configuration files needed:
+Run the entire self-hosted stack (Portal, AIOStreams, Scrapers, Indexers, Debrid Cache, and Web Players) inside a single container with zero configuration files needed:
 
 ```bash
 docker run -d \
@@ -216,13 +216,39 @@ docker run -d \
   --label port=8088 \
   -p 8088:8088 \
   -p 3001:3001 \
+  -p 4005:4005 \
+  -p 8082:8082 \
+  -p 8085:8085 \
+  -p 8086:8086 \
+  -p 3005:3005 \
+  -p 9039:9039 \
+  -p 3100:3100 \
+  -p 8000:8000 \
+  -p 7005:7005 \
+  -p 8181:8181 \
+  -p 9696:9696 \
+  -p 8080:8080 \
   -v aio-data:/data \
   ghcr.io/ooflyeyesoo/aiostreams-aio:latest
 ```
 
-* **Web Portal**: Open **`http://YOUR-SERVER-IP:8088`** to configure your provider keys and grab your manifest. Local portal access is open by default with zero password barrier.
-* **Manifest & Streams**: AIOStreams runs on **`:3001`**, serving your combined Stremio addon manifest.
-* *(Optional)*: Add `-p 8082:8082` for Stremio Web Player or `-p 8085:8085` for Nuvio Web Player.
+* **Primary Web Portal (`:8088`)**: Open **`http://YOUR-SERVER-IP:8088`** to configure your provider keys, run automated health checks, test playback, and copy your personalized manifests. Local portal access is password-free by default.
+* **Why `--label port=8088`?** By default, container dashboards, reverse proxies, and local service discovery tools sort port mappings numerically (`3001` < `8088`), inadvertently launching AIOStreams instead of the setup portal. `--label port=8088` is the universal, vendor-neutral label that instructs container discovery tools to treat port `8088` as the primary web entrypoint.
+* **Port Reference**:
+  * `8088`: Web Setup Portal & Diagnostic Center (Primary UI)
+  * `3001`: AIOStreams Core Addon Aggregator (Manifest URL & Stream Engine)
+  * `4005`: AIOMetadata Catalogs & Streaming Badges (Standalone Manifest)
+  * `8082`: Stremio Web Player
+  * `8085`: Nuvio Web Player
+  * `8086`: SlickSync Hub
+  * `3005`: InfiniDysk Usenet Engine
+  * `9039`: Posters+ Artwork & Badges
+  * `3100`: SubSense Subtitle Aggregator
+  * `8000`: Comet Torrent Scraper
+  * `7005`: Anime Kitsu Catalog Provider
+  * `8181`: Zilean DMM Cache
+  * `9696`: Prowlarr Indexer Manager
+  * `8080`: StremThru Debrid Proxy
 
 ### Option B: Docker Compose
 

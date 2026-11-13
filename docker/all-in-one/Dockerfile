@@ -5,7 +5,6 @@ LABEL description="AIOStreams 100% Self-Hosted All-In-One Streaming Appliance Co
 LABEL org.opencontainers.image.url="http://localhost:8088"
 LABEL port="8088"
 LABEL virtual.port="8088"
-LABEL docktun.port="8088"
 
 ENV PORT=8088
 ENV VIRTUAL_PORT=8088
