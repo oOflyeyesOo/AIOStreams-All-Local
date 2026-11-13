@@ -1612,21 +1612,26 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         try:
             req = urllib.request.Request(f"{flaresolverr_url}/", headers={"User-Agent": "AIO-Local-Stack/1.0"})
             with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read().decode())
-                version = data.get("version", "v3.3+")
+                raw_bytes = resp.read()
+                version = "v3.3+"
+                try:
+                    data = json.loads(raw_bytes.decode("utf-8", errors="ignore"))
+                    version = data.get("version") or data.get("msg") or "v3.3+"
+                except Exception:
+                    pass
                 self.json_response({
                     "status": "online",
                     "reachable": True,
                     "version": version,
                     "url": flaresolverr_url,
-                    "message": f"FlareSolverr ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
+                    "message": f"Antibot Proxy ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
                 })
         except Exception as e:
             self.json_response({
                 "status": "offline",
                 "reachable": False,
                 "url": flaresolverr_url,
-                "message": f"FlareSolverr is not responding at {flaresolverr_url}: {e}"
+                "message": f"Antibot proxy is not responding at {flaresolverr_url}: {e}"
             }, 503)
 
     def handle_api_benchmark(self):
