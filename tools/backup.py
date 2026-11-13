@@ -360,7 +360,10 @@ def restore_backup(archive_path: Path, root: Path = None) -> bool:
                     print("[!] Error: Restore destination contains an escaping symbolic link.", file=sys.stderr)
                     return False
             root.mkdir(parents=True, exist_ok=True)
-            tar.extractall(tmp_path, members=members)
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(tmp_path, members=members, filter="data")
+            else:
+                tar.extractall(tmp_path, members=members)
 
         # 1. Restore .env
         env_backup = tmp_path / ".env"
