@@ -637,7 +637,47 @@ class PortalTests(unittest.TestCase):
             hdr_map = {k.lower(): v for k, v in headers.items()}
             self.assertIn("attachment", hdr_map.get("content-disposition", "").lower())
 
-    def test_test_playback_endpoint(self):
+    def test_playback_is_blocked_on_server_before_provider_calls(self):
+        for state in ("running", "failed"):
+            with self.subTest(state=state), patch.object(portal, "setup_snapshot", return_value={"status": state}), patch.object(portal, "run_playback_test") as run:
+                status, body, _ = self.request("/api/test-playback", "POST", {}, auth=True)
+                self.assertEqual(status, 409)
+                self.assertFalse(json.loads(body)["readiness"]["ready"])
+                run.assert_not_called()
+
+    def test_readiness_requires_stream_manifest_and_enabled_services(self):
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value = response
+        with patch.object(portal, "setup_snapshot", return_value={"status": "complete"}), patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch.object(portal, "probe_integration", return_value={"name": "Comet", "reachable": True, "enabled": True}) as probe, patch.object(portal.urllib.request, "urlopen", return_value=response):
+            response.read.return_value = b'{"id":"fixture","resources":["stream"]}'
+            self.assertTrue(portal.playback_readiness()["ready"])
+            probe.return_value = {"name": "Optional", "reachable": False, "enabled": False}
+            self.assertTrue(portal.playback_readiness()["ready"])
+            probe.return_value = {"name": "Comet", "reachable": False, "enabled": True}
+            self.assertFalse(portal.playback_readiness()["ready"])
+            probe.return_value = {"name": "Comet", "reachable": True, "enabled": True}
+            response.read.return_value = b'{"id":"fixture","resources":["catalog"]}'
+            self.assertFalse(portal.playback_readiness()["ready"])
+            response.read.return_value = b'not json'
+            self.assertFalse(portal.playback_readiness()["ready"])
+
+    def test_readiness_blocks_controller_loss_and_setup_restart(self):
+        with patch.object(portal, "setup_snapshot", side_effect=OSError("private error")):
+            result = portal.playback_readiness()
+            self.assertFalse(result["ready"])
+            self.assertNotIn("private error", json.dumps(result))
+        with patch.object(portal, "setup_snapshot", side_effect=[{"status": "complete"}, {"status": "running"}]), patch.object(portal, "probe_integration", return_value={"name": "AIOStreams", "reachable": True}), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
+            self.assertFalse(portal.playback_readiness()["ready"])
+
+    def test_core_profile_marks_excluded_services_off(self):
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch("socket.create_connection") as connect:
+            result = portal.probe_integration(("Zilean", "zilean", 8181, "Indexers"))
+            self.assertFalse(result["enabled"])
+            connect.assert_not_called()
+
+    @patch.object(portal, "playback_readiness", return_value={"ready": True})
+    def test_test_playback_endpoint(self, _readiness):
         # 1. When NNTP login fails
         with patch.object(portal, "test_nntp_login", return_value=(False, "502 Authentication failed")):
             status, body, _ = self.request(

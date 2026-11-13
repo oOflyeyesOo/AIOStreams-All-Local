@@ -15,7 +15,7 @@ function form(saved){
   };
   const context=vm.createContext({document,URL,location:new URL('http://server:8088'),
     providers:[['PROVIDER_KEY']],fields:[['PROVIDER_KEY'],['NZB_INDEXER_API_KEY']],savedKeys:new Set(),
-    usenetPasswordSaved:false,deriveAiometaHost:()=>'',setProgress:()=>{},pollSetup:async()=>{},
+    usenetPasswordSaved:false,deriveAiometaHost:()=>'',setProgress:()=>{},pollSetup:async()=>{},renderPlaybackReadiness:()=>{},playbackBusy:false,setupFormDirty:false,lastJobStatus:"complete",refreshPlaybackReadiness:async()=>({ready:true}),
     notify:message=>{throw Error(message);},api:async(path,options)=>{
       if(path==='/api/env')return saved;
       calls.push({path,payload:options.body?JSON.parse(options.body):null});return {success:true};
@@ -151,4 +151,39 @@ test('updateStatusOverview merges health and integrations data and updates overv
   assert.equal(env.nodes.get('overview-services').textContent, '2/3 Online');
   assert.equal(env.nodes.get('overview-watchdog').textContent, '14/14 Healthy');
   assert.equal(env.nodes.get('overview-backup').textContent, '3 Saved (42 MB)');
+});
+
+function readinessUI() {
+  const env = form({});
+  const readinessCode = source.slice(source.indexOf('let playbackReadiness ='), source.indexOf('async function runPlaybackTest()'));
+  vm.runInContext(readinessCode, env.context);
+  return env;
+}
+
+test('startup gates both buttons, respects unapplied edits, and fails closed on lost connection', async () => {
+  const env = readinessUI();
+  vm.runInContext('renderPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('btn-test-playback').disabled, true);
+  env.context.api = async () => ({ready:true, message:'Ready to test', checks:[]});
+  await vm.runInContext('refreshPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('btn-test-playback').disabled, false);
+  vm.runInContext('setupFormDirty = true; renderPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('overview-test-playback-btn').disabled, true);
+  vm.runInContext('setupFormDirty = false; lastJobStatus = "running"; renderPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('btn-test-playback').disabled, true);
+  vm.runInContext('lastJobStatus = "complete"', env.context);
+  env.context.api = async () => {throw Error('offline');};
+  await vm.runInContext('refreshPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('btn-test-playback').disabled, true);
+  assert.match(env.nodes.get('startup-message').textContent, /Connection lost/);
+});
+
+test('early playback invocation cannot make a playback request', async () => {
+  const env = readinessUI();
+  const calls = [];
+  env.context.api = async path => {calls.push(path); return {ready:false, message:'Starting', checks:[]};};
+  vm.runInContext(source.match(/async function runPlaybackTest\(\) \{[\s\S]*?\n\}/)[0], env.context);
+  await vm.runInContext('runPlaybackTest()', env.context);
+  assert.deepEqual(calls, ['/api/playback-readiness']);
+  assert.equal(env.nodes.get('btn-test-playback').disabled, true);
 });

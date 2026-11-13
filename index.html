@@ -15,6 +15,13 @@
 <div class="steps"><span class="step active" id="step-1"><b>01</b> Add your keys</span><span class="step-line"></span><span class="step" id="step-2"><b>02</b> Connect everything</span><span class="step-line"></span><span class="step" id="step-3"><b>03</b> Press play</span></div>
 </section>
 
+<section id="startup-readiness" class="startup-readiness waiting" role="status" aria-live="polite">
+  <h2 id="startup-title">Checking your stack before testing</h2>
+  <p id="startup-message">Please wait. Testing stays locked until setup, enabled services, and your streaming manifest are ready.</p>
+  <details open><summary>Startup checklist — see what is ready or still waiting</summary><pre id="startup-checks">Checking services…</pre></details>
+  <p>Optional services marked Off do not block testing. Zilean can continue background indexing after its service starts.</p>
+  <a href="#setup-details">View setup progress and logs ↓</a>
+</section>
 <!-- Returning Users Compact Status Overview -->
 <section class="status-overview-panel panel" id="status-overview" style="margin-bottom:20px;padding:16px 20px;background:#141a1c;border:1px solid #232a2e;border-radius:12px;">
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
@@ -23,42 +30,42 @@
     <div>
       <div style="display:flex;align-items:center;gap:8px;">
         <h3 id="overview-headline" style="margin:0;font-size:15px;font-weight:600;color:#f1f5f9;">Stack Status Overview</h3>
-        <span id="overview-mode-badge" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;">Mode: Debrid</span>
+        <span id="overview-mode-badge" style="font-size:14px;font-weight:600;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;">Mode: Debrid</span>
       </div>
-      <span id="overview-last-check" style="font-size:12px;color:#8fa1a8;">Checked just now</span>
+      <span id="overview-last-check" style="font-size:14px;color:#8fa1a8;">Checked just now</span>
     </div>
   </div>
-  <div id="overview-badge" style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);letter-spacing:0.02em;">All Systems Operational</div>
+  <div id="overview-badge" style="font-size:14px;font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);letter-spacing:0.02em;">Checking startup</div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px;margin-bottom:12px;">
   <div style="background:#1a2124;padding:8px 12px;border-radius:6px;border:1px solid #2a3438;">
-    <div style="font-size:10px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Appliance</div>
-    <div id="overview-appliance" style="font-size:13px;font-weight:600;color:#10b981;margin-top:2px;">Online</div>
+    <div style="font-size:14px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Appliance</div>
+    <div id="overview-appliance" style="font-size:14px;font-weight:600;color:#10b981;margin-top:2px;">Online</div>
   </div>
   <div style="background:#1a2124;padding:8px 12px;border-radius:6px;border:1px solid #2a3438;">
-    <div style="font-size:10px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Services</div>
-    <div id="overview-services" style="font-size:13px;font-weight:600;color:#10b981;margin-top:2px;">Checking…</div>
+    <div style="font-size:14px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Services</div>
+    <div id="overview-services" style="font-size:14px;font-weight:600;color:#10b981;margin-top:2px;">Checking…</div>
   </div>
   <div style="background:#1a2124;padding:8px 12px;border-radius:6px;border:1px solid #2a3438;">
-    <div style="font-size:10px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Watchdog</div>
-    <div id="overview-watchdog" style="font-size:13px;font-weight:600;color:#10b981;margin-top:2px;">Active</div>
+    <div style="font-size:14px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Watchdog</div>
+    <div id="overview-watchdog" style="font-size:14px;font-weight:600;color:#10b981;margin-top:2px;">Checking…</div>
   </div>
   <div style="background:#1a2124;padding:8px 12px;border-radius:6px;border:1px solid #2a3438;">
-    <div style="font-size:10px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Last Backup</div>
-    <div id="overview-backup" style="font-size:13px;font-weight:600;color:#cbd5e1;margin-top:2px;">Checking…</div>
+    <div style="font-size:14px;color:#8fa1a8;text-transform:uppercase;letter-spacing:0.04em;">Last Backup</div>
+    <div id="overview-backup" style="font-size:14px;font-weight:600;color:#cbd5e1;margin-top:2px;">Checking…</div>
   </div>
 </div>
-<div id="overview-action-bar" style="display:flex;align-items:center;gap:10px;font-size:12px;color:#cbd5e1;background:#182023;padding:8px 12px;border-radius:6px;border:1px solid #263136;">
+<div id="overview-action-bar" style="display:flex;align-items:center;gap:10px;font-size:14px;color:#cbd5e1;background:#182023;padding:8px 12px;border-radius:6px;border:1px solid #263136;">
   <span>💡</span>
-  <span id="overview-action-text" style="flex:1;">Stack is ready. Click "Test my setup" to verify media flow or launch your web player.</span>
-  <button type="button" id="overview-test-playback-btn" class="mini-action-btn" style="white-space:nowrap;padding:4px 10px;font-size:11px;">Test my setup ▶</button>
+  <span id="overview-action-text" style="flex:1;">Checking readiness before enabling playback testing.</span>
+  <button type="button" id="overview-test-playback-btn" disabled aria-describedby="startup-message" class="mini-action-btn" style="white-space:nowrap;padding:4px 10px;font-size:14px;">Test my setup ▶</button>
 </div>
 </section>
 
 <div class="workspace-grid">
 <section class="panel setup-panel">
 <div class="panel-heading"><div><span class="eyebrow">THE ONLY SETUP YOU NEED</span><h2>Make it yours.</h2></div><span class="number-tag">01 / 03</span></div>
-<div id="setup-sync-status" class="setup-sync-bar" style="margin-bottom:14px;padding:8px 12px;background:#141b1e;border:1px solid #232c30;border-radius:6px;font-size:11px;display:flex;align-items:center;gap:8px;color:#94a3b8;"><span class="sync-dot" id="setup-sync-dot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;"></span><span id="setup-sync-text">All settings applied &amp; stack synchronized ✓</span></div>
+<div id="setup-sync-status" class="setup-sync-bar" style="margin-bottom:14px;padding:8px 12px;background:#141b1e;border:1px solid #232c30;border-radius:6px;font-size:14px;display:flex;align-items:center;gap:8px;color:#94a3b8;"><span class="sync-dot" id="setup-sync-dot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
 <form id="setup-form">
 <div class="access-scope-section" style="margin-bottom:14px;">
 <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
@@ -89,7 +96,7 @@
 <div class="usenet-primary-card">
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
   <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
-  <button type="button" id="test-saved-usenet-btn" class="mini-action-btn" style="font-size:10px;padding:3px 10px;">Test Saved NNTP ⚡</button>
+  <button type="button" id="test-saved-usenet-btn" class="mini-action-btn" style="font-size:14px;padding:3px 10px;">Test Saved NNTP ⚡</button>
 </div>
 <div class="field-grid">
 <label><span class="field-label">Server hostname <span>NNTP HOST</span></span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
@@ -126,10 +133,10 @@
 <details class="more-options"><summary>Public databases, anime, Usenet, tracking, subtitles & optional services <span>+</span></summary>
 <div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
 <label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
-<div class="credential-sharing-notice" style="margin:8px 0 12px;padding:10px 12px;background:#181d20;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#cbd5e1;line-height:1.4;">
+<div class="credential-sharing-notice" style="margin:8px 0 12px;padding:10px 12px;background:#181d20;border-left:3px solid #f59e0b;border-radius:4px;font-size:14px;color:#cbd5e1;line-height:1.4;">
   <strong style="color:#f59e0b;">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Comet, TorBox/Real-Debrid direct).
 </div>
-<div id="overlap-warning-banner" class="overlap-warning-banner" style="margin:8px 0 12px;padding:10px 12px;background:rgba(56,189,248,0.08);border-left:3px solid #38bdf8;border-radius:4px;font-size:11px;color:#cbd5e1;line-height:1.4;">
+<div id="overlap-warning-banner" class="overlap-warning-banner" style="margin:8px 0 12px;padding:10px 12px;background:rgba(56,189,248,0.08);border-left:3px solid #38bdf8;border-radius:4px;font-size:14px;color:#cbd5e1;line-height:1.4;">
   <strong style="color:#38bdf8;">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr / Comet) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
 </div>
 <p>Calls out to the public Torrentio index database (<code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;">https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
@@ -157,9 +164,9 @@
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <input id="aniskip-test-id" placeholder="IMDb (e.g. tt9335498) or MAL ID" style="flex:2;min-width:140px;" value="tt9335498">
     <input id="aniskip-test-ep" type="number" min="1" max="1000" placeholder="Ep #" value="1" style="flex:1;min-width:60px;">
-    <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;font-size:11px;">Test Skip Timestamps ⚡</button>
+    <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;font-size:14px;">Test Skip Timestamps ⚡</button>
   </div>
-  <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#1a2226;border-radius:6px;font-size:11px;color:#cbd5e1;"></div>
+  <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#1a2226;border-radius:6px;font-size:14px;color:#cbd5e1;"></div>
 </div>
 </div>
 
@@ -175,18 +182,19 @@
 <section class="manifest-panel" id="manifest"><div class="eyebrow"><span class="status-dot"></span> YOUR TAKEAWAYS</div><h2>Your Addons.<br>Everywhere you watch.</h2><p>Your AIOStreams manifest combines streams, catalogs and subtitles. The separate metadata manifest is optional.</p><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div>
 <div class="manifest-actions" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
   <button id="btn-install-stremio" class="primary-button install-action-btn" style="flex:1;min-width:160px;" disabled><span>Install in Stremio</span><span>&#128640;</span></button>
-  <button type="button" id="btn-test-playback" class="primary-button test-playback-btn" style="flex:1;min-width:160px;background:#2563eb;border-color:#3b82f6;"><span>Test my setup</span><span>▶</span></button>
+  <button type="button" id="btn-test-playback" disabled aria-describedby="playback-readiness-hint" class="primary-button test-playback-btn" style="flex:1;min-width:160px;background:#2563eb;border-color:#3b82f6;"><span>Test my setup</span><span>▶</span></button>
 </div>
 <div id="deployment-players" style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
-  <a id="player-link-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:12px;padding:8px 12px;display:none;">Launch Stremio Web (:8082) ↗</a>
-  <a id="nuvio-player-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:12px;padding:8px 12px;display:none;">Launch Nuvio Web (:8085) ↗</a>
+  <a id="player-link-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:14px;padding:8px 12px;display:none;">Launch Stremio Web (:8082) ↗</a>
+  <a id="nuvio-player-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:14px;padding:8px 12px;display:none;">Launch Nuvio Web (:8085) ↗</a>
 </div>
+<p id="playback-readiness-hint" role="status">Waiting for startup checks before testing.</p>
 <div id="playback-test-card" class="playback-test-card" style="display:none;margin-top:14px;padding:14px;background:#141a1c;border:1px solid #232a2e;border-radius:10px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <h4 style="margin:0;font-size:13px;font-weight:600;color:#f1f5f9;">Live Playback Verification</h4>
-    <span id="playback-test-status" style="font-size:11px;font-weight:600;color:#38bdf8;">Testing…</span>
+    <h4 style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">Live Playback Verification</h4>
+    <span id="playback-test-status" style="font-size:14px;font-weight:600;color:#38bdf8;">Testing…</span>
   </div>
-  <div id="playback-test-steps" style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+  <div id="playback-test-steps" style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
     <div class="test-step" id="step-auth" style="display:flex;align-items:center;gap:8px;color:#8fa1a8;">
       <span class="step-icon" id="icon-step-auth">○</span>
       <span class="step-label" style="font-weight:600;">1. Provider Credentials:</span>
@@ -210,17 +218,17 @@
   </div>
   <div id="playback-video-container" style="display:none;margin-top:14px;border-top:1px solid #232a2e;padding-top:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="font-size:11px;font-weight:600;color:#34d399;">▶ Verified Stream Preview</span>
-      <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;font-size:10px;">Open stream directly ↗</a>
+      <span style="font-size:14px;font-weight:600;color:#34d399;">▶ Verified Stream Preview</span>
+      <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;font-size:14px;">Open stream directly ↗</a>
     </div>
     <video id="playback-video-preview" controls preload="none" style="width:100%;max-height:220px;border-radius:6px;background:#0a0d0e;outline:none;border:1px solid #263136;"></video>
   </div>
-  <div id="playback-troubleshoot" style="display:none;margin-top:12px;padding:10px;background:#241416;border:1px solid #7f1d1d;border-radius:6px;font-size:11px;color:#fca5a5;line-height:1.4;"></div>
+  <div id="playback-troubleshoot" style="display:none;margin-top:12px;padding:10px;background:#241416;border:1px solid #7f1d1d;border-radius:6px;font-size:14px;color:#fca5a5;line-height:1.4;"></div>
 </div>
 <details class="share-export-menu" id="share-export-menu" style="margin-top:16px;border:1px solid #232a2e;border-radius:8px;padding:10px 14px;background:#14191c;">
-<summary style="cursor:pointer;font-weight:600;font-size:12px;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center;user-select:none;">
   <span>Share, copy or export configuration ▾</span>
-  <span style="font-size:10px;color:#859296;">Manifests &amp; Backups</span>
+  <span style="font-size:14px;color:#859296;">Manifests &amp; Backups</span>
 </summary>
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
   <button type="button" id="copy-manifest" class="light-button" disabled style="width:100%;">Copy AIOStreams manifest <span>⧉</span></button>
@@ -250,20 +258,20 @@
 </div>
 <section id="integrations" class="integrations-section"><div class="integrations-heading"><div><div class="eyebrow">BUILT TO WORK TOGETHER</div><h2>The whole stack. Connected.</h2></div><button id="refresh-services" class="text-button">Refresh status ↻</button></div><p class="section-description">Bundled services are wired automatically. Availability below checks whether each service accepts a connection; setup verifies the manifests.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>
 <section class="operations-section panel" id="telemetry"><div class="integrations-heading"><div><div class="eyebrow">LIVE TELEMETRY &amp; SELF-HEALING</div><h2>Stack Health &amp; Watchdog.</h2></div><div class="telemetry-controls"><select id="auto-refresh-select" class="subtle-select"><option value="0">Auto-refresh: Off</option><option value="5000">Auto-refresh: 5s</option><option value="10000" selected>Auto-refresh: 10s</option><option value="30000">Auto-refresh: 30s</option></select><button id="refresh-health" class="light-button">Refresh Health ↻</button><button id="run-watchdog-probe" class="light-button">Run Probe 🛡️</button></div></div><p class="section-description">Real-time resource telemetry across your active containers, self-healing endpoint watchdog status, and automated backup rotation.</p><div class="telemetry-grid"><div class="telemetry-card"><div class="stat-label">Active Containers</div><div class="stat-val text-green" id="health-fleet-count">-- / --</div><div class="stat-sub" id="health-fleet-status">All containers monitored</div></div><div class="telemetry-card"><div class="stat-label">Stack Memory</div><div class="stat-val" id="health-mem-used">-- GB</div><div class="stat-sub" id="health-mem-host">of -- GB Host (--%)</div><div class="stat-bar"><div class="stat-fill" id="health-mem-fill" style="width: 0%"></div></div></div><div class="telemetry-card"><div class="stat-label">Stack CPU Load</div><div class="stat-val text-blue" id="health-cpu-load">--%</div><div class="stat-sub" id="health-cpu-sub">Across active containers</div></div><div class="telemetry-card"><div class="stat-label">Watchdog &amp; Backups</div><div class="stat-val text-green" id="health-watchdog-state">-- / -- Online</div><div class="stat-sub" id="health-backup-summary">Checking storage…</div></div></div><details id="fleet-details" class="fleet-details" style="margin-top:20px;border:1px solid #232a2e;border-radius:8px;padding:12px;background:#14191c;">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
   <span>Per-container fleet metrics (CPU, RAM, Net I/O) ▾</span>
-  <span style="font-size:11px;color:#859296;">Click to expand</span>
+  <span style="font-size:14px;color:#859296;">Click to expand</span>
 </summary>
-<div style="margin-top: 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;"><h4 style="margin: 0; font-size: 14px; font-weight: 600; color:#e2e8f0;">Container Fleet Telemetry</h4><div style="display: flex; gap: 8px;"><a class="subtle-link" href="/api/backup" download style="margin: 0;">Download Backup (Keep 5) ↓</a><label for="backup-schedule-select" style="font-size:13px;color:#8b949e;display:flex;align-items:center;gap:6px">Schedule:<select id="backup-schedule-select" class="subtle-select" style="font-size:12px;padding:3px 6px"><option value="daily" selected>Daily (Keep 5)</option><option value="weekly">Weekly (Keep 5)</option><option value="off">Manual Only</option></select></label><button id="btn-prune-backups" class="subtle-link" style="background: none; border: none; cursor: pointer; color: var(--orange, #f39c12); font-size: 13px;">Prune Old Backups ⤓</button></div></div><div class="telemetry-table-wrapper" style="margin-top: 12px;"><table class="telemetry-table"><thead><tr><th>Container</th><th>CPU %</th><th>RAM Used / Limit</th><th>RAM %</th><th>Net I/O</th><th>Status</th></tr></thead><tbody id="telemetry-table-body"><tr><td colspan="6" style="text-align:center; padding: 18px; color: #8b949e;">Loading live container metrics…</td></tr></tbody></table></div>
+<div style="margin-top: 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;"><h4 style="margin: 0; font-size: 14px; font-weight: 600; color:#e2e8f0;">Container Fleet Telemetry</h4><div style="display: flex; gap: 8px;"><a class="subtle-link" href="/api/backup" download style="margin: 0;">Download Backup (Keep 5) ↓</a><label for="backup-schedule-select" style="font-size:14px;color:#8b949e;display:flex;align-items:center;gap:6px">Schedule:<select id="backup-schedule-select" class="subtle-select" style="font-size:14px;padding:3px 6px"><option value="daily" selected>Daily (Keep 5)</option><option value="weekly">Weekly (Keep 5)</option><option value="off">Manual Only</option></select></label><button id="btn-prune-backups" class="subtle-link" style="background: none; border: none; cursor: pointer; color: var(--orange, #f39c12); font-size: 13px;">Prune Old Backups ⤓</button></div></div><div class="telemetry-table-wrapper" style="margin-top: 12px;"><table class="telemetry-table"><thead><tr><th>Container</th><th>CPU %</th><th>RAM Used / Limit</th><th>RAM %</th><th>Net I/O</th><th>Status</th></tr></thead><tbody id="telemetry-table-body"><tr><td colspan="6" style="text-align:center; padding: 18px; color: #8b949e;">Loading live container metrics…</td></tr></tbody></table></div>
 </details></section>
 <section class="operations-section panel" id="maintenance"><div class="eyebrow">YOUR INSTANCE</div><h2>Readiness and maintenance.</h2><p class="section-description">Configured keys and reachable services are separate from authorization and playback checks.</p><button id="refresh-maintenance" class="light-button">Refresh status</button><div class="operations-grid"><div><h3>Readiness</h3><pre id="readiness-output" aria-live="polite">Checking configuration…</pre></div><div><h3>Release and backup</h3><pre id="maintenance-output" aria-live="polite">Checking saved release…</pre><a class="subtle-link" href="/api/backup" download>Make and download a fresh backup ↓</a></div><div><h3>Resource use</h3><button id="refresh-resources" class="light-button">Check resource use</button><pre id="resources-output" aria-live="polite">Not checked yet.</pre></div><div><h3>Temporary cache</h3><p>Clears temporary search data. Databases and configuration are retained.</p><button id="clean-cache" class="light-button">Clear temporary cache</button><pre id="cache-output" aria-live="polite">No cleanup requested.</pre></div><div><h3>Search requests</h3><button id="refresh-search-status" class="light-button">Check search activity</button><pre id="search-status-output" aria-live="polite">Not checked yet.</pre></div></div></section>
 <section class="operations-section panel" id="operations"><div class="eyebrow">OPERATIONS &amp; DIAGNOSTICS</div><h2>Diagnose, test, and maintain your stack.</h2><p class="section-description">Credentials are validated without being saved, and diagnostics never return secret values.</p>
 <details id="operations-details" style="margin-top:14px;border:1px solid #232a2e;border-radius:10px;padding:12px;background:#14191c;">
-<summary style="cursor:pointer;font-weight:600;font-size:13px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
   <span>Advanced Diagnostics, Logs, Benchmarks &amp; Update Planner ▾</span>
-  <span style="font-size:11px;color:#859296;">Click to toggle</span>
+  <span style="font-size:14px;color:#859296;">Click to toggle</span>
 </summary>
-<div class="operations-grid" style="margin-top:14px;"><div><h3>Diagnostics</h3><div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="run-diagnostics" class="light-button">Run diagnostics</button><a id="btn-download-diagnostics" class="light-button" href="/api/diagnostics/export" download="aio-diagnostics-report.txt" style="text-decoration:none;">Download Report ⤓</a></div><pre id="diagnostics-output" aria-live="polite">Not run yet.</pre></div><div><h3>Smoke test</h3><label class="field-label" for="smoke-kind">Content type</label><select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option></select><input id="smoke-id" placeholder="IMDb or provider content ID"><button id="run-smoke-test" class="light-button">Test manifest stream</button><pre id="smoke-output" aria-live="polite">Not run yet.</pre></div><div><h3>Provider validation</h3><select id="provider-check"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option></select><input id="provider-key" type="password" placeholder="Enter key for one-time check"><button id="validate-provider" class="light-button">Validate key</button><pre id="provider-output" aria-live="polite">Not run yet.</pre></div><div><h3>Service &amp; container logs</h3><label class="field-label" for="logs-container-select">Select service</label><div style="display:flex;gap:8px;align-items:center;"><select id="logs-container-select"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="comet">Comet (Scraper)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="prowlarr">Prowlarr (Indexers)</option></select><button type="button" id="btn-fetch-logs" class="light-button" style="margin:0;white-space:nowrap;padding:10px 12px;">View logs</button></div><pre id="container-logs-output" aria-live="polite" style="max-height:180px;overflow:auto;">Select a service and click "View logs" to inspect output.</pre></div><div><h3>FlareSolverr antibot probe</h3><p class="field-help" style="margin-bottom:8px;">Validates FlareSolverr reachability and browser challenge solving for scrapers.</p><button type="button" id="btn-probe-flaresolverr" class="light-button">Probe FlareSolverr 🛡️</button><pre id="flaresolverr-output" aria-live="polite">Not probed yet.</pre></div><div><h3>Speed &amp; latency benchmark</h3><p class="field-help" style="margin-bottom:8px;">Measures internal stack and provider network round-trip response times.</p><button type="button" id="btn-run-benchmark" class="light-button">Run benchmark ⚡</button><pre id="benchmark-output" aria-live="polite">Not run yet.</pre></div><div><h3>Profile recommendation</h3><button id="recommend-profile" class="light-button">Check host resources</button><pre id="profile-output" aria-live="polite">Not run yet.</pre></div><div><h3>Reverse proxy config</h3><select id="proxy-format"><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option><option value="cloudflare">Cloudflare Tunnel</option></select><button id="generate-proxy" class="light-button">Generate snippet</button><pre id="proxy-output" aria-live="polite">Not generated yet.</pre></div><div><h3>Updates &amp; Safety Net</h3><button id="show-update-plan" class="light-button">Show safe update plan</button><pre id="update-output" aria-live="polite">Backup is recommended before updates.</pre><div style="margin-top:8px;padding:8px 10px;background:#182023;border-radius:6px;border:1px solid #2a3438;font-size:10px;color:#8fa1a8;line-height:1.4;"><strong style="color:#e2e8f0;">Rollback Recovery:</strong> If an upgrade fails: <code style="color:#f59e0b;font-size:9px;">docker compose exec portal python3 /app/tools/release_manager.py rollback --project aio --state backups/upgrade-state.json</code></div></div></div>
+<div class="operations-grid" style="margin-top:14px;"><div><h3>Diagnostics</h3><div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="run-diagnostics" class="light-button">Run diagnostics</button><a id="btn-download-diagnostics" class="light-button" href="/api/diagnostics/export" download="aio-diagnostics-report.txt" style="text-decoration:none;">Download Report ⤓</a></div><pre id="diagnostics-output" aria-live="polite">Not run yet.</pre></div><div><h3>Smoke test</h3><label class="field-label" for="smoke-kind">Content type</label><select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option></select><input id="smoke-id" placeholder="IMDb or provider content ID"><button id="run-smoke-test" class="light-button">Test manifest stream</button><pre id="smoke-output" aria-live="polite">Not run yet.</pre></div><div><h3>Provider validation</h3><select id="provider-check"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option></select><input id="provider-key" type="password" placeholder="Enter key for one-time check"><button id="validate-provider" class="light-button">Validate key</button><pre id="provider-output" aria-live="polite">Not run yet.</pre></div><div><h3>Service &amp; container logs</h3><label class="field-label" for="logs-container-select">Select service</label><div style="display:flex;gap:8px;align-items:center;"><select id="logs-container-select"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="comet">Comet (Scraper)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="prowlarr">Prowlarr (Indexers)</option></select><button type="button" id="btn-fetch-logs" class="light-button" style="margin:0;white-space:nowrap;padding:10px 12px;">View logs</button></div><pre id="container-logs-output" aria-live="polite" style="max-height:180px;overflow:auto;">Select a service and click "View logs" to inspect output.</pre></div><div><h3>FlareSolverr antibot probe</h3><p class="field-help" style="margin-bottom:8px;">Validates FlareSolverr reachability and browser challenge solving for scrapers.</p><button type="button" id="btn-probe-flaresolverr" class="light-button">Probe FlareSolverr 🛡️</button><pre id="flaresolverr-output" aria-live="polite">Not probed yet.</pre></div><div><h3>Speed &amp; latency benchmark</h3><p class="field-help" style="margin-bottom:8px;">Measures internal stack and provider network round-trip response times.</p><button type="button" id="btn-run-benchmark" class="light-button">Run benchmark ⚡</button><pre id="benchmark-output" aria-live="polite">Not run yet.</pre></div><div><h3>Profile recommendation</h3><button id="recommend-profile" class="light-button">Check host resources</button><pre id="profile-output" aria-live="polite">Not run yet.</pre></div><div><h3>Reverse proxy config</h3><select id="proxy-format"><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option><option value="cloudflare">Cloudflare Tunnel</option></select><button id="generate-proxy" class="light-button">Generate snippet</button><pre id="proxy-output" aria-live="polite">Not generated yet.</pre></div><div><h3>Updates &amp; Safety Net</h3><button id="show-update-plan" class="light-button">Show safe update plan</button><pre id="update-output" aria-live="polite">Backup is recommended before updates.</pre><div style="margin-top:8px;padding:8px 10px;background:#182023;border-radius:6px;border:1px solid #2a3438;font-size:14px;color:#8fa1a8;line-height:1.4;"><strong style="color:#e2e8f0;">Rollback Recovery:</strong> If an upgrade fails: <code style="color:#f59e0b;font-size:14px;">docker compose exec portal python3 /app/tools/release_manager.py rollback --project aio --state backups/upgrade-state.json</code></div></div></div>
 </details></section>
 <section class="operations-section panel" id="configuration-tools"><div class="eyebrow">CONFIGURATION PORTABILITY</div><h2>Move or protect your setup.</h2><p class="section-description">Export the optimized AIOStreams profile after entering your provider and metadata keys.</p><button id="export-profile" class="light-button">Download optimized profile JSON</button><button id="export-aiometa-profile" class="light-button">Download AIOMetadata profile JSON</button><button id="export-config" class="light-button">Download redacted config</button><label class="light-button" for="import-config">Import config<input id="import-config" type="file" accept="application/json" hidden></label><span id="config-output" role="status"></span></section>
 <footer><span class="brand-small">AIO / LOCAL</span><span>Built around your server. Designed around your time.</span><div style="display:flex;gap:16px;flex-wrap:wrap"><a id="player-link" href="#" target="_blank" rel="noopener noreferrer">Launch Stremio Web (:8082) ↗</a><a id="nuvio-player-link" href="#" target="_blank" rel="noopener noreferrer">Launch Nuvio Web (:8085) ↗</a></div></footer>

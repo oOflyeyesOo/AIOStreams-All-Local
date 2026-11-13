@@ -372,6 +372,7 @@ async function pollSetup() {
       notify('Manifest configuration saved.');
     }
     lastJobStatus = job.status;
+    renderPlaybackReadiness();
     if (running) pollTimer = setTimeout(pollSetup,1600);
   } catch(error) {
     if (lastJobStatus === 'running' && ++reconnectAttempts < 90) {
@@ -379,6 +380,8 @@ async function pollSetup() {
       pollTimer = setTimeout(pollSetup,2000);
       return;
     }
+    playbackReadiness = null;
+    renderPlaybackReadiness();
     setProgress('Connection interrupted',error.message);
     document.getElementById('setup-button').disabled = false;
   }
@@ -437,12 +440,14 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     return;
   }
   const button = document.getElementById('setup-button'); button.disabled = true;
+  if (typeof setFormDirty === 'function') setFormDirty(true);
   setProgress('Saving your configuration','Connecting local services and checking your keys.',true);
   try {
     await api('/api/save-env',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     await loadSettings();
     await api('/api/setup',{method:'POST'});
     lastJobStatus = 'running';
+    renderPlaybackReadiness();
     if (typeof setFormDirty === 'function') setFormDirty(false);
     await pollSetup();
   } catch(error) { setProgress('Setup needs attention',error.message); button.disabled=false; notify(error.message); }
@@ -593,6 +598,8 @@ function updateTemplateDisplay() {
 }
 
 function setFormDirty(dirty) {
+  setupFormDirty = dirty;
+  renderPlaybackReadiness();
   const syncText = document.getElementById('setup-sync-text');
   const syncDot = document.getElementById('setup-sync-dot');
   if (!syncText) return;
@@ -601,7 +608,7 @@ function setFormDirty(dirty) {
     syncText.style.color = '#f59e0b';
     if (syncDot) { syncDot.style.background = '#f59e0b'; syncDot.style.boxShadow = '0 0 8px #f59e0b'; }
   } else {
-    syncText.textContent = 'All settings applied & stack synchronized ✓';
+    syncText.textContent = 'Settings loaded. Service readiness is checked separately above.';
     syncText.style.color = '#34d399';
     if (syncDot) { syncDot.style.background = '#10b981'; syncDot.style.boxShadow = '0 0 8px #10b981'; }
   }
@@ -689,7 +696,68 @@ document.querySelectorAll('.access-scope-section .mode-pill').forEach(btn => {
   });
 });
 
+let playbackReadiness = null;
+let playbackBusy = false;
+let setupFormDirty = false;
+let readinessTimer;
+let readinessRequest;
+
+function renderPlaybackReadiness() {
+  const ready = playbackReadiness?.ready === true && !setupFormDirty && lastJobStatus !== 'running';
+  const message = setupFormDirty ? 'You have unapplied changes. Click Connect my stack before testing.'
+    : lastJobStatus === 'running' ? 'Setup is still running. Playback testing is locked until setup and service checks finish.'
+    : playbackReadiness?.message || 'Checking startup status. Playback testing is locked until checks finish.';
+  for (const id of ['btn-test-playback', 'overview-test-playback-btn']) {
+    const btn = document.getElementById(id);
+    if (btn) { btn.disabled = !ready || playbackBusy; btn.title = message; }
+  }
+  const banner = document.getElementById('startup-readiness');
+  if (banner) banner.className = `startup-readiness ${ready ? 'ready' : 'waiting'}`;
+  const title = document.getElementById('startup-title');
+  if (title) title.textContent = ready ? 'Ready to test your setup' : 'Your stack is not ready to test yet';
+  for (const id of ['startup-message', 'playback-readiness-hint', 'overview-action-text']) {
+    const el = document.getElementById(id); if (el) el.textContent = message;
+  }
+  const list = document.getElementById('startup-checks');
+  if (list) list.textContent = (playbackReadiness?.checks || []).map(c => `${c.status === 'ready' ? '✓' : c.status === 'off' ? '–' : '…'} ${c.name}: ${c.status === 'off' ? 'Optional off' : c.status === 'ready' ? 'Ready' : 'Waiting / unavailable'}`).join('\n');
+  const badge = document.getElementById('overview-badge');
+  if (badge) {
+    badge.textContent = ready ? 'Ready to test' : 'Testing locked';
+    badge.style.color = ready ? '#86efac' : '#fde68a';
+    badge.style.background = ready ? '#142b23' : '#292318';
+    badge.style.borderColor = ready ? '#6ee7b7' : '#e6b65a';
+  }
+  const dot = document.getElementById('overview-status-dot');
+  if (dot) { dot.style.background = ready ? '#6ee7b7' : '#e6b65a'; dot.style.boxShadow = 'none'; }
+}
+
+async function refreshPlaybackReadiness() {
+  if (readinessRequest) return readinessRequest;
+  readinessRequest = (async () => {
+    try { playbackReadiness = await api('/api/playback-readiness'); }
+    catch (_) { playbackReadiness = {ready: false, message: 'Connection lost. Testing is locked while the portal reconnects.', checks: []}; }
+    renderPlaybackReadiness();
+    return playbackReadiness;
+  })();
+  try { return await readinessRequest; } finally { readinessRequest = null; }
+}
+
+async function pollPlaybackReadiness() {
+  clearTimeout(readinessTimer);
+  if (!document.hidden) await refreshPlaybackReadiness();
+  readinessTimer = setTimeout(pollPlaybackReadiness, 5000);
+}
+
 async function runPlaybackTest() {
+  if (playbackBusy) return;
+  playbackBusy = true;
+  renderPlaybackReadiness();
+  const readiness = await refreshPlaybackReadiness();
+  if (!readiness?.ready || setupFormDirty || lastJobStatus === 'running') {
+    playbackBusy = false;
+    renderPlaybackReadiness();
+    return;
+  }
   const card = document.getElementById('playback-test-card');
   const statusEl = document.getElementById('playback-test-status');
   const iconAuth = document.getElementById('icon-step-auth');
@@ -785,7 +853,7 @@ async function runPlaybackTest() {
     const testPassed = res.status === 'ok' || res.success === true || res.overall_success === true;
     if (testPassed) {
       if (statusEl) {
-        statusEl.textContent = '✓ Playback Confirmed';
+        statusEl.textContent = '✓ Media read verified';
         if (statusEl.style) statusEl.style.color = '#34d399';
       }
       if (iconPlayback) {
@@ -798,7 +866,8 @@ async function runPlaybackTest() {
         videoContainer.style.display = 'block';
         if (videoPreview) {
           videoPreview.src = res.stream_url;
-          videoPreview.onplay = () => {
+          videoPreview.onplaying = () => {
+            if (statusEl) statusEl.textContent = '✓ Browser playback started';
             if (iconPlayback) { iconPlayback.textContent = '✓'; if (iconPlayback.style) iconPlayback.style.color = '#34d399'; }
             if (descPlayback) descPlayback.textContent = 'Confirmed browser video playback.';
           };
@@ -809,7 +878,7 @@ async function runPlaybackTest() {
         }
         if (streamLink) streamLink.href = res.stream_url;
       }
-      notify('Playback verified: Streams and media range reads confirmed!');
+      notify('Streams found and media read verified. Start the preview to check browser playback.');
     } else {
       if (videoContainer && videoContainer.style) videoContainer.style.display = 'none';
       if (statusEl) {
@@ -832,7 +901,7 @@ async function runPlaybackTest() {
     const actionText = document.getElementById('overview-action-text');
     if (actionText) {
       if (res.status === 'ok') {
-        actionText.textContent = 'Playback verified! Launch your web player or install in Stremio to start watching.';
+        actionText.textContent = 'Media read verified. Try the preview or your player to confirm playback.';
       } else if (res.troubleshoot) {
         actionText.textContent = res.troubleshoot;
       }
@@ -849,7 +918,8 @@ async function runPlaybackTest() {
     }
     notify(`Playback test failed: ${err.message}`);
   } finally {
-    testBtns.forEach(btn => { if (btn) btn.disabled = false; });
+    playbackBusy = false;
+    await refreshPlaybackReadiness();
   }
 }
 
@@ -903,6 +973,7 @@ function updateStatusOverview(healthData, integrationsList) {
       dot.style.boxShadow = isHealthy ? '0 0 10px #10b981' : '0 0 10px #f59e0b';
     }
   }
+  renderPlaybackReadiness();
 }
 
 const templateSelectEl = document.getElementById('aiometadata-template');
@@ -1329,3 +1400,7 @@ Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup(),
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);
 });
+
+renderPlaybackReadiness();
+pollPlaybackReadiness();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pollPlaybackReadiness(); });

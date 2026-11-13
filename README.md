@@ -644,3 +644,19 @@ For a management-app installation, update the stack with the latest
 `compose.manager.yml`, set the variable, and redeploy Zilean. A simple container
 restart does not apply changed Compose limits. Check sustained usage with
 `docker stats`; raising the limit to `1.0` allows roughly 100% if indexing is too slow.
+
+### Startup checklist and playback testing
+
+The portal shows a prominent startup checklist and keeps **Test my setup** locked
+while setup runs, settings have unapplied changes, or readiness cannot be checked.
+It checks enabled service connections, the configured streaming manifest, and the
+search/Usenet endpoints used by the selected deployment. Services outside the
+selected Compose profiles are shown as **Optional off** and do not block testing.
+The server checks readiness again before accepting a full playback test.
+
+If a service stays at **Waiting / unavailable**, open setup progress and logs;
+check that the selected Compose profile is running, then retry configuration if
+setup failed. The checklist refreshes automatically while the page is visible.
+Readiness does not mean an initial Zilean data import has completed or that a title
+has streams. The playback test separately verifies credentials, discovery and a
+media read. Browser playback is reported only when the preview starts playing.

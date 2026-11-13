@@ -125,10 +125,15 @@ def probe_integration(item):
     name, host, port, group = item
     env_vars = read_saved_env()
     profiles = {p.strip() for p in env_vars.get("COMPOSE_PROFILES", "scrapers").split(",") if p.strip()}
-    enabled = True
-    if host == "nuvio" and "nuvio" not in profiles and "all" not in profiles:
-        enabled = False
-    elif host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE") == "debrid":
+    service_profiles = {
+        "comet": {"core", "scrapers", "all"},
+        "aiometadata": {"core", "scrapers", "all"},
+        "postersplus": {"core", "scrapers", "all"},
+        "subsense": {"core", "scrapers", "all"},
+        "nuvio": {"nuvio", "all"},
+    }
+    enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))
+    if host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE", "debrid") == "debrid":
         enabled = False
 
     reachable = False
@@ -364,6 +369,55 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
         return False, f"Unexpected server response: {user_resp.strip()}"
     except Exception as e:
         return False, str(e)
+
+
+def playback_readiness():
+    """Fail closed before paid-provider or media requests; never return private URLs."""
+    try:
+        job = setup_snapshot()
+    except Exception:
+        return {"ready": False, "state": "unavailable", "message": "Cannot check setup. Reconnecting…", "checks": []}
+    if job.get("status") not in ("idle", "complete"):
+        failed = job.get("status") == "failed"
+        return {"ready": False, "state": "failed" if failed else "starting",
+                "message": "Setup needs attention. Review setup details and reconnect your stack." if failed else "Setup is still running. Wait before testing playback.", "checks": []}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        integrations = list(pool.map(probe_integration, INTEGRATIONS))
+    checks = [{"name": item["name"], "status": "off" if not item.get("enabled", True) else "ready" if item["reachable"] else "waiting"} for item in integrations]
+    # Port acceptance alone does not mean the selected application path is usable.
+    env = read_saved_env()
+    aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+    targets = [("Configured streaming manifest", aio_url + "/stremio/u/local/manifest.json", True)]
+    profiles = set(env.get("COMPOSE_PROFILES", "scrapers").split(","))
+    if profiles & {"core", "scrapers", "all"}:
+        targets += [("Search broker", "http://search-broker:8091/healthz", False),
+                    ("Comet manifest", "http://comet:8000/manifest.json", True)]
+    if env.get("STREAMING_MODE") in ("usenet", "hybrid") or env.get("USENET_ENABLED") == "true":
+        targets.append(("Usenet backend", "http://infinidysk:3000/healthz", False))
+    def check_http(target):
+        name, url, manifest = target
+        try:
+            with urllib.request.urlopen(url, timeout=3) as response:
+                if manifest:
+                    data = json.load(response)
+                    resources = data.get("resources", [])
+                    names = [r.get("name") if isinstance(r, dict) else r for r in resources]
+                    if not data.get("id") or "stream" not in names:
+                        raise ValueError("Streaming manifest is not ready")
+            return {"name": name, "status": "ready"}
+        except Exception:
+            return {"name": name, "status": "waiting"}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        checks.extend(pool.map(check_http, targets))
+    # Setup may have begun while network probes were running.
+    try:
+        stable = setup_snapshot().get("status") in ("idle", "complete")
+    except Exception:
+        stable = False
+    ready = stable and all(c["status"] in ("ready", "off") for c in checks)
+    return {"ready": ready, "state": "ready" if ready else "waiting",
+            "message": "Services are ready for a playback test. Playback has not been verified." if ready else "Waiting for enabled services and your streaming manifest. Testing is locked until these checks pass.",
+            "checks": checks}
 
 
 def run_playback_test(mode=None, content_id=None, kind=None):
@@ -1086,6 +1140,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 self.json_response({"error": "The manifest is not ready. Complete setup first."}, 503)
             return
+        if path == "/api/playback-readiness":
+            self.json_response(playback_readiness())
+            return
         if path == "/api/integrations":
             with ThreadPoolExecutor(max_workers=10) as pool:
                 integrations = list(pool.map(probe_integration, INTEGRATIONS))
@@ -1342,6 +1399,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
                 if not isinstance(payload, dict):
                     self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
+                    return
+                readiness = playback_readiness()
+                if not readiness["ready"]:
+                    self.json_response({"status": "not_ready", "message": readiness["message"], "readiness": readiness}, 409)
                     return
                 self.json_response(run_playback_test(payload.get("mode"), payload.get("content_id"), payload.get("kind")))
             except (json.JSONDecodeError, TypeError):
