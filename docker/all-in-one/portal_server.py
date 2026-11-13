@@ -148,16 +148,27 @@ def probe_integration(item):
     return {"name": name, "group": group, "reachable": reachable, "enabled": enabled}
 
 
+_ENV_CACHE = {"data": {}, "mtime": 0.0, "source": ""}
+
+
 def read_saved_env():
-    values = {}
     source = ENV_PATH if os.path.isfile(ENV_PATH) else ENV_EXAMPLE_PATH
-    if os.path.isfile(source):
-        with open(source, "r", encoding="utf-8", errors="ignore") as handle:
-            for line in handle:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    values[key.strip()] = value.strip().strip("\"'")
+    if not os.path.isfile(source):
+        return {}
+    try:
+        mtime = os.path.getmtime(source)
+    except OSError:
+        mtime = 0.0
+    if _ENV_CACHE["source"] == source and _ENV_CACHE["mtime"] == mtime and _ENV_CACHE["data"]:
+        return dict(_ENV_CACHE["data"])
+    values = {}
+    with open(source, "r", encoding="utf-8", errors="ignore") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip().strip("\"'")
+    _ENV_CACHE.update(data=dict(values), mtime=mtime, source=source)
     return values
 
 
@@ -698,6 +709,7 @@ def save_env_updates(updates):
             if os.path.exists(temporary):
                 os.unlink(temporary)
         os.environ.update(updates)
+        _ENV_CACHE.update(data={}, mtime=0.0, source="")
 
 def normalize_base_url(url_str):
     if not url_str:
@@ -869,6 +881,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-ancestors 'none';")
         super().end_headers()
 
     def request_origin_is_local(self):
@@ -895,6 +908,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         password = os.environ.get("ADDON_PASSWORD") or read_saved_env().get("ADDON_PASSWORD") or "admin"
         client = self.client_address[0]
         now = time.monotonic()
+        if len(AUTH_FAILURES) > 100:
+            for ip in list(AUTH_FAILURES.keys()):
+                stamps = [s for s in AUTH_FAILURES[ip] if now - s < AUTH_FAILURE_WINDOW]
+                if stamps:
+                    AUTH_FAILURES[ip] = stamps
+                else:
+                    AUTH_FAILURES.pop(ip, None)
         recent = [stamp for stamp in AUTH_FAILURES.get(client, []) if now - stamp < AUTH_FAILURE_WINDOW]
         if len(recent) >= AUTH_FAILURE_LIMIT:
             self.send_error(429, "Too many authentication attempts")
@@ -1770,6 +1790,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
 
     def handle_api_restart(self):
         try:
+            if os.environ.get("COMPOSE_CONTROL_SOCKET"):
+                status, resp = control_request("POST", "/apply")
+                self.send_response(200 if status in (200, 202, 409) else 503)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(resp).encode("utf-8"))
+                return
             subprocess.Popen(["docker", "compose", "restart"], cwd=WEB_ROOT)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1930,6 +1957,18 @@ def run():
     server_address = ("0.0.0.0", PORT)
     httpd = ThreadingHTTPServer(server_address, AppliancePortalHandler)
     print(f"[PORTAL] Serving AIOStreams Appliance Portal on 0.0.0.0:{PORT} from {WEB_ROOT}...", flush=True)
+
+    def shutdown_handler(signum, frame):
+        print(f"[PORTAL] Caught signal {signum}, initiating graceful shutdown...", flush=True)
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    try:
+        import signal
+        signal.signal(signal.SIGTERM, shutdown_handler)
+        signal.signal(signal.SIGINT, shutdown_handler)
+    except Exception:
+        pass
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

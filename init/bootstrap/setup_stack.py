@@ -267,7 +267,7 @@ def is_url_reachable(url, timeout=2.0):
 # ==============================================================================
 # 1. PROWLARR PROVISIONING
 # ==============================================================================
-def wait_for_prowlarr(max_attempts=15, interval=2):
+def wait_for_prowlarr(max_attempts=20, interval=2):
     print(f"[Prowlarr Setup] Waiting for Prowlarr at {PROWLARR_URL}...", flush=True)
     headers = {"X-Api-Key": PROWLARR_API_KEY}
     for attempt in range(1, max_attempts + 1):
@@ -275,7 +275,7 @@ def wait_for_prowlarr(max_attempts=15, interval=2):
         if isinstance(res, dict) and "version" in res:
             print(f"[Prowlarr Setup] ✓ Prowlarr v{res.get('version')} is online! (attempt {attempt})", flush=True)
             return True
-        if attempt == 3 and not is_url_reachable(PROWLARR_URL, timeout=1.0):
+        if attempt >= 8 and not is_url_reachable(PROWLARR_URL, timeout=1.0):
             print("[Prowlarr Setup] ℹ️ Prowlarr is not active in current profile. Skipping...", flush=True)
             return False
         time.sleep(interval)
@@ -497,7 +497,7 @@ def wait_for_postersplus(max_attempts=20, interval=2):
         if not isinstance(res, dict) or res.get("error") != -1 or "detail" in res or "access_key" in str(res):
             print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
             return True
-        if attempt == 3 and not is_url_reachable(POSTERSPLUS_URL, timeout=1.0):
+        if attempt >= 8 and not is_url_reachable(POSTERSPLUS_URL, timeout=1.0):
             print("[Posters+ Setup] ℹ️ Posters+ is not active in current profile. Skipping...", flush=True)
             return False
         time.sleep(interval)
@@ -512,9 +512,6 @@ def wait_for_aiometadata(max_attempts=30, interval=2):
         if isinstance(res, dict) and not res.get("error") and res.get("id"):
             print(f"[AIOMetadata Setup] ✓ AIOMetadata is online and ready! (attempt {attempt})", flush=True)
             return True
-        if attempt == 3 and not is_url_reachable(AIOMETADATA_URL, timeout=1.0):
-            print("[AIOMetadata Setup] ℹ️ AIOMetadata is not active in current profile. Skipping...", flush=True)
-            return False
         time.sleep(interval)
     print("[AIOMetadata Setup] Note: AIOMetadata is still starting up...", flush=True)
     return False

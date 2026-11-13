@@ -52,7 +52,7 @@ function deriveAiometaHost(baseUrl) {
   try {
     const u = new URL(baseUrl);
     const h = u.hostname;
-    if (!h || h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.')) {
+    if (!h || h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h) || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('.home.arpa')) {
       return `${u.protocol}//${h || 'localhost'}:4005`;
     }
     const parts = h.split('.');
@@ -212,7 +212,7 @@ async function loadSettings() {
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;
 
-  const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.');
+  const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.') || /^https?:\/\/(172\.(1[6-9]|2[0-9]|3[0-1])\.|[^\/:]+\.(local|internal|lan|home\.arpa))/.test(baseUrl);
   if (typeof setAccessScope === 'function') setAccessScope(isLocal ? 'local' : 'remote');
 
   const aiomInput = document.getElementById('aiometadata-host');
