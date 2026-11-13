@@ -274,12 +274,12 @@ services:
     restart: unless-stopped
     logging: *default-logging
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
-    cpus: ${ZILEAN_CPU_LIMIT:-1.5}
+    cpus: ${ZILEAN_CPU_LIMIT:-0.5}
     mem_limit: ${ZILEAN_MEM_LIMIT:-3072m}
     deploy:
       resources:
         limits:
-          cpus: '${ZILEAN_CPU_LIMIT:-1.5}'
+          cpus: '${ZILEAN_CPU_LIMIT:-0.5}'
           memory: ${ZILEAN_MEM_LIMIT:-3072m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"

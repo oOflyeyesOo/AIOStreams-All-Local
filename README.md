@@ -624,3 +624,23 @@ If you ever want to generate a custom, stripped-down Compose setup with selected
 
 Current validation: 123 Python regression tests, twelve browser checks, image-only startup, portal apply, fixture upgrade/rollback and timed movie/episode routing tests. Earlier movie/episode decode evidence is in [release validation](docs/RELEASE-VALIDATION.md); current [routing validation](docs/ROUTING-VALIDATION.md) distinguishes media reads from decoding and public-address checks.
 
+
+### Lowering Zilean background CPU usage
+
+Zilean defaults to `ZILEAN_CPU_LIMIT=0.5`, a total allowance of half one logical
+CPU (approximately 50% in Docker stats). It can run on any available CPU, but
+Docker does not guarantee an even spread across cores. Background imports will
+take longer. This limit applies to Zilean only; PostgreSQL has a separate budget.
+
+Existing installations should set `ZILEAN_CPU_LIMIT=0.5` in `.env` or the Docker
+management app's environment editor; an existing value overrides the new default.
+For a source Compose installation, apply the change with:
+
+```sh
+docker compose --profile scrapers up -d --no-deps --force-recreate zilean
+```
+
+For a management-app installation, update the stack with the latest
+`compose.manager.yml`, set the variable, and redeploy Zilean. A simple container
+restart does not apply changed Compose limits. Check sustained usage with
+`docker stats`; raising the limit to `1.0` allows roughly 100% if indexing is too slow.
