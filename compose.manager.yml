@@ -486,7 +486,8 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - curl -fsSL http://localhost:8191/docs > /dev/null || curl -fsSL http://localhost:8191/health > /dev/null || exit 1
+      - curl -fsSL http://localhost:8191/ > /dev/null || curl -fsSL http://localhost:8191/docs > /dev/null || curl -fsSL http://localhost:8191/health
+        > /dev/null || exit 1
       interval: 15s
       timeout: 5s
       retries: 5

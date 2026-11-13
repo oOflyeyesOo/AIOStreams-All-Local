@@ -496,11 +496,14 @@ def run_playback_test(mode=None, content_id=None, kind=None):
 
     # Step 3: Media Range Read & Codec Probe
     media_step = {"name": "Media Range Read & Codec Probe", "status": "pending", "detail": ""}
+    client_stream_url = None
     if overall_success and resolved_candidate and resolved_candidate.get("url"):
-        target_url = resolved_candidate["url"]
+        client_stream_url = resolved_candidate["url"]
+        target_url = client_stream_url
         parsed = urllib.parse.urlsplit(target_url)
         ports = {None: ("aiostreams", 3000), 3000: ("aiostreams", 3000), 3001: ("aiostreams", 3000), 8080: ("stremthru", 8080)}
-        if parsed.hostname in ("localhost", "127.0.0.1", "aio.yourdomain.com") and parsed.port in ports:
+        base_host = urllib.parse.urlsplit(env_vars.get("BASE_URL", "")).hostname
+        if (parsed.hostname in ("localhost", "127.0.0.1", "aio.yourdomain.com", base_host) or parsed.port in (3000, 3001)) and parsed.port in ports:
             h, pt = ports[parsed.port]
             target_url = urllib.parse.urlunsplit(("http", f"{h}:{pt}", parsed.path, parsed.query, ""))
 
@@ -547,7 +550,7 @@ def run_playback_test(mode=None, content_id=None, kind=None):
         "mode": mode,
         "steps": steps,
         "steps_dict": steps_dict,
-        "stream_url": target_url if (overall_success and target_url) else (resolved_candidate.get("url") if overall_success and resolved_candidate else None),
+        "stream_url": client_stream_url if overall_success else None,
         "stream_title": stream_title if resolved_candidate else None,
         "content_id": sample_id,
         "kind": sample_kind,
