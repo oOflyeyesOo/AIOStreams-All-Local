@@ -22,6 +22,16 @@ class BootstrapTests(unittest.TestCase):
         requests.start()
         self.addCleanup(requests.stop)
 
+    def test_core_startup_failure_does_not_modify_profiles_or_indexers(self):
+        with patch.object(bootstrap, "wait_for_aiostreams", return_value=False), patch.object(bootstrap, "setup_aiostreams_default_user") as configure, patch.object(bootstrap, "wait_for_prowlarr") as indexers:
+            self.assertEqual(bootstrap.main(), 1)
+            configure.assert_not_called()
+            indexers.assert_not_called()
+
+    def test_error_status_is_not_accepted_as_aiostreams_readiness(self):
+        with patch.object(bootstrap, "make_request", return_value={"status": "error", "error": -1}), patch.object(bootstrap.time, "sleep"):
+            self.assertFalse(bootstrap.wait_for_aiostreams(max_attempts=1, interval=0))
+
     def test_update_env_file_replaces_existing_key_without_duplicates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             env_path = Path(temp_dir) / ".env"

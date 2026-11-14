@@ -41,7 +41,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 PORT = int(os.environ.get("PORTAL_PORT", "8088"))
 repo_root_cand = str(Path(__file__).resolve().parents[2])
 WEB_ROOT = os.environ.get("WEB_ROOT") or (repo_root_cand if os.path.isfile(os.path.join(repo_root_cand, "docker-compose.yml")) else "/app")
-ENV_PATH = os.path.join(WEB_ROOT, ".env")
+ENV_PATH = os.path.realpath(os.path.join(WEB_ROOT, ".env"))
 ENV_EXAMPLE_PATH = os.path.join(WEB_ROOT, ".env.example")
 APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
 if WEB_ROOT not in sys.path:
@@ -72,6 +72,8 @@ def control_request(method, path):
 
 
 def setup_snapshot():
+    if os.environ.get("AIO_STARTUP_ONLY") == "true":
+        return {"status": "running", "step": "Starting the internal container engine and services", "logs": ["The appliance is starting. Setup becomes available when the network-connected portal is ready. If this persists, check the appliance container logs."], "exit_code": None}
     if os.environ.get("COMPOSE_CONTROL_SOCKET"):
         return control_request("GET", "/status")[1]
     with SETUP_LOCK:
@@ -79,6 +81,8 @@ def setup_snapshot():
 
 
 def launch_setup():
+    if os.environ.get("AIO_STARTUP_ONLY") == "true":
+        raise RuntimeError("Appliance startup is not finished. Setup must run from the internal network-connected portal.")
     if os.environ.get("COMPOSE_CONTROL_SOCKET"):
         status, response = control_request("POST", "/apply")
         if status not in (202, 409):
@@ -1336,6 +1340,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if os.environ.get("AIO_STARTUP_ONLY") == "true":
+            self.json_response({"error": "Appliance is still starting. Wait for the setup portal before saving settings."}, 503)
+            return
         url_parts = urllib.parse.urlparse(self.path)
         path = url_parts.path
         if not self.authorize():

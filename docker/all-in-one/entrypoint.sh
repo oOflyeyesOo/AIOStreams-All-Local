@@ -8,6 +8,8 @@ echo "=================================================================="
 # Disable TLS generation inside dind to prevent "sed: write error" in LXC/nested environments
 export DOCKER_TLS_CERTDIR=""
 export PYTHONUNBUFFERED=1
+# The early portal is status-only. The functional portal runs on the Compose network.
+export AIO_STARTUP_ONLY=true
 
 # 1. Setup persistent storage & runtime directories
 mkdir -p /data/aiostreams \
@@ -140,89 +142,53 @@ done
 # 5. Handle stack startup if daemon is ready
 if [ "$daemon_ready" = "true" ]; then
     cd /app
-    if [ ! -f .env ] && [ -f .env.example ]; then
-        echo "[3/4] Initializing .env configuration from template..."
-        cp .env.example .env
-    fi
+    # Preserve portal settings across image replacement; import explicit runtime
+    # settings safely, including encoded NNTP credentials.
+    python3 /app/docker/all-in-one/prepare_env.py
 
-    # Inject runtime environment variables if passed via -e or --env-file
-    if [ -n "$BASE_URL" ]; then
-        sed -i "s|^BASE_URL=.*|BASE_URL=${BASE_URL}|" .env
-    fi
-    if [ -n "$TMDB_API_KEY" ]; then
-        sed -i "s|^TMDB_API_KEY=.*|TMDB_API_KEY=${TMDB_API_KEY}|" .env
-    fi
-    if [ -n "$REALDEBRID_API_KEY" ]; then
-        sed -i "s|^REALDEBRID_API_KEY=.*|REALDEBRID_API_KEY=${REALDEBRID_API_KEY}|" .env
-    fi
-    if [ -n "$PREMIUMIZE_API_KEY" ]; then
-        sed -i "s|^PREMIUMIZE_API_KEY=.*|PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}|" .env
-    fi
-    if [ -n "$ALLDEBRID_API_KEY" ]; then
-        sed -i "s|^ALLDEBRID_API_KEY=.*|ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}|" .env
-    fi
-    if [ -n "$TORBOX_API_KEY" ]; then
-        sed -i "s|^TORBOX_API_KEY=.*|TORBOX_API_KEY=${TORBOX_API_KEY}|" .env
-    fi
-    if [ -n "$DEBRIDLINK_API_KEY" ]; then
-        sed -i "s|^DEBRIDLINK_API_KEY=.*|DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}|" .env
-    fi
-    if [ -n "$TVDB_API_KEY" ]; then
-        sed -i "s|^TVDB_API_KEY=.*|TVDB_API_KEY=${TVDB_API_KEY}|" .env
-    fi
-    if [ -n "$FANART_API_KEY" ]; then
-        sed -i "s|^FANART_API_KEY=.*|FANART_API_KEY=${FANART_API_KEY}|" .env
-    fi
-    if [ -n "$RPDB_API_KEY" ]; then
-        sed -i "s|^RPDB_API_KEY=.*|RPDB_API_KEY=${RPDB_API_KEY}|" .env
-    fi
-    if [ -n "$MDBLIST_API_KEY" ]; then
-        sed -i "s|^MDBLIST_API_KEY=.*|MDBLIST_API_KEY=${MDBLIST_API_KEY}|" .env
-    fi
-    if [ -n "$GEMINI_API_KEY" ]; then
-        sed -i "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${GEMINI_API_KEY}|" .env
-    fi
-    if [ -n "$ADDON_PASSWORD" ]; then
-        sed -i "s|^ADDON_PASSWORD=.*|ADDON_PASSWORD=${ADDON_PASSWORD}|" .env
-    fi
-    if [ -n "$SECRET_KEY" ]; then
-        sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${SECRET_KEY}|" .env
-    fi
+    # Build the patched services before starting them; do not silently use an
+    # upstream image in place of a service with a local build definition.
+    docker compose build
 
-    # Clean any stale or orphaned containers inside appliance from previous restarts
-    echo "      Clearing any stale containers and dead port allocations..."
-    docker compose down --remove-orphans 2>/dev/null || true
-    docker rm -f $(docker ps -aq) 2>/dev/null || true
-
-    # Start compose stack (exclude portal container since portal_server.py is already active on port 8088)
-    echo "[4/4] Starting all streaming services and local scrapers..."
-    docker compose up -d --scale portal=0 --remove-orphans
-
-    # Auto-provision stack (Prowlarr trackers) in background
-    if [ -f /app/init/bootstrap/setup_stack.py ]; then
-        python3 -u /app/init/bootstrap/setup_stack.py > /var/log/stack_setup.log 2>&1 &
-    elif [ -f /app/init/prowlarr/setup_prowlarr.py ]; then
-        python3 -u /app/init/prowlarr/setup_prowlarr.py > /var/log/prowlarr_setup.log 2>&1 &
+    # Stop only the temporary host-side portal before binding the real portal.
+    # Never launch setup_stack.py on this host: Compose DNS is container-local.
+    kill "$PORTAL_PID" 2>/dev/null || true
+    wait "$PORTAL_PID" 2>/dev/null || true
+    PORTAL_PID=""
+    echo "[4/4] Starting services and the network-connected setup portal..."
+    if docker compose up -d --scale stack-bootstrap=0 --wait --wait-timeout 600; then
+        # Use the same controller action as the setup button. It applies the
+        # saved environment and runs bootstrap inside the service network.
+        if ! docker compose exec -T portal python3 -c 'import importlib.util; s=importlib.util.spec_from_file_location("portal", "/app/docker/all-in-one/portal_server.py"); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); p.launch_setup()'; then
+            echo "[!] Automatic setup could not start. Open the portal and choose Connect my stack."
+        fi
+    else
+        echo "[ERROR] Service startup failed. Inspect inner Compose status and logs."
+        # Keep a reachable status page if the real portal could not start.
+        if ! curl -fsS http://127.0.0.1:8088/healthz >/dev/null 2>&1; then
+            python3 -u /app/docker/all-in-one/portal_server.py > /var/log/portal_server.log 2>&1 &
+            PORTAL_PID=$!
+        fi
     fi
 
     echo ""
     echo "=================================================================="
-    echo " [✓] All services active and running inside All-In-One container! "
+    echo " Appliance started. Check portal readiness and setup progress. "
     echo "=================================================================="
-    echo " • Appliance Web Portal:   http://localhost:8088"
-    echo " • AIOStreams Portal:     http://localhost:3001"
-    echo " • Stremio Web Player:    http://localhost:8082"
-    echo " • Nuvio Web Player:      http://localhost:8085"
-    echo " • SlickSync Hub:         http://localhost:8086"
-    echo " • AIOMetadata:           http://localhost:4005"
-    echo " • Posters+:              http://localhost:9039"
-    echo " • SubSense Subtitles:    http://localhost:3100"
-    echo " • InfiniDysk Usenet:     http://localhost:3005"
-    echo " • Comet Scraper:         http://localhost:8000"
-    echo " • Anime Kitsu:           http://localhost:7005"
-    echo " • Prowlarr Indexers:     http://localhost:9696"
-    echo " • Zilean Hash Cache:     http://localhost:8181"
-    echo " • StremThru Proxy UI:    http://localhost:8080"
+    echo " â€¢ Appliance Web Portal:   http://localhost:8088"
+    echo " â€¢ AIOStreams Portal:     http://localhost:3001"
+    echo " â€¢ Stremio Web Player:    http://localhost:8082"
+    echo " â€¢ Nuvio Web Player:      http://localhost:8085"
+    echo " â€¢ SlickSync Hub:         http://localhost:8086"
+    echo " â€¢ AIOMetadata:           http://localhost:4005"
+    echo " â€¢ Posters+:              http://localhost:9039"
+    echo " â€¢ SubSense Subtitles:    http://localhost:3100"
+    echo " â€¢ InfiniDysk Usenet:     http://localhost:3005"
+    echo " â€¢ Comet Scraper:         http://localhost:8000"
+    echo " â€¢ Anime Kitsu:           http://localhost:7005"
+    echo " â€¢ Prowlarr Indexers:     http://localhost:9696"
+    echo " â€¢ Zilean Hash Cache:     http://localhost:8181"
+    echo " â€¢ StremThru Proxy UI:    http://localhost:8080"
     echo "=================================================================="
     echo ""
 
@@ -232,13 +198,14 @@ if [ "$daemon_ready" = "true" ]; then
         docker compose down
         [ -n "$PORTAL_PID" ] && kill $PORTAL_PID 2>/dev/null || true
         [ -n "$DOCKERD_PID" ] && kill $DOCKERD_PID 2>/dev/null || true
-        echo "[✓] All services halted."
+        echo "[âœ“] All services halted."
         exit 0
     }
     trap cleanup SIGTERM SIGINT
 
     # Stream aggregator logs to container stdout
-    docker compose logs -f aiostreams
+    # Keep the supervisor alive even if an application exits or logs disconnect.
+    while true; do sleep 5 & wait $!; done
 else
     echo "=================================================================="
     echo " [!] Internal container engine is still initializing or needs     "

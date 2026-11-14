@@ -373,7 +373,7 @@ async function pollSetup() {
     }
     lastJobStatus = job.status;
     renderPlaybackReadiness();
-    if (running) pollTimer = setTimeout(pollSetup,1600);
+    if (running || job.status === 'idle') pollTimer = setTimeout(pollSetup,running ? 1600 : 5000);
   } catch(error) {
     if (lastJobStatus === 'running' && ++reconnectAttempts < 90) {
       setProgress('Services are restarting','Reconnecting to the setup controller…',true);

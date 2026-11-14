@@ -17,6 +17,15 @@ spec.loader.exec_module(portal)
 
 
 class PortalTests(unittest.TestCase):
+    def test_appliance_startup_portal_cannot_save_or_launch_host_bootstrap(self):
+        with patch.dict(os.environ, {"AIO_STARTUP_ONLY": "true"}), patch.object(portal.subprocess, "Popen") as start:
+            self.assertEqual(portal.setup_snapshot()["status"], "running")
+            with self.assertRaisesRegex(RuntimeError, "internal network"):
+                portal.launch_setup()
+            status, _, _ = self.request('/api/save-env', 'POST', {'TMDB_API_KEY': 'fixture'}, auth=True)
+            self.assertEqual(status, 503)
+            start.assert_not_called()
+
     def test_usenet_password_is_saved_privately_and_not_returned_by_env(self):
         status,_,_=self.request('/api/save-env','POST',{'USENET_ENABLED':'true','USENET_HOST':'news.fixture','USENET_USER':'fixture-user','USENET_PASS':'fixture$private\'"'},auth=True)
         self.assertEqual(status,200)

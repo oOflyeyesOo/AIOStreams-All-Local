@@ -68,6 +68,7 @@ services:
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       - ./:/workspace:ro
+      - ./data:/data:ro
       - control-socket:/runtime
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/runtime/control.sock'); s.close()"]
@@ -88,6 +89,7 @@ services:
       - "8088:8088"
     volumes:
       - ./:/app
+      - ./data:/data
       - control-socket:/runtime
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     working_dir: /app
@@ -388,6 +390,7 @@ services:
       - ./data/stremio-web:/data/stremio-web
       - ./data/aiostreams:/data/aiostreams
       - ./:/app
+      - ./data:/data
       - ./templates/builtin:/templates/builtin:ro
       - ./templates/aiometadata-configs:/templates/aiometadata-configs:ro
     environment:

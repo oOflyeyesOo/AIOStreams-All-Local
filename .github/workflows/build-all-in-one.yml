@@ -43,12 +43,13 @@ jobs:
         id: repo-owner
         run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Build and Push All-In-One Image
+      - name: Build All-In-One Image for validation
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/all-in-one/Dockerfile
-          push: true
+          push: false
+          load: true
           tags: |
             ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:latest
             ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:${{ github.sha }}
@@ -56,3 +57,12 @@ jobs:
             org.opencontainers.image.title=AIOStreams All-In-One Appliance
             org.opencontainers.image.description=100% Self-Hosted Stremio Backend Stack in a Single Container
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Test docker-run appliance networking and provisioning
+        timeout-minutes: 20
+        run: python3 tests/check_appliance.py ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:${{ github.sha }}
+
+      - name: Publish tested appliance
+        run: |
+          docker push ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:${{ github.sha }}
+          docker push ghcr.io/${{ steps.repo-owner.outputs.OWNER }}/aiostreams-aio:latest

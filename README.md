@@ -660,3 +660,19 @@ setup failed. The checklist refreshes automatically while the page is visible.
 Readiness does not mean an initial Zilean data import has completed or that a title
 has streams. The playback test separately verifies credentials, discovery and a
 media read. Browser playback is reported only when the preview starts playing.
+
+### Appliance setup and Docker networking
+
+The `docker run` appliance starts a temporary status-only portal while its inner
+Docker engine starts. The functional portal, controller and bootstrapper then run
+on the same Compose network as AIOStreams. Wait for the startup page to reconnect
+before entering keys. Setup applies saved settings to containers before provisioning
+profiles and indexers; a failed AIOStreams readiness check stops provisioning.
+
+Saved settings live in `/data/.env` with the rest of the appliance data. Reuse your
+existing `/data` volume when replacing the image. For installations created before
+this persistence fix, preserve `/app/.env` from the existing container before
+replacing it; a data volume alone may not contain those older saved settings.
+The appliance release check uses disposable data to exercise actual `docker run`
+networking and controller provisioning before publishing the image. Paid-provider
+authorization and real NNTP downloads still require testing on your installation.

@@ -71,6 +71,7 @@ def update_env_file(key, value, candidates=None):
         "/data/.env"
     ]
     for target in candidates:
+        target = os.path.realpath(target)
         temporary = None
         try:
             target_dir = os.path.dirname(target)
@@ -276,7 +277,7 @@ def wait_for_prowlarr(max_attempts=20, interval=2):
             print(f"[Prowlarr Setup] ✓ Prowlarr v{res.get('version')} is online! (attempt {attempt})", flush=True)
             return True
         if attempt >= 8 and not is_url_reachable(PROWLARR_URL, timeout=1.0):
-            print("[Prowlarr Setup] ℹ️ Prowlarr is not active in current profile. Skipping...", flush=True)
+            print("[Prowlarr Setup] ℹ️ Prowlarr is unreachable. Check its container, selected Compose profile, and Docker network. Indexer setup was not completed.", flush=True)
             return False
         time.sleep(interval)
     print("[Prowlarr Setup] ⚠️ Timed out waiting for Prowlarr. Continuing...", flush=True)
@@ -498,7 +499,7 @@ def wait_for_postersplus(max_attempts=20, interval=2):
             print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
             return True
         if attempt >= 8 and not is_url_reachable(POSTERSPLUS_URL, timeout=1.0):
-            print("[Posters+ Setup] ℹ️ Posters+ is not active in current profile. Skipping...", flush=True)
+            print("[Posters+ Setup] ℹ️ Posters+ is unreachable. Check its container, selected Compose profile, and Docker network.", flush=True)
             return False
         time.sleep(interval)
     print("[Posters+ Setup] Note: Posters+ is still starting up...", flush=True)
@@ -682,11 +683,11 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     print(f"[AIOStreams Setup] Waiting for AIOStreams at {AIOSTREAMS_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
         res = make_request(f"{AIOSTREAMS_URL}/api/v1/status")
-        if isinstance(res, dict) and ("status" in res or "version" in res or res.get("success")):
+        if isinstance(res, dict) and not res.get("error") and ("status" in res or "version" in res or res.get("success")):
             print(f"[AIOStreams Setup] ✓ AIOStreams is online and ready! (attempt {attempt})", flush=True)
             return True
         time.sleep(interval)
-    print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams status. Trying user endpoint anyway...", flush=True)
+    print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams. Provisioning is blocked; check the container and Docker network before retrying.", flush=True)
     return False
 
 def build_default_config(aiometadata_manifest=None, *, probe_services=True):
@@ -1048,7 +1049,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 print("[AIOStreams Setup] ✓ Comet (Local) is online and active.", flush=True)
                 validated_presets.append(p)
             else:
-                print("[AIOStreams Setup] ℹ️ Comet not active in current profile; preset disabled.", flush=True)
+                print("[AIOStreams Setup] ℹ️ Comet is unreachable; preset omitted. Check its container and Docker network.", flush=True)
         elif ptype == "stremthruStore":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
@@ -1061,7 +1062,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                 validated_presets.append(p)
             else:
                 p["enabled"] = False
-                print("[AIOStreams Setup] ℹ️ StremThru Store not active in current profile; preset disabled.", flush=True)
+                print("[AIOStreams Setup] ℹ️ StremThru Store is unreachable; preset omitted. Check its container and Docker network.", flush=True)
                 validated_presets.append(p)
         elif ptype in ("knaben", "stremthruTorz"):
             p["enabled"] = False
@@ -1118,7 +1119,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
                     print(f"[AIOStreams Setup] ✓ SubSense Subtitles (Local) is online and active.", flush=True)
                     validated_presets.append(p)
                 else:
-                    print(f"[AIOStreams Setup] ℹ️ SubSense not reachable in current profile; omitting from active presets.", flush=True)
+                    print(f"[AIOStreams Setup] ℹ️ SubSense is unreachable; omitting from active presets. Check its container and Docker network.", flush=True)
             elif pid == "anime-kitsu-local":
                 opts["resources"] = ["catalog", "meta"]
                 murl = opts.get("manifestUrl", "http://anime-kitsu:7000/manifest.json")
@@ -1647,6 +1648,11 @@ def main():
     print("  AIOStreams Stack Bootstrapper & Auto-Provisioner ", flush=True)
     print("==================================================", flush=True)
 
+    # Do not rewrite a saved profile when core networking/startup is broken.
+    if not wait_for_aiostreams():
+        print("[Setup] ERROR: AIOStreams is unavailable. No profile changes were attempted. Run stack-bootstrap on the same Compose network as aiostreams.", flush=True)
+        return 1
+
     # 1. Prowlarr
     if wait_for_prowlarr():
         try:
@@ -1675,7 +1681,6 @@ def main():
     # 5. AIOStreams Default User & Addon Configuration (Tamtaro All-Local)
     config_info = {}
     try:
-        wait_for_aiostreams()
         config_info = setup_aiostreams_default_user(aiometadata_manifest=aiometadata_manifest)
     except Exception as e:
         print(f"[AIOStreams Setup] Error: {e}", flush=True)
