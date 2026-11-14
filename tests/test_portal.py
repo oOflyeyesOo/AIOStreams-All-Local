@@ -404,6 +404,12 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data["aiometadataConfigure"], "http://192.168.1.20:4005/configure")
         self.assertIsNone(data["aiometadataManifest"])
 
+    def test_service_ui_links_respect_port_and_proxy_overrides(self):
+        env = {"PORT_SUBSENSE": "13100", "UI_PROWLARR_URL": "https://prowlarr.example.net"}
+        self.assertEqual(portal.service_ui_url("subsense", "nas.lan:8088", env), "http://nas.lan:13100/configure")
+        self.assertEqual(portal.service_ui_url("prowlarr", "nas.lan:8088", env), "https://prowlarr.example.net")
+        self.assertIsNone(portal.service_ui_url("zilean", "nas.lan:8088", env))
+
     def test_failed_replace_preserves_original(self):
         before = (self.root / ".env").read_bytes()
         with patch.object(portal.os, "replace", side_effect=OSError("disk failure")):

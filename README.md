@@ -262,6 +262,21 @@ created by setup. The separate **AIOStreams admin dashboard** manages the
 instance itself. Rerunning portal setup can reapply the stack's preset settings,
 so export a copy of your manual configuration before rerunning it.
 
+The service cards also have **Open UI** shortcuts for services that ship a
+browser interface. A shortcut uses the service's published port on the portal
+host. For a reverse proxy, set the complete URL in the Compose project's
+`.env`, for example `UI_PROWLARR_URL=https://prowlarr.example.net`.
+
+For the appliance, the default `docker run` example publishes AIOStreams,
+AIOMetadata, and the web players. To open another UI, publish its port when
+creating the container and set `-e INTERNAL_BIND_IP=0.0.0.0` so Docker can
+forward to the inner service. For example, `-p 192.168.1.10:9696:9696` enables
+Prowlarr on the server's trusted LAN address. Use your actual server IP.
+Other UI ports include Comet `8000`, InfiniDysk `3005`, SubSense `3100`,
+Posters+ `9039`, StremThru `8080`, Anime Kitsu `7005`, and SlickSync `8086`.
+For loopback-only access from another machine, forward the published ports
+and the portal over SSH, then open the forwarded portal at localhost.
+
 
 
 After entering provider and metadata keys, use **Download optimized profile

@@ -28,6 +28,8 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"   # Prowlarr Indexer Manager
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8080:8080"   # StremThru Debrid Proxy
     environment:
+      # The outer port mappings above control host access to the nested services.
+      - INTERNAL_BIND_IP=0.0.0.0
       - BASE_URL=${BASE_URL:-https://aio.yourdomain.com}
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-https://aiometa.yourdomain.com}
       - TMDB_API_KEY=${TMDB_API_KEY:-}

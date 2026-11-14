@@ -59,6 +59,7 @@ input, select, button { font-size:16px; }
 .field-label, .field-grid .field-label, .mode-pill-title { font-size:16px; }
 .field-help, .section-description, .save-note, .under-button, .mode-pill-desc,
 .optional-setup p, .progress-panel p, .service-card small { color:#b8c5c9; }
+.service-ui-link { display:inline-block; margin-top:8px; color:#bcd6b8; font-weight:600; text-decoration:underline; text-underline-offset:3px; }
 .primary-button, .light-button, .mini-action-btn, .text-button, .install-action-btn { min-height:44px; font-size:16px; }
 .test-playback-btn { color:#fff; }
 button:disabled { cursor:not-allowed; opacity:.6; }

@@ -331,7 +331,18 @@ async function refreshServices() {
     status.textContent=service.enabled===false?'Off':'';
     status.title = service.enabled === false ? 'Optional off' : service.reachable ? 'Accepting connections' : 'Not reachable yet';
     status.setAttribute('aria-label',status.title);
-    content.append(name,group); card.append(icon,content,status); grid.append(card);
+    content.append(name, group);
+    if (service.uiUrl) {
+      const link = document.createElement('a');
+      link.className = 'service-ui-link';
+      link.href = service.uiUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open UI ↗';
+      link.setAttribute('aria-label', `Open ${service.name} UI`);
+      content.append(link);
+    }
+    card.append(icon, content, status); grid.append(card);
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;

@@ -123,6 +123,12 @@ HOST_PORT_MAP = {
     "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "stremio-web": 8082,
     "nuvio": 8085, "slicksync": 8086
 }
+SERVICE_UI_PATHS = {
+    "aiostreams": "/stremio/configure", "aiometadata": "/configure",
+    "comet": "/configure", "prowlarr": "/", "infinidysk": "/",
+    "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
+    "anime-kitsu": "/", "stremio-web": "/", "nuvio": "/", "slicksync": "/",
+}
 
 def probe_integration(item):
     import socket
@@ -867,6 +873,23 @@ def dashboard_origin(configured, request_host, port, default_port, public_fallba
     return f"http://{host}:{port}"
 
 
+def service_ui_url(service, request_host, env):
+    path = SERVICE_UI_PATHS.get(service)
+    if path is None:
+        return None
+    suffix = service.upper().replace("-", "_")
+    override = env.get(f"UI_{suffix}_URL") or os.environ.get(f"UI_{suffix}_URL")
+    if override:
+        try:
+            return normalize_base_url(override)
+        except ValueError:
+            pass
+    address_key = {"aiostreams": "BASE_URL", "aiometadata": "AIOMETADATA_HOST"}.get(service)
+    address = (env.get(address_key) or os.environ.get(address_key)) if address_key else None
+    port = env.get(f"PORT_{suffix}") or os.environ.get(f"PORT_{suffix}")
+    return dashboard_origin(address, request_host, port, HOST_PORT_MAP[service]) + path
+
+
 def public_service_urls(base_url):
     parsed = urllib.parse.urlsplit(base_url)
     host = parsed.hostname or "localhost"
@@ -1192,6 +1215,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/integrations":
             with ThreadPoolExecutor(max_workers=10) as pool:
                 integrations = list(pool.map(probe_integration, INTEGRATIONS))
+            env = read_saved_env()
+            for item, (_, service, _, _) in zip(integrations, INTEGRATIONS):
+                if item.get("enabled", True):
+                    ui_url = service_ui_url(service, self.headers.get("Host", "localhost"), env)
+                    if ui_url:
+                        item["uiUrl"] = ui_url
             self.json_response({"integrations": integrations})
             return
         if path == "/api/maintenance":
