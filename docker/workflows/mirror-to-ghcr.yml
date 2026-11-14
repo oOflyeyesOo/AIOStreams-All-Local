@@ -33,7 +33,7 @@ jobs:
             target: "aiometadata:latest"
           - source: "nepiraw/stremio-subsense:latest"
             target: "subsense:latest"
-          - source: "orochibraru/nuvio-web:latest"
+          - source: "zedensix/nuvio-web:latest"
             target: "nuvio:latest"
           - source: "ghcr.io/slicknsliding/slicksync:private"
             target: "slicksync:latest"

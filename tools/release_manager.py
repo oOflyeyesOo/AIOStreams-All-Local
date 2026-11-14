@@ -53,12 +53,34 @@ def command(args, *, timeout=900, data=None, env=None):
 
 def resolve_image(image):
     if PIN.fullmatch(image):return image
-    output=command(['docker','buildx','imagetools','inspect',image],timeout=120)
-    match=re.search(r'^Digest:\s+(sha256:[0-9a-f]{64})',output,re.M)
-    if not match:raise RuntimeError('Registry did not return an immutable digest')
-    repository=image.split('@',1)[0]
-    if ':' in repository.rsplit('/',1)[-1]:repository=repository.rsplit(':',1)[0]
-    return repository+'@'+match[1]
+    # Never echo arbitrary registry output, URLs or credentials into release logs.
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/:+-]*', image):
+        raise ValueError('Invalid registry image reference')
+    reason = 'registry lookup failed'
+    for attempt in range(3):
+        try:
+            result = subprocess.run(['docker','buildx','imagetools','inspect',image],
+                                    capture_output=True, text=True, timeout=120)
+            if result.returncode == 0:
+                match = re.search(r'^Digest:\s+(sha256:[0-9a-f]{64})', result.stdout, re.M)
+                if not match:
+                    raise RuntimeError(f'No immutable digest returned for {image}')
+                repository = image.split('@',1)[0]
+                if ':' in repository.rsplit('/',1)[-1]:repository=repository.rsplit(':',1)[0]
+                return repository+'@'+match[1]
+            detail = (result.stderr or '').lower()
+            if any(word in detail for word in ('unauthorized', 'denied', 'insufficient_scope', 'forbidden')):
+                reason = 'registry access denied; verify the repository name and registry permissions'
+                break
+            if any(word in detail for word in ('not found', 'manifest unknown', 'name unknown')):
+                reason = 'image or tag not found; verify the upstream image reference'
+                break
+            reason = 'registry request failed (possibly unavailable or rate limited)'
+        except subprocess.TimeoutExpired:
+            reason = 'registry request timed out'
+        if attempt < 2:time.sleep(2 ** (attempt + 1))
+    raise RuntimeError(f'Cannot resolve {image}: {reason}')
+
 
 def load_compose(path):
     try:
@@ -92,7 +114,10 @@ def make_bundle(compose_path,release,output,resolver=resolve_image):
     for name,service in resolved['services'].items():
         if 'image' not in service:raise ValueError('Release bundles cannot contain build-only services')
         ref=service['image']
-        if ref not in cache:cache[ref]=resolver(ref)
+        if ref not in cache:
+            # Service name identifies the failure without printing environment values.
+            print(f'Resolving image for service {name}', flush=True)
+            cache[ref]=resolver(ref)
         images[name]=cache[ref]
     lock=validate_lock({'format':'aio-release-v1','release':release,'images':images})
     for name,image in images.items():source['services'][name]['image']=image

@@ -9,6 +9,7 @@ on:
       - 'docker/**'
       - 'tools/**'
       - 'init/**'
+      - 'tests/**'
       - 'templates/**'
       - 'assets/**'
       - 'index.html'

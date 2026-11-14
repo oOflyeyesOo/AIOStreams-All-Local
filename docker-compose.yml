@@ -95,7 +95,7 @@ services:
     working_dir: /app
     command: sh -c "apk add --no-cache docker-cli >/dev/null 2>&1; exec python3 -u /app/docker/all-in-one/portal_server.py"
     environment:
-      - AIO_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
+      - AIO_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
       - COMPOSE_CONTROL_SOCKET=/runtime/control.sock
       - AIOSTREAMS_URL=http://aiostreams:3000
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
@@ -186,15 +186,15 @@ services:
       - ENCRYPT_STREMTHRU_URLS=false
 
       # --- Metadata & Debrid Auto-Configuration ---
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - FANART_API_KEY=${FANART_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
+      - FANART_API_KEY=${FANART_API_KEY:-}
       - FETCH_TRAKT_ALIASES=true
       - EASYNEWS_USER=${EASYNEWS_USER:-}
       - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
-      - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY}\nrealdebrid.apiKey=${REALDEBRID_API_KEY}\nalldebrid.apiKey=${ALLDEBRID_API_KEY}\ntorbox.apiKey=${TORBOX_API_KEY}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
+      - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY:-}\nrealdebrid.apiKey=${REALDEBRID_API_KEY:-}\nalldebrid.apiKey=${ALLDEBRID_API_KEY:-}\ntorbox.apiKey=${TORBOX_API_KEY:-}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY:-}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
 
       # --- Community Templates & SEL Auto-Sync (Tam-Taro & Vidhin05) ---
       - TEMPLATE_URLS=${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}
@@ -260,7 +260,7 @@ services:
       - SCRAPE_ANIMETOSHO=false
       - ZILEAN_URL=http://zilean:8181
       - STREMTHRU_URL=http://stremthru:8080
-      - TMDB_API_KEY=${TMDB_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
     volumes:
       - ./data/comet:/app/data
     networks:
@@ -409,32 +409,32 @@ services:
       - STREMTHRU_URL=http://stremthru:8080
       - BASE_URL=${BASE_URL:-http://localhost:3001}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
-      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY}
-      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY}
-      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY}
-      - TORBOX_API_KEY=${TORBOX_API_KEY}
-      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY}
-      - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY}
-      - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY}
-      - SEEDR_API_KEY=${SEEDR_API_KEY}
+      - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY:-}
+      - REALDEBRID_API_KEY=${REALDEBRID_API_KEY:-}
+      - ALLDEBRID_API_KEY=${ALLDEBRID_API_KEY:-}
+      - TORBOX_API_KEY=${TORBOX_API_KEY:-}
+      - DEBRIDLINK_API_KEY=${DEBRIDLINK_API_KEY:-}
+      - EASYDEBRID_API_KEY=${EASYDEBRID_API_KEY:-}
+      - OFFCLOUD_API_KEY=${OFFCLOUD_API_KEY:-}
+      - SEEDR_API_KEY=${SEEDR_API_KEY:-}
       - EASYNEWS_USER=${EASYNEWS_USER:-}
       - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
       - USENET_ENABLED=${USENET_ENABLED:-false}
-      - USENET_HOST=${USENET_HOST}
+      - USENET_HOST=${USENET_HOST:-}
       - USENET_PORT=${USENET_PORT:-563}
-      - USENET_USER=${USENET_USER}
+      - USENET_USER=${USENET_USER:-}
       - USENET_USER_B64=${USENET_USER_B64:-}
-      - USENET_PASS=${USENET_PASS}
+      - USENET_PASS=${USENET_PASS:-}
       - USENET_PASS_B64=${USENET_PASS_B64:-}
       - USENET_SSL=${USENET_SSL:-true}
       - NZB_INDEXER_URL=${NZB_INDEXER_URL:-}
       - NZB_INDEXER_API_KEY=${NZB_INDEXER_API_KEY:-}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - FANART_API_KEY=${FANART_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
+      - FANART_API_KEY=${FANART_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
       - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
@@ -505,15 +505,15 @@ services:
       - STREMTHRU_VAULT_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - STREMTHRU_REDIS_URI=redis://shared-redis:6379/3
       - STREMTHRU_DATABASE_URI=sqlite:///app/data/stremthru.db
-      - STREMTHRU_STORE_AUTH=*:realdebrid:${REALDEBRID_API_KEY},*:premiumize:${PREMIUMIZE_API_KEY},*:alldebrid:${ALLDEBRID_API_KEY},*:torbox:${TORBOX_API_KEY},*:debridlink:${DEBRIDLINK_API_KEY},admin:realdebrid:${REALDEBRID_API_KEY},admin:premiumize:${PREMIUMIZE_API_KEY},admin:alldebrid:${ALLDEBRID_API_KEY},admin:torbox:${TORBOX_API_KEY},admin:debridlink:${DEBRIDLINK_API_KEY}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - STREMTHRU_TMDB_API_KEY=${TMDB_API_KEY}
-      - STREMTHRU_TVDB_API_KEY=${TVDB_API_KEY}
-      - STREMTHRU_MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - STREMTHRU_RPDB_API_KEY=${RPDB_API_KEY}
+      - STREMTHRU_STORE_AUTH=*:realdebrid:${REALDEBRID_API_KEY:-},*:premiumize:${PREMIUMIZE_API_KEY:-},*:alldebrid:${ALLDEBRID_API_KEY:-},*:torbox:${TORBOX_API_KEY:-},*:debridlink:${DEBRIDLINK_API_KEY:-},admin:realdebrid:${REALDEBRID_API_KEY:-},admin:premiumize:${PREMIUMIZE_API_KEY:-},admin:alldebrid:${ALLDEBRID_API_KEY:-},admin:torbox:${TORBOX_API_KEY:-},admin:debridlink:${DEBRIDLINK_API_KEY:-}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
+      - STREMTHRU_TMDB_API_KEY=${TMDB_API_KEY:-}
+      - STREMTHRU_TVDB_API_KEY=${TVDB_API_KEY:-}
+      - STREMTHRU_MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - STREMTHRU_RPDB_API_KEY=${RPDB_API_KEY:-}
     volumes:
       - ./data/stremthru:/app/data
     networks:
@@ -597,7 +597,7 @@ services:
     environment:
       - PORT=7000
       - NODE_OPTIONS=--max-old-space-size=128
-      - FANART_APIKEY=${FANART_API_KEY}
+      - FANART_APIKEY=${FANART_API_KEY:-}
     networks:
       - stremio-net
 
@@ -614,15 +614,15 @@ services:
     environment:
       - PORT=4005
       - HOST_NAME=${AIOMETADATA_HOST:-http://localhost:4005}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - TMDB_API=${TMDB_API_KEY}
-      - BUILT_IN_TMDB_API_KEY=${TMDB_API_KEY}
-      - TVDB_API_KEY=${TVDB_API_KEY}
-      - BUILT_IN_TVDB_API_KEY=${TVDB_API_KEY}
-      - FANART_API_KEY=${FANART_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TMDB_API=${TMDB_API_KEY:-}
+      - BUILT_IN_TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+      - BUILT_IN_TVDB_API_KEY=${TVDB_API_KEY:-}
+      - FANART_API_KEY=${FANART_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
       - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
@@ -669,9 +669,9 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:8000"
     environment:
       - PORT=8000
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - MDBLIST_API_KEY=${MDBLIST_API_KEY}
-      - RPDB_API_KEY=${RPDB_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - MDBLIST_API_KEY=${MDBLIST_API_KEY:-}
+      - RPDB_API_KEY=${RPDB_API_KEY:-}
       - ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-}
       - AIOSTREAMS_URL=http://aiostreams:3000
       - CACHE_DIR=/app/cache
@@ -717,7 +717,7 @@ services:
   # 7. WEB PLAYERS & STREAM CLIENTS (NUVIO & STREMIO WEB)
   # ============================================================================
   nuvio:
-    image: orochibraru/nuvio-web:latest
+    image: zedensix/nuvio-web:latest
     container_name: nuvio-web
     profiles: ["nuvio", "all"]
     restart: unless-stopped

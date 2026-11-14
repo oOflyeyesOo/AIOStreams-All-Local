@@ -6,6 +6,34 @@ from tools.backup import create_backup,latest_backup_status
 PIN='ghcr.io/example/service@sha256:'+'1'*64
 NEXT='ghcr.io/example/service@sha256:'+'2'*64
 class ReleaseTests(unittest.TestCase):
+    def test_resolver_reports_missing_image_without_exposing_registry_output(self):
+        import subprocess
+        result = subprocess.CompletedProcess([], 1, '', 'ERROR: denied token=fixture-private')
+        with patch.object(releases.subprocess, 'run', return_value=result) as run, patch.object(releases.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(RuntimeError, 'example/missing:latest: registry access denied') as error:
+                releases.resolve_image('example/missing:latest')
+            self.assertNotIn('fixture-private', str(error.exception))
+            self.assertEqual(run.call_count, 1)
+            sleep.assert_not_called()
+
+    def test_resolver_retries_transient_failure_and_pins_digest(self):
+        import subprocess
+        bad = subprocess.CompletedProcess([], 1, '', '503 Service Unavailable')
+        good = subprocess.CompletedProcess([], 0, 'Digest: sha256:' + '1'*64, '')
+        with patch.object(releases.subprocess, 'run', side_effect=[bad, good]) as run, patch.object(releases.time, 'sleep'):
+            self.assertEqual(releases.resolve_image('ghcr.io/example/service:latest'), PIN)
+            self.assertEqual(run.call_count, 2)
+
+    def test_resolver_timeout_is_bounded_and_cannot_return_mutable_tag(self):
+        import subprocess
+        with patch.object(releases.subprocess, 'run', side_effect=subprocess.TimeoutExpired(['docker'], 120)) as run, patch.object(releases.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'timed out'):
+                releases.resolve_image('example/service:latest')
+            self.assertEqual(run.call_count, 3)
+        with patch.object(releases.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, 'no digest', '')):
+            with self.assertRaisesRegex(RuntimeError, 'No immutable digest'):
+                releases.resolve_image('example/service:latest')
+
     def lock(self,image=PIN):return {'format':'aio-release-v1','release':'fixture-v1','images':{'portal':image}}
     def test_mutable_tags_and_embedded_registry_credentials_are_rejected(self):
         for ref in ('ghcr.io/example/service:latest','https://secret@host/image@sha256:'+'1'*64,'sha256:'+'1'*64):

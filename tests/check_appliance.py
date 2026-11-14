@@ -12,7 +12,7 @@ def main():
     image = sys.argv[1]
     name = 'aio-appliance-smoke'
     created = run(['docker', 'run', '-d', '--privileged', '--name', name,
-                   '-e', 'COMPOSE_PROFILES=core', '-e', 'ADDON_PASSWORD=appliance-test-password',
+                   '-e', 'COMPOSE_PROFILES=scrapers', '-e', 'ADDON_PASSWORD=appliance-test-password',
                    '-e', 'BASE_URL=http://127.0.0.1:3001', image])
     if created.returncode:
         raise RuntimeError('Could not start disposable appliance')
@@ -23,9 +23,10 @@ p=importlib.util.module_from_spec(s); s.loader.exec_module(p)
 assert os.environ.get('COMPOSE_CONTROL_SOCKET') == '/runtime/control.sock'
 assert os.environ.get('AIO_STARTUP_ONLY') != 'true'
 assert os.path.realpath('/app/.env') == '/data/.env'
-for host in ('aiostreams', 'comet', 'aiometadata', 'postersplus', 'subsense'):
+for host in ('aiostreams', 'comet', 'aiometadata', 'postersplus', 'subsense', 'prowlarr', 'infinidysk', 'stremthru', 'zilean'):
     socket.getaddrinfo(host, None)
-urllib.request.urlopen('http://aiostreams:3000/api/v1/status', timeout=5).close()
+for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping', 'http://infinidysk:3000/healthz'):
+    urllib.request.urlopen(url, timeout=5).close()
 job=p.setup_snapshot()
 assert job['status'] == 'complete', job['status']
 print('PASS: internal DNS, core HTTP, persisted settings, controller and provisioning')

@@ -146,12 +146,16 @@ jobs:
         if: failure()
         run: |
           mkdir -p diagnostics
+          if [ ! -f release-bundle/compose.release.yml ]; then
+            echo 'Image resolution failed before a release stack was created. See Resolve immutable release set.' | tee diagnostics/not-started.txt >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml ps -a > diagnostics/containers.txt 2>&1 || docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -a > diagnostics/containers.txt 2>&1 || true
 
           for svc in portal controller stack-bootstrap aiostreams infinidysk prowlarr; do
             docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml logs --tail 100 "$svc" > "diagnostics/${svc}.log" 2>&1 || docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml logs --tail 100 "$svc" > "diagnostics/${svc}.log" 2>&1 || true
           done
-          cid=$(docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -aq aiostreams)
+          cid=$(docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml ps -aq aiostreams || true)
           if [ -n "$cid" ]; then
             python3 tests/summarize_startup.py "$cid" > diagnostics/startup-summary.md 2>&1 || true
             cat diagnostics/startup-summary.md >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
@@ -167,4 +171,8 @@ jobs:
         if: always()
         run: |
           rm -f fixture.env
-          docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml down --volumes --remove-orphans
+          if [ -f release-bundle/compose.release.yml ]; then
+            docker compose -p aio-release --env-file .env.example -f release-bundle/compose.release.yml down --volumes --remove-orphans
+          else
+            echo 'No release stack was created; cleanup is not needed.'
+          fi
