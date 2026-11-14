@@ -53,3 +53,23 @@ class ControllerTests(unittest.TestCase):
                 self.assertIn('--no-deps', arguments)
                 self.assertNotIn('controller', arguments[arguments.index('--wait-timeout') + 1 + 1:])
         self.assertEqual(controller.JOB['status'], 'complete')
+
+    def test_subsense_health_failure_does_not_block_bootstrap(self):
+        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
+               'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
+        config = {'services': {'aiostreams': {}, 'subsense': {}, 'stack-bootstrap': {}}}
+        steps = []
+
+        def command(args, step, **kwargs):
+            steps.append(args)
+            if args[-1] == 'subsense':
+                raise RuntimeError('SubSense is unhealthy')
+
+        with patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), \
+             patch.object(controller, 'command_json', side_effect=[[own], config]), \
+             patch.object(controller, 'log_command', side_effect=command):
+            controller.apply()
+
+        self.assertEqual([args[-1] for args in steps], ['aiostreams', 'subsense', 'stack-bootstrap'])
+        self.assertEqual(controller.JOB['status'], 'complete')
+        self.assertIn('SubSense is unhealthy', controller.JOB['logs'][-1])

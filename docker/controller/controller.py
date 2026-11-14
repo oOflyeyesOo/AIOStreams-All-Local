@@ -91,6 +91,7 @@ def log_command(arguments, step, timeout=900):
 
 def apply():
     temporary = None
+    subtitle_warning = None
     try:
         own = command_json(['docker', 'inspect', os.environ['HOSTNAME']])[0]
         project, host_root = project_identity(own)
@@ -135,12 +136,20 @@ def apply():
                 log_command(run + ['run', '--rm', '--no-deps', initializer], 'Preparing application storage')
         # --no-deps is essential: portal depends on controller, and following that
         # dependency could replace this very controller halfway through its job.
-        applications = [name for name in services if name not in databases]
+        applications = [name for name in services if name not in databases and name != 'subsense']
         if applications:
             log_command(run + up + applications, 'Applying keys and starting services')
+        if 'subsense' in services:
+            try:
+                subtitle_up = ['up', '-d', '--no-deps', '--no-build', '--wait', '--wait-timeout', '30']
+                log_command(run + subtitle_up + ['subsense'], 'Starting optional SubSense subtitles', timeout=90)
+            except (RuntimeError, OSError) as error:
+                subtitle_warning = f'Warning: {error}. Setup can continue without SubSense.'
         log_command(run + ['run', '--rm', '--no-deps', 'stack-bootstrap'],
                     'Connecting indexers, metadata, subtitles and players')
         with LOCK:
+            if subtitle_warning:
+                JOB['logs'].append(redact(subtitle_warning))
             JOB.update(status='complete', step='Your manifest is ready', exit_code=0)
     except Exception as error:
         with LOCK:

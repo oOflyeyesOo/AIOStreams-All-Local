@@ -387,7 +387,15 @@ def playback_readiness():
                 "message": "Setup needs attention. Review setup details and reconnect your stack." if failed else "Setup is still running. Wait before testing playback.", "checks": []}
     with ThreadPoolExecutor(max_workers=10) as pool:
         integrations = list(pool.map(probe_integration, INTEGRATIONS))
-    checks = [{"name": item["name"], "status": "off" if not item.get("enabled", True) else "ready" if item["reachable"] else "waiting"} for item in integrations]
+    checks = []
+    for item in integrations:
+        if not item.get("enabled", True):
+            status = "off"
+        elif item["reachable"]:
+            status = "ready"
+        else:
+            status = "optional" if item["name"] == "SubSense" else "waiting"
+        checks.append({"name": item["name"], "status": status})
     # Port acceptance alone does not mean the selected application path is usable.
     env = read_saved_env()
     aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -418,7 +426,7 @@ def playback_readiness():
         stable = setup_snapshot().get("status") in ("idle", "complete")
     except Exception:
         stable = False
-    ready = stable and all(c["status"] in ("ready", "off") for c in checks)
+    ready = stable and all(c["status"] in ("ready", "off", "optional") for c in checks)
     return {"ready": ready, "state": "ready" if ready else "waiting",
             "message": "Services are ready for a playback test. Playback has not been verified." if ready else "Waiting for enabled services and your streaming manifest. Testing is locked until these checks pass.",
             "checks": checks}

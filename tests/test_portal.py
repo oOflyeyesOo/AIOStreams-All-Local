@@ -699,6 +699,8 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(portal.playback_readiness()["ready"])
             probe.return_value = {"name": "Comet", "reachable": False, "enabled": True}
             self.assertFalse(portal.playback_readiness()["ready"])
+            probe.return_value = {"name": "SubSense", "reachable": False, "enabled": True}
+            self.assertTrue(portal.playback_readiness()["ready"])
             probe.return_value = {"name": "Comet", "reachable": True, "enabled": True}
             response.read.return_value = b'{"id":"fixture","resources":["catalog"]}'
             self.assertFalse(portal.playback_readiness()["ready"])

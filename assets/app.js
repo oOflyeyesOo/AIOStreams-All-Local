@@ -722,7 +722,8 @@ function renderPlaybackReadiness() {
     const el = document.getElementById(id); if (el) el.textContent = message;
   }
   const list = document.getElementById('startup-checks');
-  if (list) list.textContent = (playbackReadiness?.checks || []).map(c => `${c.status === 'ready' ? '✓' : c.status === 'off' ? '–' : '…'} ${c.name}: ${c.status === 'off' ? 'Optional off' : c.status === 'ready' ? 'Ready' : 'Waiting / unavailable'}`).join('\n');
+  const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
+  if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n');
   const badge = document.getElementById('overview-badge');
   if (badge) {
     badge.textContent = ready ? 'Ready to test' : 'Testing locked';

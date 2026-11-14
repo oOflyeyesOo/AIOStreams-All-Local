@@ -40,7 +40,8 @@ class ApplianceTests(unittest.TestCase):
         script = (ROOT / 'docker/all-in-one/entrypoint.sh').read_text()
         self.assertNotIn('--scale portal=0', script)
         self.assertNotIn('python3 -u /app/init/bootstrap/setup_stack.py', script)
-        self.assertIn('--scale stack-bootstrap=0', script)
+        self.assertIn("'/^stack-bootstrap$/d'", script)
+        self.assertIn("'/^subsense$/d'", script)
         self.assertIn('docker compose exec -T portal', script)
         self.assertNotIn('docker rm -f $(docker ps -aq)', script)
 

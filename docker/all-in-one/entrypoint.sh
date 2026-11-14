@@ -156,7 +156,11 @@ if [ "$daemon_ready" = "true" ]; then
     wait "$PORTAL_PID" 2>/dev/null || true
     PORTAL_PID=""
     echo "[4/4] Starting services and the network-connected setup portal..."
-    if docker compose up -d --scale stack-bootstrap=0 --wait --wait-timeout 600; then
+    # The controller starts SubSense separately so an optional subtitle service
+    # cannot prevent the network-connected portal from becoming available.
+    enabled_services=$(docker compose config --services)
+    mapfile -t startup_services < <(printf '%s\n' "$enabled_services" | sed -e '/^subsense$/d' -e '/^stack-bootstrap$/d' -e '/^$/d')
+    if docker compose up -d --wait --wait-timeout 600 "${startup_services[@]}"; then
         # Use the same controller action as the setup button. It applies the
         # saved environment and runs bootstrap inside the service network.
         if ! docker compose exec -T portal python3 -c 'import importlib.util; s=importlib.util.spec_from_file_location("portal", "/app/docker/all-in-one/portal_server.py"); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); p.launch_setup()'; then
