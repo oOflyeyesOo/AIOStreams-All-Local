@@ -1,4 +1,5 @@
 import base64
+from email.message import Message
 import http.client
 import importlib.util
 import json
@@ -8,7 +9,7 @@ import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 spec = importlib.util.spec_from_file_location(
     "portal", Path(__file__).resolve().parents[1] / "docker/all-in-one/portal_server.py")
@@ -388,6 +389,20 @@ class PortalTests(unittest.TestCase):
         data = json.loads(body)
         self.assertEqual(data.get("aiometadataHost"), "https://aiometa.example.com")
         self.assertEqual(data.get("aiometadataManifest"), "https://aiometa.example.com/stremio/test-uuid-123/manifest.json")
+        self.assertEqual(data["aiometadataConfigure"], "https://aiometa.example.com/stremio/test-uuid-123/configure")
+        self.assertEqual(data["aiostreamsDashboard"], "https://aio.example.com/dashboard")
+
+    def test_dashboard_links_on_fresh_lan_install(self):
+        with tempfile.TemporaryDirectory() as temp:
+            env_path = Path(temp) / ".env"
+            env_path.write_text("BASE_URL=https://aio.yourdomain.com\nPORT_AIOSTREAMS=13001\n", encoding="utf-8")
+            with patch.object(portal, "ENV_PATH", str(env_path)):
+                status, body, _ = self.request("/api/manifest-info", auth=True, headers={"Host": "192.168.1.20:8088"})
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["aiostreamsConfigure"], "http://192.168.1.20:13001/stremio/configure")
+        self.assertEqual(data["aiometadataConfigure"], "http://192.168.1.20:4005/configure")
+        self.assertIsNone(data["aiometadataManifest"])
 
     def test_failed_replace_preserves_original(self):
         before = (self.root / ".env").read_bytes()
@@ -653,6 +668,25 @@ class PortalTests(unittest.TestCase):
                 self.assertEqual(status, 409)
                 self.assertFalse(json.loads(body)["readiness"]["ready"])
                 run.assert_not_called()
+
+    def test_playback_rejects_html_from_stream_origin(self):
+        streams = MagicMock(status=200)
+        streams.__enter__.return_value = streams
+        streams.read.return_value = b'{"streams":[{"url":"https://media.example/video"}]}'
+        origin = MagicMock(status=200)
+        origin.__enter__.return_value = origin
+        origin.headers = Message()
+        origin.headers["Content-Type"] = "text/html; charset=utf-8"
+        origin.read.return_value = b"<html>Please sign in</html>"
+        with patch.object(portal, "read_saved_env", return_value={"PREMIUMIZE_API_KEY": "fixture"}), \
+             patch.object(portal, "validate_provider", return_value={"status": "valid", "detail": ""}), \
+             patch.object(portal.os.path, "isfile", return_value=True), \
+             patch.object(portal.Path, "read_text", return_value='{"uuid":"fixture","encrypted_password":"fixture"}'), \
+             patch.object(portal.urllib.request, "urlopen", side_effect=[streams, origin]):
+            result = portal.run_playback_test()
+        self.assertFalse(result["success"])
+        self.assertEqual(result["steps_dict"]["media_read"]["status"], "fail")
+        self.assertIsNone(result["stream_url"])
 
     def test_readiness_requires_stream_manifest_and_enabled_services(self):
         from unittest.mock import MagicMock

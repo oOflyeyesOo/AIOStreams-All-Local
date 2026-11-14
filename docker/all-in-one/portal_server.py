@@ -563,8 +563,8 @@ def run_playback_test(mode=None, content_id=None, kind=None):
         stream_step.update(status="skipped", detail="Skipped due to upstream auth failure.")
     steps.append(stream_step)
 
-    # Step 3: Media Range Read & Codec Probe
-    media_step = {"name": "Media Range Read & Codec Probe", "status": "pending", "detail": ""}
+    # Step 3: Media transport probe. Player decoding is checked separately.
+    media_step = {"name": "Media Range Read", "status": "pending", "detail": ""}
     client_stream_url = None
     if overall_success and resolved_candidate and resolved_candidate.get("url"):
         client_stream_url = resolved_candidate["url"]
@@ -584,11 +584,16 @@ def run_playback_test(mode=None, content_id=None, kind=None):
                 elapsed = round(time.monotonic() - t0, 3)
                 is_matroska = block.startswith(bytes.fromhex("1a45dfa3"))
                 is_mp4 = b"ftyp" in block[:32]
-                container = "Matroska/WebM" if is_matroska else ("MP4" if is_mp4 else "Stream")
-                if resp.status in (200, 206) and len(block) > 0:
+                content_type = resp.headers.get_content_type()
+                if content_type.startswith("text/") or content_type in ("application/json", "application/problem+json", "application/xhtml+xml"):
+                    media_step.update(status="fail", detail="The origin returned a text or error response instead of media.")
+                    troubleshoot = "Check whether the provider or proxy is returning a login or error page."
+                    overall_success = False
+                elif resp.status in (200, 206) and block:
+                    container = "Matroska/WebM header" if is_matroska else ("MP4 header" if is_mp4 else "media response")
                     media_step.update(
                         status="pass",
-                        detail=f"Received {len(block)} bytes in {elapsed}s (HTTP {resp.status}, {container} verified). Instant playback confirmed."
+                        detail=f"Received {len(block)} bytes in {elapsed}s (HTTP {resp.status}, {container})."
                     )
                 else:
                     media_step.update(
@@ -823,6 +828,35 @@ def derive_aiometadata_host(base_url, explicit_host=None):
     except Exception:
         pass
     return "http://localhost:4005"
+
+
+def dashboard_origin(configured, request_host, port, default_port, public_fallback=None):
+    """Use the public address when set, otherwise use the portal's host and service port."""
+    if configured:
+        try:
+            origin = normalize_base_url(configured)
+        except ValueError:
+            origin = "http://localhost"
+        host = urllib.parse.urlsplit(origin).hostname
+        if host not in ("localhost", "127.0.0.1", "::1", "aiostreams", "aiometadata") and not (
+                host == "yourdomain.com" or host.endswith(".yourdomain.com")):
+            return origin
+    if public_fallback:
+        return public_fallback
+    try:
+        parsed = urllib.parse.urlsplit(normalize_base_url("http://" + request_host))
+        host = parsed.hostname if not parsed.path else "localhost"
+    except ValueError:
+        host = "localhost"
+    if ":" in host:
+        host = f"[{host}]"
+    try:
+        port = int(port)
+        if not 1 <= port <= 65535:
+            raise ValueError("Invalid port")
+    except (TypeError, ValueError):
+        port = default_port
+    return f"http://{host}:{port}"
 
 
 def public_service_urls(base_url):
@@ -1626,7 +1660,11 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         k, v = line.split("=", 1)
                         env_vars[k.strip()] = v.strip().strip('"').strip("'")
 
-        base_url = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL", "http://localhost:3000"))
+        request_host = self.headers.get("Host", "localhost")
+        base_url = dashboard_origin(
+            env_vars.get("BASE_URL") or os.environ.get("BASE_URL"),
+            request_host, env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001,
+        )
         raw_uuid = install_info.get("uuid") or env_vars.get("DEFAULT_AIO_UUID")
         raw_enc = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or env_vars.get("DEFAULT_AIO_ENCRYPTED_PASSWORD")
 
@@ -1637,9 +1675,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         alias_manifest = f"{base_url}/stremio/u/local/manifest.json"
 
         # AIOMetadata public subdomain and manifest
-        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or "a7543d89-6f1a-47d1-abd1-a627e14dbbcb"
-        aiom_host = derive_aiometadata_host(base_url, env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST"))
-        aiom_manifest = f"{aiom_host}/stremio/{aiom_profile}/manifest.json" if aiom_profile else f"{aiom_host}/manifest.json"
+        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or os.environ.get("AIOMETADATA_PROFILE_UUID")
+        configured_meta = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST")
+        aiom_host = dashboard_origin(
+            configured_meta, request_host,
+            env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005,
+            public_fallback=derive_aiometadata_host(base_url) if base_url.startswith("https://") else None,
+        )
+        aiom_path = f"/stremio/{urllib.parse.quote(aiom_profile, safe='')}" if aiom_profile else ""
+        aiom_manifest = f"{aiom_host}{aiom_path}/manifest.json" if aiom_path else None
 
         resp = {
             "success": True,
@@ -1648,7 +1692,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "baseUrl": base_url,
             "directManifest": direct_manifest,
             "aliasManifest": alias_manifest,
+            "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/stremio/configure",
+            "aiostreamsDashboard": f"{base_url}/dashboard",
             "aiometadataHost": aiom_host,
+            "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
             "aiometadataManifest": aiom_manifest
         }
         self.json_response(resp)

@@ -265,6 +265,13 @@ async function loadSettings() {
 
 async function loadManifest() {
   const info = await api('/api/manifest-info');
+  const customization = document.getElementById('addon-customization');
+  if (customization && info.aiostreamsConfigure && info.aiostreamsDashboard && info.aiometadataConfigure) {
+    document.getElementById('configure-aiostreams').href = info.aiostreamsConfigure;
+    document.getElementById('configure-aiometadata').href = info.aiometadataConfigure;
+    document.getElementById('aiostreams-dashboard').href = info.aiostreamsDashboard;
+    customization.hidden = false;
+  }
   if (info.directManifest) {
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
@@ -285,12 +292,8 @@ async function loadManifest() {
     currentAiometaManifest = info.aiometadataManifest;
     const tracking = document.getElementById('connect-tracking');
     const setupTracking = document.getElementById('setup-connect-tracking');
-    const configuration = new URL(currentAiometaManifest);
-    const profile = configuration.pathname.match(/^\/stremio\/([^/]+)\//);
-    if (profile) {
-      configuration.pathname = `/stremio/${profile[1]}/configure`;
-      configuration.search = ''; configuration.hash = '';
-      const configureUrl = configuration.toString();
+    if (info.aiometadataConfigure) {
+      const configureUrl = info.aiometadataConfigure;
       if (tracking) {
         tracking.href = configureUrl;
         tracking.classList.remove('disabled');

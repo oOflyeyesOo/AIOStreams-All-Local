@@ -254,6 +254,14 @@ Open **`http://YOUR-SERVER:8088`**:
 
 The portal automatically saves `.env` safely, provisions indexers and databases, configures AIOMetadata presets with Posters+, and activates the AIOStreams super-addon profile. Once complete, copy the manifest URLs directly into your player.
 
+Under **Customize your addons**, open **Configure AIOStreams** to edit the
+installed streaming profile or **Configure AIOMetadata** to change catalogs,
+artwork, and tracking. Sign in to AIOStreams as `admin` with the stack password
+(`ADDON_PASSWORD`). AIOMetadata uses the same password to unlock the profile
+created by setup. The separate **AIOStreams admin dashboard** manages the
+instance itself. Rerunning portal setup can reapply the stack's preset settings,
+so export a copy of your manual configuration before rerunning it.
+
 
 
 After entering provider and metadata keys, use **Download optimized profile
