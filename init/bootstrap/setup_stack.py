@@ -603,17 +603,21 @@ def setup_aiometadata_tamtaro():
     config.setdefault("customArt", {})["posterUrl"] = poster_url
     config["customArt"]["proxy"] = True
 
-    # Configure art providers with Fanart.tv ClearLogos & backdrops
+    # Fanart is optional, but AIOMetadata requires its key if any slot selects it.
+    art_source = "fanart" if str(api_keys.get("fanart") or "").strip() else "tmdb"
     art_providers = config.setdefault("artProviders", {})
     for kind in ("movie", "series", "anime"):
-        kind_cfg = art_providers.setdefault(kind, {})
-        kind_cfg["logo"] = "fanart"
-        kind_cfg["background"] = "fanart"
+        kind_cfg = art_providers.get(kind)
+        if not isinstance(kind_cfg, dict):
+            kind_cfg = {}
+            art_providers[kind] = kind_cfg
+        kind_cfg["logo"] = art_source
+        kind_cfg["background"] = art_source
         kind_cfg["poster"] = "custom"
 
     config["castCount"] = 15
     config["animeEpisodeDates"] = "earliest"
-    config.setdefault("search", {})["ai_enabled"] = True
+    config.setdefault("search", {})["ai_enabled"] = bool(str(api_keys.get("gemini") or "").strip())
     config["traktWatchTracking"] = True
     config["simklWatchTracking"] = True
     config["anilistWatchTracking"] = True
@@ -637,7 +641,27 @@ def setup_aiometadata_tamtaro():
     endpoint = f"{AIOMETADATA_URL}/api/config/update/{existing_profile}" if existing_profile else f"{AIOMETADATA_URL}/api/config/save"
     res = make_request(endpoint, method="PUT" if existing_profile else "POST", data=save_payload)
     if not isinstance(res, dict) or not res.get("success"):
-        raise RuntimeError("AIOMetadata rejected its configuration. Check its API keys and addon password.")
+        status = res.get("error") if isinstance(res, dict) else None
+        detail = {
+            -1: "Could not reach AIOMetadata while saving the profile.",
+            401: "AIOMetadata refused the password. Verify that the stack password matches the addon and any existing profile.",
+            403: "AIOMetadata denied permission to save this profile.",
+            409: "The AIOMetadata profile changed during setup. Reload it and try again.",
+        }.get(status) if isinstance(status, int) else None
+        if status == 400:
+            try:
+                error_body = json.loads(res.get("message", ""))
+            except (ValueError, TypeError):
+                error_body = {}
+            missing = error_body.get("missingKeys") if isinstance(error_body, dict) else None
+            keys = [label for key, label in (("tmdb", "TMDB"), ("fanart", "Fanart")) if isinstance(missing, list) and key in missing]
+            if keys:
+                detail = f"AIOMetadata needs an API key for {', '.join(keys)}."
+            elif isinstance(error_body, dict) and "maxCatalogs" in error_body:
+                detail = "AIOMetadata rejected the preset because it exceeds the enabled catalog limit."
+        if not detail:
+            detail = f"AIOMetadata rejected the profile (HTTP {status})." if isinstance(status, int) and 400 <= status <= 599 else "AIOMetadata did not confirm that it saved the profile."
+        raise RuntimeError(detail)
     if res.get("userUUID"):
         update_env_file("AIOMETADATA_PROFILE_UUID", str(res["userUUID"]))
     update_env_file("AIOMETADATA_TEMPLATE", template_name)

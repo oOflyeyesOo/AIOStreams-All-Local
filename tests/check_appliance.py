@@ -13,11 +13,12 @@ def main():
     name = 'aio-appliance-smoke'
     created = run(['docker', 'run', '-d', '--privileged', '--name', name,
                    '-e', 'COMPOSE_PROFILES=scrapers', '-e', 'ADDON_PASSWORD=appliance-test-password',
+                   '-e', 'TMDB_API_KEY=fixture-not-a-provider-key',
                    '-e', 'BASE_URL=http://127.0.0.1:3001', image])
     if created.returncode:
         raise RuntimeError('Could not start disposable appliance')
     try:
-        probe = '''import importlib.util, os, socket, urllib.request
+        probe = '''import importlib.util, json, os, socket, urllib.request
 s=importlib.util.spec_from_file_location('portal','/app/docker/all-in-one/portal_server.py')
 p=importlib.util.module_from_spec(s); s.loader.exec_module(p)
 assert os.environ.get('COMPOSE_CONTROL_SOCKET') == '/runtime/control.sock'
@@ -29,7 +30,11 @@ for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping',
     urllib.request.urlopen(url, timeout=5).close()
 job=p.setup_snapshot()
 assert job['status'] == 'complete', job['status']
-print('PASS: internal DNS, core HTTP, persisted settings, controller and provisioning')
+profile=p.read_saved_env().get('AIOMETADATA_PROFILE_UUID')
+assert profile, 'AIOMetadata did not save the fixture profile without Fanart'
+with urllib.request.urlopen('http://aiometadata:4005/stremio/'+profile+'/manifest.json', timeout=5) as response:
+    assert json.load(response).get('id')
+print('PASS: internal DNS, core HTTP, persisted settings, controller, and metadata provisioning without Fanart')
 '''
         deadline = time.monotonic() + 900
         while time.monotonic() < deadline:

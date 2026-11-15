@@ -97,7 +97,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_metadata_save_supplies_addon_password_and_uses_install_path(self):
         response = {"success": True, "userUUID": "test-id", "installUrl": "http://localhost:4005/stremio/test-id/manifest.json"}
-        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": "", "SIMKL_CLIENT_ID": "my-simkl-client-id", "ANILIST_TOKEN": "my-anilist-token"}), patch.object(bootstrap, "make_request", return_value=response) as request, patch.object(bootstrap, "update_env_file"):
+        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": "", "FANART_API_KEY": "fixture-fanart", "SIMKL_CLIENT_ID": "my-simkl-client-id", "ANILIST_TOKEN": "my-anilist-token"}), patch.object(bootstrap, "make_request", return_value=response) as request, patch.object(bootstrap, "update_env_file"):
             result = bootstrap.setup_aiometadata_tamtaro()
             self.assertEqual(result, bootstrap.AIOMETADATA_URL + "/stremio/test-id/manifest.json")
             self.assertEqual(request.call_args.kwargs["data"]["addonPassword"], bootstrap.ADDON_PASSWORD)
@@ -110,6 +110,26 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(saved_config.get("malWatchTracking"))
             self.assertEqual(saved_config.get("artProviders", {}).get("anime", {}).get("logo"), "fanart")
             self.assertEqual(saved_config.get("animeEpisodeDates"), "earliest")
+
+    def test_metadata_bootstrap_works_without_optional_artwork_and_ai_keys(self):
+        response = {"success": True, "userUUID": "fixture"}
+        env = {"AIOMETADATA_PROFILE_UUID": "", "TMDB_API_KEY": "fixture-tmdb", "FANART_API_KEY": "", "GEMINI_API_KEY": ""}
+        with patch.dict(bootstrap.os.environ, env), \
+             patch.object(bootstrap, "FANART_API_KEY", ""), patch.object(bootstrap, "GEMINI_API_KEY", ""), \
+             patch.object(bootstrap, "make_request", return_value=response) as request, patch.object(bootstrap, "update_env_file"):
+            bootstrap.setup_aiometadata_tamtaro()
+        config = request.call_args.kwargs["data"]["config"]
+        for kind in ("movie", "series", "anime"):
+            self.assertEqual(config["artProviders"][kind]["logo"], "tmdb")
+            self.assertEqual(config["artProviders"][kind]["background"], "tmdb")
+        self.assertFalse(config["search"]["ai_enabled"])
+
+    def test_metadata_save_error_names_missing_key_without_echoing_response(self):
+        response = {"error": 400, "message": '{"missingKeys":["tmdb","private-data"],"error":"private-data"}'}
+        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": ""}), \
+             patch.object(bootstrap, "make_request", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, r"^AIOMetadata needs an API key for TMDB\.$"):
+                bootstrap.setup_aiometadata_tamtaro()
 
     def test_metadata_repeat_setup_preserves_linked_accounts(self):
         existing={"apiKeys":{"simklTokenId":"linked-simkl-record","anilistTokenId":"linked-anilist-record"}}
