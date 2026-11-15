@@ -73,5 +73,14 @@ summary { min-height:44px; align-content:center; cursor:pointer; font-weight:600
 #startup-checks { font:14px/1.8 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 #playback-readiness-hint { font-size:16px; color:#fde68a; margin-top:14px; }
 .steps, .player-list, .field-label, .template-header { flex-wrap:wrap; }
+.service-card { transition: border-color 0.15s ease, background 0.15s ease; }
+.service-card:hover { border-color: #465558; background: #1a2225; }
+.service-card-actions { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.service-log-link { display: inline-flex; align-items: center; gap: 3px; background: transparent; border: 1px solid #3b4547; border-radius: 4px; color: #a9b5a8; font-size: 13px; font-weight: 600; padding: 2px 7px; cursor: pointer; text-decoration: none; min-height: 28px; transition: all 0.15s ease; }
+.service-log-link:hover { background: #232d30; border-color: var(--orange); color: #fff; }
+.setup-details-accordion { width: 100%; margin-top: 10px; }
+.setup-details-accordion summary { cursor: pointer; color: #cbd5e1; font-size: 13px; font-weight: 600; }
+.setup-details-accordion pre { max-height: 220px; overflow-y: auto; scroll-behavior: smooth; }
+
 :focus-visible { outline:3px solid #93c5fd; outline-offset:3px; }
 @media(max-width:900px) { .workspace-grid { grid-template-columns:minmax(0,1fr); } }

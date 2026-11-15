@@ -1745,10 +1745,22 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         safe_containers = {
             "aiostreams", "portal", "controller", "flaresolverr", "comet",
             "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
-            "stremio-web", "nuvio"
+            "stremio-web", "nuvio", "postersplus", "anime-kitsu", "subsense",
+            "stremthru", "aiometadata", "slicksync", "setup"
         }
 
         if container and container in safe_containers:
+            if container == "setup":
+                snap = setup_snapshot()
+                logs_text = "\n".join(snap.get("logs", [])) or "No setup logs recorded yet."
+                self.json_response({
+                    "container": "setup",
+                    "logs": logs_text,
+                    "status": snap.get("status", "idle"),
+                    "step": snap.get("step", "")
+                })
+                return
+
             try:
                 tail = int((query.get("tail") or ["60"])[0] or 60)
             except (ValueError, TypeError):
@@ -1767,6 +1779,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
 
             # 2. Try log files in /var/log/
             log_path = f"/var/log/{container}.log"
+            if not os.path.isfile(log_path):
+                log_path = f"/var/log/aio/{container}.log"
             if os.path.isfile(log_path):
                 try:
                     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:

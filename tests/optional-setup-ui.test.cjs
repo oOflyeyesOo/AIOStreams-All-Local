@@ -9,7 +9,7 @@ function form(saved){
   const document={
     querySelectorAll(){ return []; },
     getElementById(id){
-      if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},handlers:{},addEventListener(type,handler){this.handlers[type]=handler;}});
+      if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},handlers:{},addEventListener(type,handler){this.handlers[type]=handler;},scrollIntoView(){}});
       return nodes.get(id);
     }
   };
@@ -187,3 +187,21 @@ test('early playback invocation cannot make a playback request', async () => {
   assert.deepEqual(calls, ['/api/playback-readiness']);
   assert.equal(env.nodes.get('btn-test-playback').disabled, true);
 });
+
+test('showContainerLogs opens operations details and requests container logs', async () => {
+  const env = form({});
+  const calls = [];
+  env.context.api = async path => { calls.push(path); return { container: 'prowlarr', logs: 'Sample Prowlarr Log' }; };
+  const showLogsCode = source.slice(source.indexOf('async function showContainerLogs('), source.indexOf('async function refreshServices()'));
+  vm.runInContext(showLogsCode, env.context);
+  const opDetails = env.document.getElementById('operations-details');
+  opDetails.open = false;
+  const sel = env.document.getElementById('logs-container-select');
+  sel.options = [{ value: 'aiostreams' }, { value: 'prowlarr' }];
+  await vm.runInContext("showContainerLogs('prowlarr')", env.context);
+  assert.equal(opDetails.open, true);
+  assert.equal(sel.value, 'prowlarr');
+  assert.deepEqual(calls, ['/api/logs?container=prowlarr']);
+  assert.equal(env.document.getElementById('container-logs-output').textContent, 'Sample Prowlarr Log');
+});
+

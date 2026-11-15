@@ -855,6 +855,13 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(data["container"], "aiostreams")
             self.assertIn("AIOStreams log output", data["logs"])
 
+    def test_container_logs_setup_endpoint(self):
+        status, body, _ = self.request("/api/logs?container=setup", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["container"], "setup")
+        self.assertIn("logs", data)
+
     def test_container_logs_tail_clamping(self):
         with patch.object(portal.subprocess, "run") as mock_sub:
             mock_sub.return_value = unittest.mock.MagicMock(returncode=0, stdout="log output", stderr="")

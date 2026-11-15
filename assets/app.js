@@ -316,6 +316,41 @@ async function loadManifest() {
 }
 
 let lastIntegrations = [];
+
+async function showContainerLogs(containerName) {
+  const opDetails = document.getElementById('operations-details');
+  if (opDetails) opDetails.open = true;
+  const sel = document.getElementById('logs-container-select');
+  if (sel && containerName) {
+    const direct = Array.from(sel.options).find(opt => opt.value === containerName);
+    if (direct) {
+      sel.value = containerName;
+    } else {
+      const fuzzy = Array.from(sel.options).find(opt => opt.value.includes(containerName) || containerName.includes(opt.value));
+      if (fuzzy) sel.value = fuzzy.value;
+    }
+  }
+  const target = (sel && sel.value) ? sel.value : (containerName || 'aiostreams');
+  const out = document.getElementById('container-logs-output');
+  if (out) {
+    out.textContent = `Fetching latest logs for ${target}…`;
+    out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  const btn = document.getElementById('btn-fetch-logs');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api(`/api/logs?container=${encodeURIComponent(target)}`);
+    if (out) {
+      out.textContent = res.logs || `[${target}] No recent logs returned.`;
+      out.scrollTop = out.scrollHeight;
+    }
+  } catch (err) {
+    if (out) out.textContent = `Error fetching logs for ${target}: ${err.message}`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function refreshServices() {
   const result = await api('/api/integrations');
   lastIntegrations = result.integrations || [];
@@ -332,6 +367,8 @@ async function refreshServices() {
     status.title = service.enabled === false ? 'Optional off' : service.reachable ? 'Accepting connections' : 'Not reachable yet';
     status.setAttribute('aria-label',status.title);
     content.append(name, group);
+    const actions = document.createElement('div');
+    actions.className = 'service-card-actions';
     if (service.uiUrl) {
       const link = document.createElement('a');
       link.className = 'service-ui-link';
@@ -340,9 +377,29 @@ async function refreshServices() {
       link.rel = 'noopener noreferrer';
       link.textContent = 'Open UI ↗';
       link.setAttribute('aria-label', `Open ${service.name} UI`);
-      content.append(link);
+      actions.append(link);
     }
-    card.append(icon, content, status); grid.append(card);
+    const containerKey = (service.host || service.name).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const logBtn = document.createElement('button');
+    logBtn.type = 'button';
+    logBtn.className = 'service-log-link';
+    logBtn.textContent = 'Log 📄';
+    logBtn.title = `View logs for ${service.name}`;
+    logBtn.setAttribute('aria-label', `View ${service.name} logs`);
+    logBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showContainerLogs(containerKey);
+    });
+    actions.append(logBtn);
+    content.append(actions);
+
+    card.append(icon, content, status);
+    card.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'A' && e.target.tagName !== 'BUTTON') {
+        showContainerLogs(containerKey);
+      }
+    });
+    grid.append(card);
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
@@ -373,12 +430,29 @@ async function pollSetup() {
   try {
     const job = await api('/api/setup-status');
     reconnectAttempts = 0;
-    document.getElementById('setup-logs').textContent = job.logs.join('\n');
-    document.getElementById('setup-details').hidden = job.status === 'idle';
+    const setupDetails = document.getElementById('setup-details');
+    const setupLogs = document.getElementById('setup-logs');
+    const toggleBtn = document.getElementById('btn-toggle-setup-logs');
+    if (setupLogs && Array.isArray(job.logs)) {
+      setupLogs.textContent = job.logs.join('\n');
+      if (job.status === 'running' || job.status === 'failed') {
+        setupLogs.scrollTop = setupLogs.scrollHeight;
+      }
+    }
+    if (setupDetails) {
+      setupDetails.hidden = job.status === 'idle';
+      if (job.status === 'running' || job.status === 'failed') {
+        setupDetails.open = true;
+      }
+    }
+    if (toggleBtn) {
+      toggleBtn.hidden = job.status === 'idle';
+      toggleBtn.textContent = (setupDetails && setupDetails.open) ? 'Hide setup output ▴' : 'View setup output ▾';
+    }
     const running = job.status === 'running';
     document.getElementById('setup-button').disabled = running;
     document.getElementById('setup-button').firstElementChild.textContent = running ? 'Connecting your stack…' : 'Connect my stack';
-    if (job.status !== 'idle') setProgress(job.status === 'complete' ? 'Manifest configuration saved' : job.step, running ? 'Services are being configured. You can leave this page open.' : job.status === 'complete' ? 'Manifest configuration saved. Check readiness below before testing playback.' : 'Review setup details below, check your keys, then try again.',running);
+    if (job.status !== 'idle') setProgress(job.status === 'complete' ? 'Manifest configuration saved' : job.step, running ? 'Services are being configured. Live setup logs are displayed below.' : job.status === 'complete' ? 'Manifest configuration saved. Check readiness below before testing playback.' : 'Setup needs attention. Review output below, verify your keys, then try again.',running);
     document.getElementById('step-2').classList.toggle('active',running);
     document.getElementById('step-3').classList.toggle('active',job.status === 'complete');
     if (job.status === 'complete' && lastJobStatus !== 'complete') {
@@ -1165,19 +1239,30 @@ async function runOperations() {
     } catch (error) { output('config-output').textContent = error.message; }
   });
 
-  document.getElementById('btn-fetch-logs')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
+  document.getElementById('logs-container-select')?.addEventListener('change', (e) => {
+    showContainerLogs(e.target.value);
+  });
+
+  document.getElementById('btn-fetch-logs')?.addEventListener('click', () => {
     const container = document.getElementById('logs-container-select')?.value || 'aiostreams';
-    const out = output('container-logs-output');
-    if (out) out.textContent = `Fetching latest logs for ${container}…`;
-    btn.disabled = true;
-    try {
-      const res = await api(`/api/logs?container=${encodeURIComponent(container)}`);
-      if (out) out.textContent = res.logs || 'No recent logs returned.';
-    } catch (err) {
-      if (out) out.textContent = `Error fetching logs: ${err.message}`;
-    } finally {
-      btn.disabled = false;
+    showContainerLogs(container);
+  });
+
+  document.getElementById('btn-inspect-container-logs')?.addEventListener('click', () => {
+    showContainerLogs();
+  });
+
+  document.getElementById('btn-toggle-setup-logs')?.addEventListener('click', () => {
+    const setupDetails = document.getElementById('setup-details');
+    if (setupDetails) {
+      setupDetails.open = !setupDetails.open;
+      const toggleBtn = document.getElementById('btn-toggle-setup-logs');
+      if (toggleBtn) {
+        toggleBtn.textContent = setupDetails.open ? 'Hide setup output ▴' : 'View setup output ▾';
+      }
+      if (setupDetails.open) {
+        setupDetails.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
   });
 
