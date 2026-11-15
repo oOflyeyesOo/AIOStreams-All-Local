@@ -87,3 +87,22 @@ class UsenetConfigTests(unittest.TestCase):
             indexer_address("http://indexer.test\x00/api")
         with self.assertRaisesRegex(ValueError, 'indexer base address'):
             indexer_address("http://indexer.test:999999/")
+
+        # Mapping support (such as os.environ) across Usenet helpers
+        import os
+        from tools.usenet_config import newznab_indexers
+        test_env = dict(os.environ)
+        test_env['USENET_EXTRA_INDEXERS_B64'] = base64.b64encode(b'[{"id":"abc","url":"http://portal:18886","apiKey":"k"}]').decode()
+        test_env['NZB_INDEXER_URL'] = 'http://portal:18884'
+        test_env['NZB_INDEXER_API_KEY'] = 'main-k'
+        os.environ.update(test_env)
+        try:
+            indexers = newznab_indexers(os.environ)
+            self.assertEqual(len(indexers), 2)
+            self.assertEqual(indexers[0]['url'], 'http://portal:18884')
+            self.assertEqual(indexers[1]['url'], 'http://portal:18886')
+            self.assertEqual(len(extra_sources(os.environ, 'USENET_EXTRA_INDEXERS')), 1)
+        finally:
+            os.environ.pop('USENET_EXTRA_INDEXERS_B64', None)
+            os.environ.pop('NZB_INDEXER_URL', None)
+            os.environ.pop('NZB_INDEXER_API_KEY', None)

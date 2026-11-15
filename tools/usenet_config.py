@@ -1,5 +1,6 @@
 """Usenet form validation and private controller-only provider configuration."""
 import base64
+from collections.abc import Mapping
 import ipaddress
 import json
 import re
@@ -13,7 +14,7 @@ EXTRA_SOURCES = {
 
 
 def extra_sources(values, field):
-    if not isinstance(values, dict):
+    if not isinstance(values, Mapping):
         return []
     encoded = values.get(field + '_B64', '')
     if not encoded:
@@ -22,7 +23,7 @@ def extra_sources(values, field):
         if not isinstance(encoded, (str, bytes)):
             raise ValueError
         rows = json.loads(base64.b64decode(encoded, validate=True))
-        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        if not isinstance(rows, list) or any(not isinstance(row, Mapping) for row in rows):
             raise ValueError
         return rows
     except (ValueError, TypeError, UnicodeError):
@@ -52,7 +53,7 @@ def newznab_indexers(values):
     return rows
 
 def credential(values, name):
-    if not isinstance(values, dict):
+    if not isinstance(values, Mapping):
         return ''
     encoded = values.get(name + '_B64', '')
     try:
@@ -70,7 +71,7 @@ def enabled(values):
     return values.get('USENET_ENABLED', 'true' if complete else 'false') == 'true'
 
 def server_config(values, kind=1):
-    if not isinstance(values, dict):
+    if not isinstance(values, Mapping):
         raise ValueError('Invalid configuration values')
     host = str(values.get('USENET_HOST') or '').strip()
     try:
@@ -130,7 +131,7 @@ def update_sources(updates, existing, field, secret):
     saved = []
     ids = set()
     for row in rows:
-        if not isinstance(row, dict):
+        if not isinstance(row, Mapping):
             raise ValueError('Invalid Usenet source row')
         row_id = row.get('id')
         if row_id and (not isinstance(row_id, str) or row_id not in previous or row_id in ids):
@@ -158,7 +159,7 @@ def update_sources(updates, existing, field, secret):
     updates[encoded_field] = base64.b64encode(json.dumps(saved).encode()).decode()
 
 def form_updates(submitted, existing):
-    if not isinstance(submitted, dict) or not isinstance(existing, dict):
+    if not isinstance(submitted, Mapping) or not isinstance(existing, Mapping):
         raise ValueError('Form updates require dictionaries')
     updates = dict(submitted)
     for field, secret in EXTRA_SOURCES.items():
