@@ -87,7 +87,11 @@ class Newznab(http.server.BaseHTTPRequestHandler):
 nntp=socketserver.ThreadingTCPServer(('0.0.0.0',18883),Nntp)
 nntp.daemon_threads=True
 nzb=http.server.ThreadingHTTPServer(('0.0.0.0',18884),Newznab)
-for server in (nntp,nzb):threading.Thread(target=server.serve_forever,daemon=True).start()
+backup_nntp=socketserver.ThreadingTCPServer(('0.0.0.0',18885),Nntp)
+backup_nntp.daemon_threads=True
+second_nzb=http.server.ThreadingHTTPServer(('0.0.0.0',18886),Newznab)
+servers=(nntp,nzb,backup_nntp,second_nzb)
+for server in servers:threading.Thread(target=server.serve_forever,daemon=True).start()
 try:
     # Remove only stale indexers from this exact isolated fixture address.
     indexer_headers={'X-Api-Key':'prowlarr_internal_secret_key_99'}
@@ -95,7 +99,10 @@ try:
         if item.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and f.get('value')=='http://portal:18884' for f in item.get('fields',[])):
             request('http://prowlarr:9696/api/v1/indexer/'+str(item['id']),headers=indexer_headers,method='DELETE')
     values={'USENET_ENABLED':'true','USENET_HOST':'portal','USENET_PORT':'18883','USENET_USER':USER,'USENET_PASS':PASSWORD,
-            'USENET_SSL':'false','USENET_CONNECTIONS':'2','NZB_INDEXER_URL':'http://portal:18884','NZB_INDEXER_API_KEY':'fixture-indexer-key'}
+            'USENET_SSL':'false','USENET_CONNECTIONS':'2','NZB_INDEXER_URL':'http://portal:18884','NZB_INDEXER_API_KEY':'fixture-indexer-key',
+            'USENET_EXTRA_SERVERS':[{'host':'portal','port':'18885','username':USER,'password':PASSWORD,
+                                     'connections':'1','tls':False,'backupOnly':True}],
+            'USENET_EXTRA_INDEXERS':[{'url':'http://portal:18886','apiKey':'fixture-second-indexer-key'}]}
     assert portal('/api/save-env',values)['success']
     saved=portal('/api/env');assert saved['USENET_PASSWORD_SAVED'] and PASSWORD not in json.dumps(saved) and 'USENET_PASS_B64' not in saved
     assert PASSWORD not in Path('/app/.env').read_text()
@@ -105,33 +112,41 @@ try:
     assert route['options']['sources']==['usenet'] and route['options']['services']==['nzbdav']
     assert not any(p['type'] in ('torrentio','comet') for p in config['presets'])
     env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
-    provider=json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])['Providers'][0]
+    provider,backup=json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])['Providers']
     assert provider['User']==USER and provider['Pass']==PASSWORD and provider['MaxConnections']==2
+    assert backup['Port']==18885 and backup['Type']==3 and backup['Pass']==PASSWORD
     key=env['NZBDAV_CONFIG__API__KEY']
     effective=request('http://infinidysk:3000/api/get-config',urllib.parse.urlencode({'config-keys':'usenet.providers'}).encode(),{'x-api-key':key,'Content-Type':'application/x-www-form-urlencoded'})
     items=effective.get('configItems') or effective.get('ConfigItems')
     assert items,'InfiniDysk must expose effective saved settings'
-    item=items[0];p=json.loads(item.get('configValue') or item['ConfigValue'])['Providers'][0]
-    assert p['Host']=='portal' and p['Port']==18883
-    test=request('http://infinidysk:3000/api/test-usenet-connection',urllib.parse.urlencode({'host':p['Host'],'port':p['Port'],'user':p['User'],'pass':p['Pass'],'use-ssl':'false'}).encode(),{'x-api-key':key,'Content-Type':'application/x-www-form-urlencoded'})
-    assert test.get('connected') or test.get('Connected'),'NNTP fixture authentication failed'
-    assert counts['authenticated']>=1 and counts['rejected']==0
-    print('PASS: real InfiniDysk accepts saved credentials containing dollar signs and quotes',flush=True)
+    item=items[0];providers=json.loads(item.get('configValue') or item['ConfigValue'])['Providers']
+    assert [(p['Host'],p['Port'],p['Type']) for p in providers]==[('portal',18883,1),('portal',18885,3)]
+    for p in providers:
+        test=request('http://infinidysk:3000/api/test-usenet-connection',urllib.parse.urlencode({'host':p['Host'],'port':p['Port'],'user':p['User'],'pass':p['Pass'],'use-ssl':'false'}).encode(),{'x-api-key':key,'Content-Type':'application/x-www-form-urlencoded'})
+        assert test.get('connected') or test.get('Connected'),'NNTP fixture authentication failed'
+    assert counts['authenticated']>=2 and counts['rejected']==0
+    print('PASS: InfiniDysk authenticates both the pool and backup NNTP servers',flush=True)
     def indexers():return request('http://prowlarr:9696/api/v1/indexer',headers={'X-Api-Key':'prowlarr_internal_secret_key_99'})
-    matches=lambda:[x for x in indexers() if x.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and f.get('value')=='http://portal:18884' for f in x.get('fields',[]))]
-    assert len(matches())==1 and matches()[0]['protocol']=='usenet','Exactly one NZB indexer required'
+    def matches(port=18884):
+        return [x for x in indexers() if x.get('implementation')=='Newznab' and any(
+            f.get('name')=='baseUrl' and f.get('value')==f'http://portal:{port}' for f in x.get('fields',[]))]
+    assert len(matches())==len(matches(18886))==1 and matches()[0]['protocol']=='usenet'
+    assert matches(18886)[0]['enable']
     assert portal('/api/save-env',{'USENET_ENABLED':'true','USENET_USER':USER})['success']
     apply()
-    assert len(matches())==1
+    assert len(matches())==len(matches(18886))==1
     print('PASS: repeated setup retains password and does not duplicate Newznab',flush=True)
-    assert portal('/api/save-env',{'USENET_ENABLED':'false'})['success']
+    assert portal('/api/save-env',{'USENET_ENABLED':'false','USENET_EXTRA_INDEXERS':[]})['success']
     apply()
     env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
     assert json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])=={'Providers':[]}
     assert portal('/api/env')['USENET_PASSWORD_SAVED']
     assert not any(p['instanceId']=='prowlarr-usenet' for p in installed_profile()['presets'])
     assert len(matches())==1 and not matches()[0]['enable'],'Disabled managed NZB indexer must not poll in the background'
+    assert not any(item['enable'] for item in matches(18886)), 'Removed indexer is still enabled'
     print('PASS: disabling stops optional service and NNTP provider while retaining credentials',flush=True)
     print(json.dumps({'scope':'fixture NNTP authentication and indexer setup, not article playback','counts':counts}),flush=True)
 finally:
-    nntp.shutdown();nntp.server_close();nzb.shutdown();nzb.server_close()
+    for server in servers:
+        server.shutdown()
+        server.server_close()

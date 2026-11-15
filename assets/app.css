@@ -70,6 +70,36 @@ summary { min-height:44px; align-content:center; cursor:pointer; font-weight:600
 .startup-readiness p { margin:10px 0; }
 .startup-readiness a { text-decoration:underline; font-weight:600; }
 .startup-readiness.ready { background:#142b23; border-color:#6ee7b7; color:#d1fae5; }
+.startup-readiness.failed { background:#2e1d21; border-color:#e09898; color:#ffdddd; }
+.startup-readiness { margin-top:28px; }
+.startup-readiness h1 { margin:0; font-size:clamp(27px,4vw,42px); letter-spacing:-.045em; }
+.stack-status > p { max-width:62ch; line-height:1.55; }
+.stack-actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
+.stack-actions > .primary-button, .stack-actions > .light-button { width:auto; gap:12px; margin:0; }
+.stack-actions > .text-button { color:inherit; }
+.startup-checklist pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+#startup-readiness .progress-panel { margin-top:12px; padding:12px; }
+#progress-panel[hidden] { display:none; }
+#progress-panel.setup-complete > div { display:none; }
+#setup > summary, #manifest > summary, .advanced-tools > summary { font-size:17px; font-weight:650; }
+#setup-form { margin-top:16px; }
+.advanced-tools { margin-top:30px; padding:12px 20px; }
+.advanced-tools > .operations-section { margin-top:14px; }
+.usenet-source-row { margin:14px 0; padding:12px; min-width:0; border:1px solid var(--line); border-radius:8px; }
+.usenet-source-row legend { padding:0 6px; color:#cbd5d1; }
+.usenet-source-row label input:not([type=checkbox]) { margin-top:5px; }
+#add-usenet-server, #add-nzb-indexer { margin-top:12px; }
+.usenet-primary-card h3 { margin:10px 0; font-size:15px; }
+.tool-group { border-top:1px solid var(--line); margin:4px 0; }
+.tool-group > summary { padding:0 4px; font-weight:600; }
+.tool-group .operations-section { margin:0 0 14px; }
+.service-toolbar, .log-dialog-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.service-log-dialog { width:min(920px, calc(100% - 24px)); max-height:90vh; margin:auto; padding:20px; color:var(--white); background:#191f22; border:1px solid #526164; border-radius:12px; }
+.service-log-dialog::backdrop { background:#080b0ed9; }
+.log-dialog-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+.log-dialog-toolbar > select { width:auto; max-width:100%; min-width:10rem; flex:1; }
+#service-log-status { min-height:1.5em; margin:12px 0 6px; color:#b8c5c9; overflow-wrap:anywhere; }
+#service-log-dialog pre { height:clamp(180px, 48vh, 520px); margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:#111719; border:1px solid var(--line); border-radius:6px; padding:12px; font-size:14px; }
 #startup-checks { font:14px/1.8 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 #playback-readiness-hint { font-size:16px; color:#fde68a; margin-top:14px; }
 .steps, .player-list, .field-label, .template-header { flex-wrap:wrap; }

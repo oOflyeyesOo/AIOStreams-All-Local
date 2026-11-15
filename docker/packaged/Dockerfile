@@ -28,6 +28,7 @@ COPY docker/stremio-web/bootstrap.js /srv/stremio-server/build/aio-bootstrap.js
 
 FROM python:3.11-alpine AS bootstrap
 COPY init/bootstrap /init
+COPY tools/usenet_config.py /init/tools/usenet_config.py
 COPY init/service_inventory.py /init/service_inventory.py
 COPY templates /templates
 COPY tests/check_stack.py tests/check_streams.py tests/check_playback.py /

@@ -32,3 +32,29 @@ class UsenetConfigTests(unittest.TestCase):
             values=self.settings()
             with self.assertRaises(ValueError) as error:form_updates(change,values)
             self.assertNotIn('fixture-secret',str(error.exception))
+
+    def test_extra_provider_and_indexer_keep_secrets_on_edit_and_support_removal(self):
+        values = self.settings()
+        values.update(form_updates({
+            'USENET_EXTRA_SERVERS': [{'host': 'backup.fixture.invalid', 'username': 'backup-user',
+                                      'password': 'backup$secret', 'backupOnly': True}],
+            'USENET_EXTRA_INDEXERS': [{'url': 'https://index.fixture.invalid/', 'apiKey': 'indexer$secret'}],
+        }, values))
+        public = public_settings(values)
+        self.assertNotIn('$secret', json.dumps(public))
+        servers = public['USENET_EXTRA_SERVERS']
+        indexers = public['USENET_EXTRA_INDEXERS']
+        self.assertTrue(servers[0]['secretSaved'])
+        self.assertTrue(indexers[0]['secretSaved'])
+        servers[0]['connections'] = '3'
+        values.update(form_updates({'USENET_EXTRA_SERVERS': servers, 'USENET_EXTRA_INDEXERS': indexers}, values))
+        primary, backup = provider_config(values)['Providers']
+        self.assertEqual((primary['Type'], backup['Type'], backup['MaxConnections']), (1, 3, 3))
+        self.assertEqual(backup['Pass'], 'backup$secret')
+        values.update(form_updates({'USENET_EXTRA_SERVERS': []}, values))
+        self.assertEqual(len(provider_config(values)['Providers']), 1)
+
+    def test_duplicate_indexer_addresses_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'appears more than once'):
+            form_updates({'NZB_INDEXER_URL': 'https://index.fixture.invalid',
+                          'USENET_EXTRA_INDEXERS': [{'url': 'https://index.fixture.invalid/', 'apiKey': 'fixture-key'}]}, {})

@@ -66,15 +66,6 @@ test('native anime switch reloads and is saved with the selected account',async(
   assert.equal(env.calls.find(c=>c.path==='/api/save-env').payload.ENABLE_ANIME_SOURCES,'true');
 });
 
-test('custom ports update player-link and nuvio-player-link hrefs',async()=>{
-  const env=form({PORT_STREMIO_WEB:'18082',PORT_NUVIO:'18085',ports:{stremio_web:18082,nuvio:18085},configuredKeys:[]});
-  await vm.runInContext('loadSettings()',env.context);
-  assert.equal(env.nodes.get('player-link').href,'http://server:18082');
-  assert.equal(env.nodes.get('player-link').textContent,'Launch Stremio Web (:18082) ↗');
-  assert.equal(env.nodes.get('nuvio-player-link').href,'http://server:18085');
-  assert.equal(env.nodes.get('nuvio-player-link').textContent,'Launch Nuvio Web (:18085) ↗');
-});
-
 test('saved keys reveal test button for validating credentials without re-entering them',async()=>{
   const env=form({configuredKeys:['PROVIDER_KEY']});
   await vm.runInContext('loadSettings()',env.context);
@@ -134,43 +125,30 @@ test('remote access scope updates helper text for reverse proxy / tunnel setup',
   assert.match(env.nodes.get('aiometa-url-help').textContent, /subdomain/);
 });
 
-test('updateStatusOverview merges health and integrations data and updates overview card elements',async()=>{
-  const env=form({});
-  const fnStatus = source.match(/function updateStatusOverview\([^\)]*\) \{[\s\S]*?\n\}/)[0];
-  vm.runInContext('let lastHealthData = null, lastIntegrations = null;\n' + fnStatus, env.context);
-  const integrations = [
-    { name: 'AIOStreams', group: 'Core', reachable: true, enabled: true },
-    { name: 'Stremio Web', group: 'Core', reachable: true, enabled: true },
-    { name: 'Comet', group: 'Scrapers', reachable: false, enabled: true },
-  ];
-  const healthData = {
-    watchdog: { overall: 'healthy', healthy_count: 14, total_services: 14 },
-    backup: { count: 3, total_size_mb: 42 }
-  };
-  vm.runInContext('updateStatusOverview(' + JSON.stringify(healthData) + ', ' + JSON.stringify(integrations) + ')', env.context);
-  assert.equal(env.nodes.get('overview-services').textContent, '2/3 Online');
-  assert.equal(env.nodes.get('overview-watchdog').textContent, '14/14 Healthy');
-  assert.equal(env.nodes.get('overview-backup').textContent, '3 Saved (42 MB)');
-});
-
 function readinessUI() {
   const env = form({});
   const readinessCode = source.slice(source.indexOf('let playbackReadiness ='), source.indexOf('async function runPlaybackTest()'));
-  vm.runInContext(readinessCode, env.context);
+  vm.runInContext('let manifestLoaded = true; let currentManifest = null;\n' + readinessCode, env.context);
   return env;
 }
 
-test('startup gates both buttons, respects unapplied edits, and fails closed on lost connection', async () => {
+test('the main status presents one clear next step and gates playback', async () => {
   const env = readinessUI();
   vm.runInContext('renderPlaybackReadiness()', env.context);
   assert.equal(env.nodes.get('btn-test-playback').disabled, true);
+  assert.equal(env.nodes.get('startup-title').textContent, 'Finish setup');
+  vm.runInContext('currentManifest = "https://test.invalid/manifest.json"', env.context);
   env.context.api = async () => ({ready:true, message:'Ready to test', checks:[]});
   await vm.runInContext('refreshPlaybackReadiness()', env.context);
   assert.equal(env.nodes.get('btn-test-playback').disabled, false);
   vm.runInContext('setupFormDirty = true; renderPlaybackReadiness()', env.context);
-  assert.equal(env.nodes.get('overview-test-playback-btn').disabled, true);
+  assert.equal(env.nodes.get('ready-actions').hidden, true);
+  assert.equal(env.nodes.get('startup-title').textContent, 'Apply your changes');
   vm.runInContext('setupFormDirty = false; lastJobStatus = "running"; renderPlaybackReadiness()', env.context);
   assert.equal(env.nodes.get('btn-test-playback').disabled, true);
+  assert.equal(env.nodes.get('startup-title').textContent, 'Starting services');
+  vm.runInContext('lastJobStatus = "failed"; renderPlaybackReadiness()', env.context);
+  assert.equal(env.nodes.get('startup-title').textContent, 'Setup needs attention');
   vm.runInContext('lastJobStatus = "complete"', env.context);
   env.context.api = async () => {throw Error('offline');};
   await vm.runInContext('refreshPlaybackReadiness()', env.context);
@@ -188,20 +166,20 @@ test('early playback invocation cannot make a playback request', async () => {
   assert.equal(env.nodes.get('btn-test-playback').disabled, true);
 });
 
-test('showContainerLogs opens operations details and requests container logs', async () => {
+test('showContainerLogs opens the viewer for the requested service', async () => {
   const env = form({});
   const calls = [];
   env.context.api = async path => { calls.push(path); return { container: 'prowlarr', logs: 'Sample Prowlarr Log' }; };
   const showLogsCode = source.slice(source.indexOf('async function showContainerLogs('), source.indexOf('async function refreshServices()'));
   vm.runInContext(showLogsCode, env.context);
-  const opDetails = env.document.getElementById('operations-details');
-  opDetails.open = false;
+  const dialog = env.document.getElementById('service-log-dialog');
+  dialog.showModal = () => { dialog.open = true; };
   const sel = env.document.getElementById('logs-container-select');
   sel.options = [{ value: 'aiostreams' }, { value: 'prowlarr' }];
   await vm.runInContext("showContainerLogs('prowlarr')", env.context);
-  assert.equal(opDetails.open, true);
+  assert.equal(dialog.open, true);
+  assert.equal(env.document.getElementById('advanced-tools').open, undefined);
   assert.equal(sel.value, 'prowlarr');
   assert.deepEqual(calls, ['/api/logs?container=prowlarr']);
   assert.equal(env.document.getElementById('container-logs-output').textContent, 'Sample Prowlarr Log');
 });
-

@@ -16,9 +16,9 @@ services:
       - "${PORTAL_PORT:-8088}:8088"   # Built-in Landing Page & Quick Setup Portal
       - "${PORT_AIOSTREAMS:-3001}:3001"   # AIOStreams Aggregator Portal (External Subdomain)
       - "${PORT_AIOMETADATA:-4005}:4005"   # AIOMetadata Catalogs & Ratings (External Subdomain)
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8085:8085"   # Nuvio Web Player
+      - "${PLAYER_BIND_IP:-0.0.0.0}:8085:8085"   # Nuvio Web Player
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:8086"   # SlickSync Hub
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8082:8082"   # Stremio Web Player
+      - "${PLAYER_BIND_IP:-0.0.0.0}:8082:8082"   # Stremio Web Player
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator

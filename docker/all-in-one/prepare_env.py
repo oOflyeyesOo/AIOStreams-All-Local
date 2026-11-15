@@ -50,4 +50,6 @@ def prepare(root, data, environment):
 
 
 if __name__ == '__main__':
-    prepare('/app', '/data', os.environ)
+    # The outer container's published ports define the appliance boundary.
+    # Inner loopback-only bindings cannot receive those forwarded connections.
+    prepare('/app', '/data', {'INTERNAL_BIND_IP': '0.0.0.0', **os.environ})

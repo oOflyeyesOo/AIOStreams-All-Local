@@ -269,13 +269,19 @@ host. For a reverse proxy, set the complete URL in the Compose project's
 
 For the appliance, the default `docker run` example publishes AIOStreams,
 AIOMetadata, and the web players. To open another UI, publish its port when
-creating the container and set `-e INTERNAL_BIND_IP=0.0.0.0` so Docker can
-forward to the inner service. For example, `-p 192.168.1.10:9696:9696` enables
+creating the container. For example, `-p 192.168.1.10:9696:9696` enables
 Prowlarr on the server's trusted LAN address. Use your actual server IP.
 Other UI ports include Comet `8000`, InfiniDysk `3005`, SubSense `3100`,
 Posters+ `9039`, StremThru `8080`, Anime Kitsu `7005`, and SlickSync `8086`.
 For loopback-only access from another machine, forward the published ports
 and the portal over SSH, then open the forwarded portal at localhost.
+
+Under **Stack settings → Usenet servers and NZB indexers**, use **Add Usenet
+server** for another NNTP account. Added servers start as **Backup only**.
+Clear that option to use the server in the regular connection pool. Use **Add
+NZB indexer** for each additional Newznab endpoint. Prowlarr manages those
+indexers, and AIOStreams uses the existing Prowlarr Usenet route. Leave a saved
+password or API key field blank to keep it when editing the row.
 
 
 

@@ -848,12 +848,19 @@ class PortalTests(unittest.TestCase):
 
     def test_container_logs_endpoint(self):
         with patch.object(portal.subprocess, "run") as mock_sub:
-            mock_sub.return_value = unittest.mock.MagicMock(returncode=0, stdout="AIOStreams log output line 1\nline 2", stderr="")
-            status, body, _ = self.request("/api/logs?container=aiostreams", auth=True)
+            mock_sub.side_effect = [
+                MagicMock(returncode=0, stdout="fixture-project\n"),
+                MagicMock(returncode=0, stdout="abcdef012345\n"),
+                MagicMock(returncode=0, stdout="SubSense log output https://example.invalid/?api_key=fixture-secret"),
+            ]
+            status, body, _ = self.request("/api/logs?container=subsense", auth=True)
             self.assertEqual(status, 200)
             data = json.loads(body)
-            self.assertEqual(data["container"], "aiostreams")
-            self.assertIn("AIOStreams log output", data["logs"])
+            self.assertEqual(data["container"], "subsense")
+            self.assertIn("SubSense log output", data["logs"])
+            self.assertNotIn("fixture-secret", data["logs"])
+            self.assertIn("label=com.docker.compose.project=fixture-project", mock_sub.call_args_list[1].args[0])
+            self.assertIn("label=com.docker.compose.service=subsense", mock_sub.call_args_list[1].args[0])
 
     def test_container_logs_setup_endpoint(self):
         status, body, _ = self.request("/api/logs?container=setup", auth=True)
@@ -864,7 +871,10 @@ class PortalTests(unittest.TestCase):
 
     def test_container_logs_tail_clamping(self):
         with patch.object(portal.subprocess, "run") as mock_sub:
-            mock_sub.return_value = unittest.mock.MagicMock(returncode=0, stdout="log output", stderr="")
+            def docker(args, **kwargs):
+                output = {"inspect": "fixture-project", "ps": "abcdef012345", "logs": "log output"}
+                return MagicMock(returncode=0, stdout=output[args[1]])
+            mock_sub.side_effect = docker
             # Test negative tail clamped
             status, _, _ = self.request("/api/logs?container=aiostreams&tail=-10", auth=True)
             self.assertEqual(status, 200)

@@ -47,7 +47,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.2.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
-from tools.usenet_config import form_updates, public_settings, credential
+from tools.usenet_config import EXTRA_SOURCES, extra_sources, form_updates, public_settings, credential
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
@@ -1737,6 +1737,22 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         }
         self.json_response(resp)
 
+    def redact_service_logs(self, output):
+        values = {**os.environ, **read_saved_env()}
+        private = {value for key, value in values.items() if value and re.search(r'KEY|PASS|TOKEN|SECRET|ENCRYPTED', key)}
+        try:
+            private.add(credential(values, 'USENET_PASS'))
+            for field, secret in EXTRA_SOURCES.items():
+                private.update(row.get(secret, '') for row in extra_sources(values, field))
+        except ValueError:
+            pass
+        for value in sorted(filter(None, private), key=len, reverse=True):
+            # Very short values can appear inside ordinary log words.
+            if len(value) >= 4:
+                output = output.replace(value, '[REDACTED]').replace(urllib.parse.quote(value, safe=''), '[REDACTED]')
+        output = re.sub(r'(/stremio/)[^/\s]+/[^/\s]+', r'\1[REDACTED]', output)
+        return re.sub(r'([?&](?:api[_-]?key|access[_-]?key|token|password)=)[^&\s]+', r'\1[REDACTED]', output, flags=re.I)
+
     def handle_api_logs(self):
         url_parts = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(url_parts.query)
@@ -1755,7 +1771,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 logs_text = "\n".join(snap.get("logs", [])) or "No setup logs recorded yet."
                 self.json_response({
                     "container": "setup",
-                    "logs": logs_text,
+                    "logs": self.redact_service_logs(logs_text),
                     "status": snap.get("status", "idle"),
                     "step": snap.get("step", "")
                 })
@@ -1767,14 +1783,26 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 tail = 60
             tail = max(1, min(tail, 500))
 
-            # 1. Try Docker CLI if available
+            # Resolve this project's Compose service label, including services
+            # whose Docker names differ between appliance and packaged installs.
             try:
-                res = subprocess.run(["docker", "logs", "--tail", str(min(tail, 200)), container],
+                own = subprocess.run(["docker", "inspect", "--format",
+                                      '{{index .Config.Labels "com.docker.compose.project"}}', os.environ.get("HOSTNAME", "")],
                                      capture_output=True, text=True, timeout=4)
-                if res.returncode == 0 and (res.stdout or res.stderr):
-                    self.json_response({"container": container, "logs": (res.stdout or res.stderr).strip()})
-                    return
-            except Exception:
+                project = own.stdout.strip()
+                if own.returncode == 0 and re.fullmatch(r"[a-z0-9][a-z0-9_-]*", project):
+                    found = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}",
+                                            "--filter", f"label=com.docker.compose.service={container}"],
+                                           capture_output=True, text=True, timeout=4)
+                    ids = found.stdout.split()
+                    if found.returncode == 0 and ids and re.fullmatch(r"[a-f0-9]{12,64}", ids[0]):
+                        res = subprocess.run(["docker", "logs", "--tail", str(min(tail, 200)), ids[0]],
+                                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                             errors="replace", timeout=4)
+                        if res.returncode == 0:
+                            self.json_response({"container": container, "logs": self.redact_service_logs(res.stdout[-65536:].strip())})
+                            return
+            except (OSError, subprocess.TimeoutExpired):
                 pass
 
             # 2. Try log files in /var/log/
@@ -1785,15 +1813,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
                         lines = f.readlines()
-                        self.json_response({"container": container, "logs": "".join(lines[-tail:]).strip()})
+                        self.json_response({"container": container, "logs": self.redact_service_logs("".join(lines[-tail:])[-65536:].strip())})
                         return
                 except Exception:
                     pass
 
-            self.json_response({
-                "container": container,
-                "logs": f"[{container}] Service monitored. Direct container log streaming is unavailable in this environment."
-            })
+            self.json_response({"error": f"No logs are available for {container}. Check that the service has started."}, 404)
             return
 
         logs = {}

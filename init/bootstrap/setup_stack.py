@@ -21,6 +21,14 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import tempfile
+import copy
+from pathlib import Path
+
+for parent in Path(__file__).resolve().parents:
+    if (parent / 'tools' / 'usenet_config.py').is_file():
+        sys.path.insert(0, str(parent))
+        break
+from tools.usenet_config import newznab_indexers
 
 def load_env_file():
     if os.environ.get("AIO_SKIP_ENV_FILE") == "true":
@@ -445,36 +453,67 @@ def tune_prowlarr_indexers():
                 pass
 
 def setup_usenet_indexer():
-    base=os.environ.get('NZB_INDEXER_URL','').rstrip('/')
-    key=os.environ.get('NZB_INDEXER_API_KEY','')
-    active=os.environ.get('USENET_ENABLED','false')=='true'
-    if active and (not base or not key):
-        return
-    headers={'X-Api-Key':PROWLARR_API_KEY}
-    existing=make_request(f'{PROWLARR_URL}/api/v1/indexer',headers=headers)
-    if not isinstance(existing,list):raise RuntimeError('Prowlarr indexer inventory is unavailable')
-    owned=next((item for item in existing if item.get('implementation')=='Newznab' and item.get('name')=='AIO Local Usenet'),None)
-    if not active:
-        if owned and owned.get('enable'):
-            payload=dict(owned,enable=False)
-            result=make_request(f"{PROWLARR_URL}/api/v1/indexer/{owned['id']}",method='PUT',headers=headers,data=payload)
-            if not isinstance(result,dict) or not result.get('id'):raise RuntimeError('Prowlarr could not disable the managed NZB indexer')
-        return
-    prior=owned or next((item for item in existing if item.get('implementation')=='Newznab' and any(f.get('name')=='baseUrl' and str(f.get('value','')).rstrip('/')==base for f in item.get('fields',[]))),None)
-    schemas=make_request(f'{PROWLARR_URL}/api/v1/indexer/schema',headers=headers)
-    schema=next((item for item in schemas if item.get('implementation')=='Newznab'),None) if isinstance(schemas,list) else None
-    if not schema:raise RuntimeError('Prowlarr Newznab support is unavailable')
-    import copy
-    payload=copy.deepcopy(prior or schema)
-    payload.update(name=prior.get('name') if prior else 'AIO Local Usenet',enable=True,appProfileId=payload.get('appProfileId') or 1)
-    for field in payload.get('fields',[]):
-        if field.get('name')=='baseUrl':field['value']=base
-        elif field.get('name')=='apiKey':field['value']=key
-    if not prior:payload.pop('id',None)
-    path=f"{PROWLARR_URL}/api/v1/indexer"+(f"/{prior['id']}" if prior else '')
-    result=make_request(path,method='PUT' if prior else 'POST',headers=headers,data=payload,timeout=30)
-    if not isinstance(result,dict) or not result.get('id'):raise RuntimeError('Prowlarr could not validate the NZB indexer; check its address and key')
-    print('[Usenet Setup] NZB indexer configured in Prowlarr.',flush=True)
+    active = os.environ.get('USENET_ENABLED', 'false') == 'true'
+    rows = newznab_indexers(os.environ) if active else []
+    headers = {'X-Api-Key': PROWLARR_API_KEY}
+    endpoint = f'{PROWLARR_URL}/api/v1/indexer'
+    existing = make_request(endpoint, headers=headers)
+    if not isinstance(existing, list):
+        raise RuntimeError('Prowlarr indexer inventory is unavailable')
+    indexers = [item for item in existing if item.get('implementation') == 'Newznab']
+    managed_name = 'AIO Local Usenet'
+    owned = {item['name']: item for item in indexers
+             if re.fullmatch(r'AIO Local Usenet(?: \[aio:[a-f0-9]{32}\])?', item.get('name', ''))}
+    schema = None
+    errors = 0
+    keep = set()
+
+    def field(item, name):
+        return next((entry.get('value') for entry in item.get('fields', []) if entry.get('name') == name), None)
+
+    for row in rows:
+        name = f"{managed_name} [aio:{row['id']}]" if row['id'] else managed_name
+        keep.add(name)
+        prior = owned.get(name)
+        base = row['url']
+        api_key = row['apiKey']
+        duplicate = next((item for item in indexers
+                          if item is not prior and str(field(item, 'baseUrl') or '').rstrip('/').lower() == base.lower()
+                          and item.get('enable') and item.get('name') not in owned), None)
+        if duplicate:
+            print('[Usenet Setup] NZB address already enabled in Prowlarr; keeping its manual settings.', flush=True)
+            continue
+        if prior and prior.get('enable') and field(prior, 'baseUrl') == base and field(prior, 'apiKey') == api_key:
+            continue
+        if prior is None and schema is None:
+            schemas = make_request(endpoint + '/schema', headers=headers)
+            schema = next((item for item in schemas if item.get('implementation') == 'Newznab'), None) if isinstance(schemas, list) else None
+            if schema is None:
+                raise RuntimeError('Prowlarr Newznab support is unavailable')
+        payload = copy.deepcopy(prior or schema)
+        payload.update(name=name, enable=True, appProfileId=payload.get('appProfileId') or 1)
+        for entry in payload.get('fields', []):
+            if entry.get('name') == 'baseUrl':
+                entry['value'] = base
+            elif entry.get('name') == 'apiKey':
+                entry['value'] = api_key
+        if not prior:
+            payload.pop('id', None)
+        path = f"{endpoint}/{prior['id']}" if prior else endpoint
+        result = make_request(path, method='PUT' if prior else 'POST', headers=headers, data=payload, timeout=30)
+        if not isinstance(result, dict) or not result.get('id'):
+            errors += 1
+
+    for name, item in owned.items():
+        if name in keep or not item.get('enable'):
+            continue
+        result = make_request(f"{endpoint}/{item['id']}", method='PUT', headers=headers, data=dict(item, enable=False))
+        if not isinstance(result, dict) or not result.get('id'):
+            errors += 1
+    if errors:
+        raise RuntimeError(f'Prowlarr could not apply {errors} NZB indexer change(s); check the addresses and API keys')
+    if rows:
+        print(f'[Usenet Setup] Applied {len(rows)} NZB indexer setting(s) in Prowlarr.', flush=True)
 
 
 # ==============================================================================

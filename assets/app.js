@@ -178,9 +178,75 @@ window.showToast = notify;
 function setProgress(title,message,running=false) {
   document.getElementById('progress-title').textContent = title;
   document.getElementById('progress-description').textContent = message;
-  document.getElementById('progress-panel').classList.toggle('running',running);
+  const panel = document.getElementById('progress-panel');
+  panel.hidden = false;
+  panel.classList.toggle('running', running);
 }
 let cachedEnv = {};
+const extraUsenetSources = [
+  { key: 'USENET_EXTRA_SERVERS', list: 'extra-usenet-servers', template: 'usenet-server-row', add: 'add-usenet-server', secret: 'password' },
+  { key: 'USENET_EXTRA_INDEXERS', list: 'extra-nzb-indexers', template: 'nzb-indexer-row', add: 'add-nzb-indexer', secret: 'apiKey' },
+];
+
+function addUsenetSource(source, saved = {}) {
+  const list = document.getElementById(source.list);
+  const template = document.getElementById(source.template);
+  if (!list || !template || list.children.length >= 12) return;
+  const row = template.content.firstElementChild.cloneNode(true);
+  if (saved.id) row.dataset.sourceId = saved.id;
+  for (const input of row.querySelectorAll('[data-source-field]')) {
+    const field = input.dataset.sourceField;
+    if (field === source.secret) {
+      input.placeholder = saved.secretSaved ? 'Saved · enter to replace' : '';
+      input.required = !saved.secretSaved;
+    } else if (field in saved) {
+      if (input.type === 'checkbox') input.checked = saved[field];
+      else input.value = saved[field];
+    }
+  }
+  row.querySelector('[data-remove-source]').addEventListener('click', () => {
+    row.remove();
+    document.getElementById(source.add).disabled = false;
+    setFormDirty(true);
+  });
+  list.append(row);
+  document.getElementById(source.add).disabled = list.children.length >= 12;
+  return row;
+}
+
+function loadExtraUsenetSources(settings) {
+  for (const source of extraUsenetSources) {
+    document.getElementById(source.list)?.replaceChildren();
+    const button = document.getElementById(source.add);
+    if (button) button.disabled = false;
+    for (const row of settings[source.key] || []) addUsenetSource(source, row);
+  }
+}
+
+function readExtraUsenetSources(payload) {
+  for (const source of extraUsenetSources) {
+    const list = document.getElementById(source.list);
+    if (!list) continue;
+    payload[source.key] = Array.from(list.children, row => {
+      const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
+      for (const input of row.querySelectorAll('[data-source-field]')) {
+        const field = input.dataset.sourceField;
+        if (field === source.secret && !input.value) continue;
+        values[field] = input.type === 'checkbox' ? input.checked : input.value;
+      }
+      return values;
+    });
+  }
+}
+
+for (const source of extraUsenetSources) {
+  document.getElementById(source.add)?.addEventListener('click', () => {
+    const row = addUsenetSource(source);
+    row?.querySelector('input')?.focus();
+    if (row) setFormDirty(true);
+  });
+}
+
 async function loadSettings() {
   const env = await api('/api/env');
   cachedEnv = env;
@@ -202,6 +268,7 @@ async function loadSettings() {
   usenetPasswordSaved=!!env.USENET_PASSWORD_SAVED;
   document.getElementById('usenet-pass').value='';
   document.getElementById('usenet-pass').placeholder=usenetPasswordSaved?'Saved · enter to replace':'Usenet password';
+  if (typeof loadExtraUsenetSources === 'function') loadExtraUsenetSources(env);
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
   const modeVal = env.STREAMING_MODE || (env.USENET_ENABLED === 'true' && !providers.some(([k]) => savedKeys.has(k) || env[k]) ? 'usenet' : (env.USENET_ENABLED === 'true' ? 'hybrid' : 'debrid'));
@@ -248,23 +315,13 @@ async function loadSettings() {
     const testEl = document.getElementById(`${key}-test`);
     if (testEl) testEl.hidden = !saved;
   }
-  const stremioPort = (env.ports && env.ports.stremio_web) || env.PORT_STREMIO_WEB || 8082;
-  const stremioLink = document.getElementById('player-link');
-  if (stremioLink) {
-    stremioLink.href = `${location.protocol}//${location.hostname}:${stremioPort}`;
-    stremioLink.textContent = `Launch Stremio Web (:${stremioPort}) ↗`;
-  }
-  const nuvioPort = (env.ports && env.ports.nuvio) || env.PORT_NUVIO || 8085;
-  const nuvioPlayerLink = document.getElementById('nuvio-player-link');
-  if (nuvioPlayerLink) {
-    nuvioPlayerLink.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
-    nuvioPlayerLink.textContent = `Launch Nuvio Web (:${nuvioPort}) ↗`;
-  }
   if (typeof setFormDirty === 'function') setFormDirty(false);
 }
 
+let manifestLoaded = false;
 async function loadManifest() {
   const info = await api('/api/manifest-info');
+  manifestLoaded = true;
   const customization = document.getElementById('addon-customization');
   if (customization && info.aiostreamsConfigure && info.aiostreamsDashboard && info.aiometadataConfigure) {
     document.getElementById('configure-aiostreams').href = info.aiostreamsConfigure;
@@ -275,9 +332,6 @@ async function loadManifest() {
   if (info.directManifest) {
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
-    document.getElementById('copy-manifest').disabled = false;
-    const installBtn = document.getElementById('btn-install-stremio');
-    if (installBtn) installBtn.disabled = false;
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
@@ -315,45 +369,44 @@ async function loadManifest() {
   }
 }
 
-let lastIntegrations = [];
 
 async function showContainerLogs(containerName) {
-  const opDetails = document.getElementById('operations-details');
-  if (opDetails) opDetails.open = true;
-  const sel = document.getElementById('logs-container-select');
-  if (sel && containerName) {
-    const direct = Array.from(sel.options).find(opt => opt.value === containerName);
-    if (direct) {
-      sel.value = containerName;
-    } else {
-      const fuzzy = Array.from(sel.options).find(opt => opt.value.includes(containerName) || containerName.includes(opt.value));
-      if (fuzzy) sel.value = fuzzy.value;
-    }
+  const dialog = document.getElementById('service-log-dialog');
+  const select = document.getElementById('logs-container-select');
+  const output = document.getElementById('container-logs-output');
+  const status = document.getElementById('service-log-status');
+  const refresh = document.getElementById('btn-fetch-logs');
+  const copy = document.getElementById('copy-service-logs');
+  if (!dialog || !select || !output) return;
+
+  if (containerName && Array.from(select.options).some(option => option.value === containerName)) {
+    select.value = containerName;
   }
-  const target = (sel && sel.value) ? sel.value : (containerName || 'aiostreams');
-  const out = document.getElementById('container-logs-output');
-  if (out) {
-    out.textContent = `Fetching latest logs for ${target}…`;
-    out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-  const btn = document.getElementById('btn-fetch-logs');
-  if (btn) btn.disabled = true;
+  const target = select.value || 'aiostreams';
+  const label = select.selectedOptions?.[0]?.textContent || target;
+  if (!dialog.open) dialog.showModal();
+  const request = Symbol();
+  showContainerLogs.pending = request;
+  status.textContent = `Loading ${label} logs…`;
+  output.textContent = '';
+  refresh.disabled = true;
+  copy.disabled = true;
   try {
-    const res = await api(`/api/logs?container=${encodeURIComponent(target)}`);
-    if (out) {
-      out.textContent = res.logs || `[${target}] No recent logs returned.`;
-      out.scrollTop = out.scrollHeight;
-    }
-  } catch (err) {
-    if (out) out.textContent = `Error fetching logs for ${target}: ${err.message}`;
+    const result = await api(`/api/logs?container=${encodeURIComponent(target)}`);
+    if (showContainerLogs.pending !== request) return;
+    output.textContent = result.logs || 'No recent output.';
+    output.scrollTop = output.scrollHeight;
+    status.textContent = `Recent output for ${label}`;
+    copy.disabled = !result.logs;
+  } catch (error) {
+    if (showContainerLogs.pending === request) status.textContent = `Could not load logs: ${error.message}`;
   } finally {
-    if (btn) btn.disabled = false;
+    if (showContainerLogs.pending === request) refresh.disabled = false;
   }
 }
 
 async function refreshServices() {
   const result = await api('/api/integrations');
-  lastIntegrations = result.integrations || [];
   const grid = document.getElementById('service-grid'); grid.replaceChildren();
   for (const service of result.integrations) {
     const card = document.createElement('div'); card.className = 'service-card';
@@ -383,7 +436,7 @@ async function refreshServices() {
     const logBtn = document.createElement('button');
     logBtn.type = 'button';
     logBtn.className = 'service-log-link';
-    logBtn.textContent = 'Log 📄';
+    logBtn.textContent = 'View logs';
     logBtn.title = `View logs for ${service.name}`;
     logBtn.setAttribute('aria-label', `View ${service.name} logs`);
     logBtn.addEventListener('click', (e) => {
@@ -394,35 +447,29 @@ async function refreshServices() {
     content.append(actions);
 
     card.append(icon, content, status);
-    card.addEventListener('click', (e) => {
-      if (e.target.tagName !== 'A' && e.target.tagName !== 'BUTTON') {
-        showContainerLogs(containerKey);
-      }
-    });
     grid.append(card);
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
 
-  const stremioSvc = result.integrations.find(s => s.name && s.name.toLowerCase().includes('stremio'));
-  const nuvioSvc = result.integrations.find(s => s.name && s.name.toLowerCase().includes('nuvio'));
+  const stremioSvc = result.integrations.find(s => s.name === 'Stremio Web');
+  const nuvioSvc = result.integrations.find(s => s.name === 'Nuvio');
   const stremioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.stremio_web) || (cachedEnv && cachedEnv.PORT_STREMIO_WEB) || 8082;
   const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
 
   const stremioAction = document.getElementById('player-link-action');
   if (stremioAction) {
-    stremioAction.href = `${location.protocol}//${location.hostname}:${stremioPort}`;
-    stremioAction.textContent = `Launch Stremio Web (:${stremioPort}) ↗`;
+    stremioAction.href = stremioSvc?.uiUrl || `http://${location.hostname}:${stremioPort}`;
+    stremioAction.textContent = `Open Stremio Web ↗`;
     stremioAction.style.display = (stremioSvc && stremioSvc.enabled !== false) ? 'block' : 'none';
   }
   const nuvioAction = document.getElementById('nuvio-player-action');
   if (nuvioAction) {
-    nuvioAction.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
-    nuvioAction.textContent = `Launch Nuvio Web (:${nuvioPort}) ↗`;
+    nuvioAction.href = nuvioSvc?.uiUrl || `http://${location.hostname}:${nuvioPort}`;
+    nuvioAction.textContent = `Open Nuvio Web ↗`;
     nuvioAction.style.display = (nuvioSvc && nuvioSvc.enabled !== false) ? 'block' : 'none';
   }
 
-  if (typeof updateStatusOverview === 'function') updateStatusOverview(lastHealthData, result.integrations);
 }
 
 async function pollSetup() {
@@ -441,7 +488,7 @@ async function pollSetup() {
     }
     if (setupDetails) {
       setupDetails.hidden = job.status === 'idle';
-      if (job.status === 'running' || job.status === 'failed') {
+      if (job.status !== lastJobStatus && job.status === 'failed') {
         setupDetails.open = true;
       }
     }
@@ -452,16 +499,19 @@ async function pollSetup() {
     const running = job.status === 'running';
     document.getElementById('setup-button').disabled = running;
     document.getElementById('setup-button').firstElementChild.textContent = running ? 'Connecting your stack…' : 'Connect my stack';
-    if (job.status !== 'idle') setProgress(job.status === 'complete' ? 'Manifest configuration saved' : job.step, running ? 'Services are being configured. Live setup logs are displayed below.' : job.status === 'complete' ? 'Manifest configuration saved. Check readiness below before testing playback.' : 'Setup needs attention. Review output below, verify your keys, then try again.',running);
-    document.getElementById('step-2').classList.toggle('active',running);
-    document.getElementById('step-3').classList.toggle('active',job.status === 'complete');
+    if (running || job.status === 'failed') {
+      setProgress(job.step, running ? 'See setup output for details.' : 'Review the last error and inspect the affected service.', running);
+    }
+    const progressPanel = document.getElementById('progress-panel');
+    if (progressPanel) progressPanel.classList.toggle('setup-complete', job.status === 'complete');
     if (job.status === 'complete' && lastJobStatus !== 'complete') {
-      await loadManifest(); await refreshServices();
-      notify('Manifest configuration saved.');
+      if (progressPanel) progressPanel.hidden = false;
+      if (setupDetails) setupDetails.open = false;
+      await Promise.allSettled([loadManifest(), refreshServices()]);
     }
     lastJobStatus = job.status;
     renderPlaybackReadiness();
-    if (running || job.status === 'idle') pollTimer = setTimeout(pollSetup,running ? 1600 : 5000);
+    pollTimer = setTimeout(pollSetup, running ? 1600 : 5000);
   } catch(error) {
     if (lastJobStatus === 'running' && ++reconnectAttempts < 90) {
       setProgress('Services are restarting','Reconnecting to the setup controller…',true);
@@ -472,6 +522,7 @@ async function pollSetup() {
     renderPlaybackReadiness();
     setProgress('Connection interrupted',error.message);
     document.getElementById('setup-button').disabled = false;
+    pollTimer = setTimeout(pollSetup, 5000);
   }
 }
 
@@ -512,6 +563,7 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
   };
   const usenetPassword=document.getElementById('usenet-pass').value;
   if(usenetPassword||!usenetPasswordSaved)payload.USENET_PASS=usenetPassword;
+  if (typeof readExtraUsenetSources === 'function') readExtraUsenetSources(payload);
   for (const [key] of fields) {
     const value = document.getElementById(key).value.trim();
     if (value || !savedKeys.has(key)) payload[key] = value;
@@ -570,20 +622,7 @@ async function copyToClipboard(text, successMsg, triggerBtn) {
   }
 }
 
-const btnInstallStremio = document.getElementById('btn-install-stremio');
-if (btnInstallStremio) {
-  btnInstallStremio.addEventListener('click', () => {
-    if (!currentManifest) return;
-    const stremioUrl = currentManifest.replace(/^https?:/, 'stremio:');
-    copyToClipboard(currentManifest, 'Launching Stremio... (Manifest URL copied to clipboard as fallback)');
-    window.location.href = stremioUrl;
-  });
-}
-
 document.getElementById('btn-test-playback')?.addEventListener('click', () => {
-  if (typeof runPlaybackTest === 'function') runPlaybackTest();
-});
-document.getElementById('overview-test-playback-btn')?.addEventListener('click', () => {
   if (typeof runPlaybackTest === 'function') runPlaybackTest();
 });
 
@@ -706,12 +745,6 @@ function setStreamingMode(mode) {
   const hiddenInput = document.getElementById('streaming-mode');
   if (hiddenInput) hiddenInput.value = mode;
 
-  const modeBadge = document.getElementById('overview-mode-badge');
-  if (modeBadge) {
-    const labels = { debrid: 'Mode: Debrid', usenet: 'Mode: Usenet Only', hybrid: 'Mode: Hybrid' };
-    modeBadge.textContent = labels[mode] || `Mode: ${mode}`;
-  }
-
   const modePills = document.querySelectorAll ? document.querySelectorAll('.streaming-mode-section .mode-pill') : [];
   modePills.forEach(btn => {
     if (btn.classList && typeof btn.classList.toggle === 'function') {
@@ -790,35 +823,59 @@ let setupFormDirty = false;
 let readinessTimer;
 let readinessRequest;
 
+let settingsRestored = false;
+
 function renderPlaybackReadiness() {
-  const ready = playbackReadiness?.ready === true && !setupFormDirty && lastJobStatus !== 'running';
-  const message = setupFormDirty ? 'You have unapplied changes. Click Connect my stack before testing.'
-    : lastJobStatus === 'running' ? 'Setup is still running. Playback testing is locked until setup and service checks finish.'
-    : playbackReadiness?.message || 'Checking startup status. Playback testing is locked until checks finish.';
-  for (const id of ['btn-test-playback', 'overview-test-playback-btn']) {
-    const btn = document.getElementById(id);
-    if (btn) { btn.disabled = !ready || playbackBusy; btn.title = message; }
+  const failed = lastJobStatus === 'failed' || playbackReadiness?.state === 'failed';
+  const running = lastJobStatus === 'running' || playbackReadiness?.state === 'starting';
+  const needsSetup = manifestLoaded && !currentManifest && !running && !failed;
+  const ready = playbackReadiness?.ready === true && !setupFormDirty && !failed && !running;
+  const state = failed ? 'failed' : ready ? 'ready' : (setupFormDirty || needsSetup) && !running ? 'setup' : 'waiting';
+  let title = 'Checking your stack';
+  let message = playbackReadiness?.message || 'Checking services and setup progress.';
+  if (failed) {
+    title = 'Setup needs attention';
+    message = 'Check the setup output below, then retry from Stack settings.';
+  } else if (running) {
+    title = 'Starting services';
+    message = 'Setup is in progress. Playback controls appear when checks pass.';
+  } else if (setupFormDirty) {
+    title = 'Apply your changes';
+    message = 'Choose Connect my stack to apply your edits and recheck playback readiness.';
+  } else if (ready) {
+    title = 'Ready to play';
+    message = 'Use the manifest in your player or run a playback test here.';
+  } else if (needsSetup) {
+    title = 'Finish setup';
+    message = 'Add your keys in Stack settings, then choose Connect my stack.';
   }
+
   const banner = document.getElementById('startup-readiness');
-  if (banner) banner.className = `startup-readiness ${ready ? 'ready' : 'waiting'}`;
-  const title = document.getElementById('startup-title');
-  if (title) title.textContent = ready ? 'Ready to test your setup' : 'Your stack is not ready to test yet';
-  for (const id of ['startup-message', 'playback-readiness-hint', 'overview-action-text']) {
-    const el = document.getElementById(id); if (el) el.textContent = message;
+  if (banner) banner.className = `startup-readiness ${state}`;
+  const titleEl = document.getElementById('startup-title');
+  const messageEl = document.getElementById('startup-message');
+  if (titleEl && titleEl.textContent !== title) titleEl.textContent = title;
+  if (messageEl && messageEl.textContent !== message) messageEl.textContent = message;
+  const actions = document.getElementById('ready-actions');
+  if (actions) actions.hidden = !ready;
+  const test = document.getElementById('btn-test-playback');
+  if (test) test.disabled = !ready || playbackBusy;
+  const copy = document.getElementById('copy-manifest');
+  if (copy) copy.disabled = !ready || !currentManifest;
+  const settings = document.getElementById('setup');
+  if (!settingsRestored && ready && settings && !settings.contains?.(document.activeElement)) {
+    settings.open = false;
+    settingsRestored = true;
   }
   const list = document.getElementById('startup-checks');
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
-  if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n');
-  const badge = document.getElementById('overview-badge');
-  if (badge) {
-    badge.textContent = ready ? 'Ready to test' : 'Testing locked';
-    badge.style.color = ready ? '#86efac' : '#fde68a';
-    badge.style.background = ready ? '#142b23' : '#292318';
-    badge.style.borderColor = ready ? '#6ee7b7' : '#e6b65a';
-  }
-  const dot = document.getElementById('overview-status-dot');
-  if (dot) { dot.style.background = ready ? '#6ee7b7' : '#e6b65a'; dot.style.boxShadow = 'none'; }
+  if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';
 }
+
+document.getElementById('open-stack-settings')?.addEventListener('click', () => {
+  const settings = document.getElementById('setup');
+  if (settings) settings.open = true;
+});
 
 async function refreshPlaybackReadiness() {
   if (readinessRequest) return readinessRequest;
@@ -842,7 +899,7 @@ async function runPlaybackTest() {
   playbackBusy = true;
   renderPlaybackReadiness();
   const readiness = await refreshPlaybackReadiness();
-  if (!readiness?.ready || setupFormDirty || lastJobStatus === 'running') {
+  if (!readiness?.ready || setupFormDirty || ['running', 'failed'].includes(lastJobStatus)) {
     playbackBusy = false;
     renderPlaybackReadiness();
     return;
@@ -858,7 +915,7 @@ async function runPlaybackTest() {
   const iconPlayback = document.getElementById('icon-step-playback');
   const descPlayback = document.getElementById('desc-step-playback');
   const troubleshootEl = document.getElementById('playback-troubleshoot');
-  const testBtns = [document.getElementById('btn-test-playback'), document.getElementById('overview-test-playback-btn')].filter(Boolean);
+  const testBtns = [document.getElementById('btn-test-playback')].filter(Boolean);
   const videoContainer = document.getElementById('playback-video-container');
   const videoPreview = document.getElementById('playback-video-preview');
   const streamLink = document.getElementById('playback-direct-stream-link');
@@ -949,7 +1006,7 @@ async function runPlaybackTest() {
         iconPlayback.textContent = '▶';
         if (iconPlayback.style) iconPlayback.style.color = '#38bdf8';
       }
-      if (descPlayback) descPlayback.textContent = 'Stream ready. Video player preview active.';
+      if (descPlayback) descPlayback.textContent = 'Press Play in the preview to verify browser playback.';
 
       if (res.stream_url && typeof res.stream_url === 'string' && /^https?:\/\//i.test(res.stream_url) && videoContainer && videoContainer.style) {
         videoContainer.style.display = 'block';
@@ -962,7 +1019,7 @@ async function runPlaybackTest() {
           };
           videoPreview.onerror = () => {
             if (iconPlayback) { iconPlayback.textContent = '⚠'; if (iconPlayback.style) iconPlayback.style.color = '#fbbf24'; }
-            if (descPlayback) descPlayback.textContent = 'Direct stream link active (preview codec unsupported in browser).';
+            if (descPlayback) descPlayback.textContent = 'The browser could not play the preview. Try the direct link in your player.';
           };
         }
         if (streamLink) streamLink.href = res.stream_url;
@@ -971,14 +1028,14 @@ async function runPlaybackTest() {
     } else {
       if (videoContainer && videoContainer.style) videoContainer.style.display = 'none';
       if (statusEl) {
-        statusEl.textContent = res.status === 'warning' ? '⚠ Playback Warning' : '✗ Playback Failed';
+        statusEl.textContent = res.status === 'warning' ? '⚠ Playback Warning' : '✗ Setup check failed';
         if (statusEl.style) statusEl.style.color = res.status === 'warning' ? '#fbbf24' : '#f87171';
       }
       if (iconPlayback) {
         iconPlayback.textContent = '✗';
         if (iconPlayback.style) iconPlayback.style.color = '#8fa1a8';
       }
-      if (descPlayback) descPlayback.textContent = 'Skipped due to upstream issue.';
+      if (descPlayback) descPlayback.textContent = 'Skipped because an earlier check failed.';
       notify(`Playback check: ${res.message || 'Verification issue detected'}`);
     }
 
@@ -987,14 +1044,6 @@ async function runPlaybackTest() {
       if (troubleshootEl.style) troubleshootEl.style.display = 'block';
     }
 
-    const actionText = document.getElementById('overview-action-text');
-    if (actionText) {
-      if (res.status === 'ok') {
-        actionText.textContent = 'Media read verified. Try the preview or your player to confirm playback.';
-      } else if (res.troubleshoot) {
-        actionText.textContent = res.troubleshoot;
-      }
-    }
   } catch (err) {
     if (statusEl) {
       statusEl.textContent = '✗ Check Interrupted';
@@ -1011,97 +1060,6 @@ async function runPlaybackTest() {
     await refreshPlaybackReadiness();
   }
 }
-
-function updateStatusOverview(healthData, integrationsList) {
-  if (healthData) lastHealthData = healthData;
-  if (Array.isArray(integrationsList) && integrationsList.length > 0) lastIntegrations = integrationsList;
-
-  const lastCheck = document.getElementById('overview-last-check');
-  if (lastCheck) {
-    lastCheck.textContent = `Checked at ${new Date().toLocaleTimeString()}`;
-  }
-
-  const modeBadge = document.getElementById('overview-mode-badge');
-  if (modeBadge) {
-    const curMode = document.getElementById('streaming-mode')?.value || 'debrid';
-    const labels = { debrid: 'Mode: Debrid', usenet: 'Mode: Usenet Only', hybrid: 'Mode: Hybrid' };
-    modeBadge.textContent = labels[curMode] || `Mode: ${curMode}`;
-  }
-
-  const servicesEl = document.getElementById('overview-services');
-  if (servicesEl && Array.isArray(lastIntegrations) && lastIntegrations.length > 0) {
-    const active = lastIntegrations.filter(item => item.enabled !== false);
-    const reachable = active.filter(item => item.reachable);
-    servicesEl.textContent = `${reachable.length}/${active.length} Online`;
-    servicesEl.style.color = (active.length > 0 && reachable.length === active.length) ? '#10b981' : '#f59e0b';
-  }
-
-  if (lastHealthData) {
-    const wd = lastHealthData.watchdog || {};
-    const bk = lastHealthData.backup || {};
-    const wdEl = document.getElementById('overview-watchdog');
-    if (wdEl) {
-      wdEl.textContent = `${wd.healthy_count || 0}/${wd.total_services || 0} Healthy`;
-      wdEl.style.color = wd.overall === 'healthy' ? '#10b981' : '#f59e0b';
-    }
-    const bkEl = document.getElementById('overview-backup');
-    if (bkEl) {
-      bkEl.textContent = `${bk.count || 0} Saved (${bk.total_size_mb || 0} MB)`;
-    }
-    const badge = document.getElementById('overview-badge');
-    const dot = document.getElementById('overview-status-dot');
-    const isHealthy = wd.overall === 'healthy';
-    if (badge) {
-      badge.textContent = isHealthy ? 'All Systems Operational' : 'Attention Needed';
-      badge.style.color = isHealthy ? '#34d399' : '#fbbf24';
-      badge.style.background = isHealthy ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
-      badge.style.borderColor = isHealthy ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)';
-    }
-    if (dot) {
-      dot.style.background = isHealthy ? '#10b981' : '#f59e0b';
-      dot.style.boxShadow = isHealthy ? '0 0 10px #10b981' : '0 0 10px #f59e0b';
-    }
-  }
-  renderPlaybackReadiness();
-}
-
-const templateSelectEl = document.getElementById('aiometadata-template');
-if (templateSelectEl) {
-  templateSelectEl.addEventListener('change', updateTemplateDisplay);
-}
-
-document.getElementById('copy-template-json')?.addEventListener('click', async (e) => {
-  const select = document.getElementById('aiometadata-template');
-  const val = select ? select.value : 'tamtaro-aiometadata-with-anime.json';
-  try {
-    const res = await fetch(`/templates/aiometadata-configs/${val}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    await copyToClipboard(text, `Copied ${val} to clipboard!`, e.currentTarget);
-  } catch (err) {
-    notify(`Failed to copy JSON: ${err.message}`);
-  }
-});
-
-document.getElementById('test-webhook-btn')?.addEventListener('click', async () => {
-  const input = document.getElementById('discord-webhook-url');
-  const url = input?.value.trim();
-  if (!url) {
-    notify('Enter a Discord or Apprise webhook URL first.');
-    return;
-  }
-  notify('Dispatching test alert...');
-  try {
-    const res = await api('/api/webhook-test', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ url })
-    });
-    notify(res.message || 'Webhook alert delivered! 🎉');
-  } catch (err) {
-    notify(`Webhook test failed: ${err.message}`);
-  }
-});
 
 async function refreshMaintenance() {
   const state = await api('/api/maintenance');
@@ -1243,6 +1201,11 @@ async function runOperations() {
     showContainerLogs(e.target.value);
   });
 
+  document.getElementById('open-service-logs')?.addEventListener('click', () => showContainerLogs());
+  document.getElementById('copy-service-logs')?.addEventListener('click', event => {
+    copyToClipboard(document.getElementById('container-logs-output').textContent, 'Service logs copied.', event.currentTarget);
+  });
+
   document.getElementById('btn-fetch-logs')?.addEventListener('click', () => {
     const container = document.getElementById('logs-container-select')?.value || 'aiostreams';
     showContainerLogs(container);
@@ -1351,13 +1314,11 @@ async function runOperations() {
 }
 
 let healthInterval = null;
-let lastHealthData = null;
 
 async function refreshHealthTelemetry() {
   try {
     const data = await api('/api/health-stats');
     if (!data || !data.success) return;
-    lastHealthData = data;
 
     const res = data.resources || {};
     const wd = data.watchdog || {};
@@ -1415,9 +1376,6 @@ async function refreshHealthTelemetry() {
       });
     }
 
-    if (typeof updateStatusOverview === 'function') {
-      updateStatusOverview(data, lastIntegrations);
-    }
   } catch (err) {
     console.error('Failed to refresh health telemetry:', err);
   }
@@ -1455,17 +1413,23 @@ function initHealthTelemetry() {
   });
 
   const select = document.getElementById('auto-refresh-select');
-  if (select) {
-    const updateInterval = () => {
-      if (healthInterval) clearInterval(healthInterval);
-      const val = parseInt(select.value, 10);
-      if (val > 0) {
-        healthInterval = setInterval(refreshHealthTelemetry, val);
-      }
-    };
-    select.addEventListener('change', updateInterval);
+  const advanced = document.getElementById('advanced-tools');
+  const updateInterval = () => {
+    clearInterval(healthInterval);
+    healthInterval = null;
+    const interval = Number(select?.value);
+    if (advanced?.open && !document.hidden && interval > 0) {
+      healthInterval = setInterval(refreshHealthTelemetry, interval);
+    }
+  };
+  select?.addEventListener('change', updateInterval);
+  advanced?.addEventListener('toggle', () => {
     updateInterval();
-  }
+    if (advanced.open && !document.hidden) {
+      refreshHealthTelemetry();
+      refreshMaintenance().catch(error => notify(error.message));
+    }
+  });
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('visibilitychange', () => {
@@ -1479,16 +1443,9 @@ function initHealthTelemetry() {
           pollTimer = null;
         }
       } else {
-        refreshHealthTelemetry();
-        if (lastJobStatus === 'running') {
-          pollSetup();
-        }
-        if (select) {
-          const val = parseInt(select.value, 10);
-          if (val > 0 && !healthInterval) {
-            healthInterval = setInterval(refreshHealthTelemetry, val);
-          }
-        }
+        pollSetup();
+        if (advanced?.open) refreshHealthTelemetry();
+        updateInterval();
       }
     });
   }
@@ -1496,7 +1453,7 @@ function initHealthTelemetry() {
 
 runOperations();
 initHealthTelemetry();
-Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup(),refreshMaintenance(),refreshHealthTelemetry()]).then(results=>{
+Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);
 });
