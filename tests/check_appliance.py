@@ -13,12 +13,11 @@ def main():
     name = 'aio-appliance-smoke'
     created = run(['docker', 'run', '-d', '--privileged', '--name', name,
                    '-e', 'COMPOSE_PROFILES=scrapers', '-e', 'ADDON_PASSWORD=appliance-test-password',
-                   '-e', 'TMDB_API_KEY=fixture-not-a-provider-key',
                    '-e', 'BASE_URL=http://127.0.0.1:3001', image])
     if created.returncode:
         raise RuntimeError('Could not start disposable appliance')
     try:
-        probe = '''import importlib.util, json, os, socket, urllib.request
+        probe = '''import importlib.util, os, socket, urllib.request
 s=importlib.util.spec_from_file_location('portal','/app/docker/all-in-one/portal_server.py')
 p=importlib.util.module_from_spec(s); s.loader.exec_module(p)
 assert os.environ.get('COMPOSE_CONTROL_SOCKET') == '/runtime/control.sock'
@@ -29,19 +28,40 @@ for host in ('aiostreams', 'comet', 'aiometadata', 'postersplus', 'subsense', 'p
 for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping', 'http://infinidysk:3000/healthz'):
     urllib.request.urlopen(url, timeout=5).close()
 job=p.setup_snapshot()
+if job['status'] == 'failed':
+    print(*job.get('logs', [])[-24:], sep=chr(10), flush=True)
+    raise SystemExit(42)
 assert job['status'] == 'complete', job['status']
-profile=p.read_saved_env().get('AIOMETADATA_PROFILE_UUID')
-assert profile, 'AIOMetadata did not save the fixture profile without Fanart'
-with urllib.request.urlopen('http://aiometadata:4005/stremio/'+profile+'/manifest.json', timeout=5) as response:
-    assert json.load(response).get('id')
-print('PASS: internal DNS, core HTTP, persisted settings, controller, and metadata provisioning without Fanart')
+print('PASS: internal DNS, core HTTP, persisted settings, controller and provisioning')
+'''
+        metadata_probe = '''import importlib.util, json, os, urllib.request
+os.environ.update(AIO_SKIP_ENV_FILE='true', TMDB_API_KEY='fixture-not-a-provider-key',
+                  FANART_API_KEY='', AIOMETADATA_PROFILE_UUID='')
+s=importlib.util.spec_from_file_location('bootstrap','/app/init/bootstrap/setup_stack.py')
+b=importlib.util.module_from_spec(s); s.loader.exec_module(b)
+saved={}
+b.update_env_file=lambda key, value: saved.update({key: value})
+url=b.setup_aiometadata_tamtaro()
+assert saved.get('AIOMETADATA_PROFILE_UUID'), 'No metadata profile saved'
+with urllib.request.urlopen(url, timeout=10) as response:
+    assert json.load(response).get('id'), 'Metadata manifest missing ID'
+print('PASS: AIOMetadata profile save and manifest without Fanart')
 '''
         deadline = time.monotonic() + 900
         while time.monotonic() < deadline:
             result = run(['docker', 'exec', name, 'docker', 'compose', 'exec', '-T', 'portal', 'python3', '-c', probe])
             if result.returncode == 0:
                 print(result.stdout)
+                metadata = run(['docker', 'exec', name, 'docker', 'compose',
+                                'exec', '-T', 'portal', 'python3', '-c', metadata_probe])
+                if metadata.returncode:
+                    print(metadata.stderr[-2000:])
+                    raise RuntimeError('Metadata profile save or manifest verification failed')
+                print(metadata.stdout.splitlines()[-1])
                 return
+            if result.returncode == 42:
+                print(result.stdout[-4000:])
+                break
             state = run(['docker', 'inspect', '--format', '{{.State.Running}}', name])
             if state.stdout.strip() != 'true':
                 break
