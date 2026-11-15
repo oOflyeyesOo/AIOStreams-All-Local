@@ -41,7 +41,7 @@ the source deployment for custom Compose definitions.
 ## Image access and versions
 
 Images are built by [Build Docker manager images](../../actions/workflows/build-manager-images.yml)
-on relevant source pushes to `main`. Wait for **all eight builds** to succeed (`search-broker`, `portal`, `controller`, `aiostreams`, `stremio-web`, `bootstrap`, `postgres-init`, and `kitsu`) before installing a
+on relevant source pushes to `main`. Wait for **all seven builds** to succeed (`search-broker`, `portal`, `controller`, `aiostreams`, `bootstrap`, `postgres-init`, and `kitsu`) before installing a
 new revision. They are published under `ghcr.io/ooflyeyesoo/aio-local-*` with
 `latest` and full commit-SHA tags. Set `AIO_IMAGE_TAG` to a successful commit SHA to
 keep all packaged components on the same release. Upstream services still use
@@ -63,7 +63,7 @@ The source deployment below remains available without these packaged images.
 
 Do not run a source installation and a manager installation with the default
 ports on the same host at the same time. The full stack also publishes service
-ports listed in the Compose file, including 3001, 8082 and 8085.
+ports listed in the Compose file, including 3001 for AIOStreams and its built-in player.
 
 ## Storage, updates and removal
 
@@ -84,9 +84,8 @@ you have backed it up and deliberately migrated its data.
 
 ### Source Compose Profiles (`docker-compose.yml`)
 When deploying directly from source using `docker-compose.yml`, profiles allow running exactly the components you need:
-- **`core`** (default lean stack): AIOStreams, AIOMetadata, Comet, SubSense, Anime Kitsu, StremThru Store, Stremio Web, and backing databases/cache.
+- **`core`** (default lean stack): AIOStreams, AIOMetadata, Comet, SubSense, Anime Kitsu, StremThru Store and backing databases/cache.
 - **`scrapers`** (recommended full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and Infinidysk Usenet.
-- **`nuvio`** (dedicated player): Standalone Nuvio Web Player (`:8085`) with AniSkip skip intros and multi-stream sync.
 - **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`).
 - **`all`**: Activates all continuous services simultaneously.
 
@@ -110,7 +109,7 @@ the retired Hidden Cinemeta container from this project.
 To build the manager images locally, tag all targets consistently:
 
 ```sh
-for target in search-broker portal controller aiostreams stremio-web bootstrap postgres-init; do
+for target in search-broker portal controller aiostreams bootstrap postgres-init; do
   docker build -f docker/packaged/Dockerfile --target "$target" -t "aio-local-$target:local" .
 done
 docker build -f docker/anime-kitsu/Dockerfile -t aio-local-kitsu:local .
@@ -130,8 +129,14 @@ a Hidden Cinemeta server.
 
 ### Host ports and optional coverage
 
-Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_STREMIO_WEB`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
+Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_AIOSTREAMS`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
 
 The default request path uses Comet plus the StremThru Store (Debrid Cloud Library) integration. External scraping is powered by Comet querying local Prowlarr indexers and Zilean DMM torrent hash cache. StremThru Store directly replaces the retired Debrid Search container with zero-overhead, instant cloud library lookups.
 
 Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.
+
+When upgrading a Compose installation that bundled Stremio Web and Nuvio Web,
+redeploy the same project with `docker compose up -d --remove-orphans` (use the
+same Compose file and profiles). In a Docker manager, select its orphan removal
+option or remove only the two retired player containers. Their saved data stays
+on disk. Open the AIOStreams player from the portal after setup finishes.

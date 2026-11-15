@@ -118,7 +118,7 @@ All other microservices (Comet, Zilean, Prowlarr, Posters+, SubSense, Postgres, 
 
 flowchart LR
 
-    Player["📱 Stremio / Nuvio Player<br/>(Outside Home Network)"]
+    Player["📱 AIOStreams or external player<br/>(Outside Home Network)"]
 
     
 
@@ -218,8 +218,6 @@ docker run -d \
   -p 8088:8088 \
   -p 3001:3001 \
   -p 4005:4005 \
-  -p 8082:8082 \
-  -p 8085:8085 \
   -v aio-data:/data \
   ghcr.io/ooflyeyesoo/aiostreams-aio:latest
 ```
@@ -230,8 +228,6 @@ docker run -d \
   * `8088`: Web Setup Portal & Diagnostic Center (Primary UI)
   * `3001`: AIOStreams Core Addon Aggregator (Manifest URL & Stream Engine)
   * `4005`: AIOMetadata Catalogs & Streaming Badges (Standalone Manifest)
-  * `8082`: Stremio Web Player
-  * `8085`: Nuvio Web Player
   *(All backend scrapers, indexers, proxies, and databases communicate securely inside the container and require no host ports).*
 
 ### Option B: Docker Compose
@@ -252,6 +248,11 @@ Open **`http://YOUR-SERVER:8088`**:
 3. Enter your metadata keys (TMDB, TVDB, Fanart, MDBList).
 4. Click **Connect my stack**.
 
+To change the shared password, click **Set admin password** at the top of the
+portal, enter a new password, then click **Connect my stack**. A blank field keeps the
+current password. If the player asks for a username, choose **Copy player
+username** in the portal and sign in with the stack password.
+
 The portal automatically saves `.env` safely, provisions indexers and databases, configures AIOMetadata presets with Posters+, and activates the AIOStreams super-addon profile. Once complete, copy the manifest URLs directly into your player.
 
 Under **Customize your addons**, open **Configure AIOStreams** to edit the
@@ -268,7 +269,7 @@ host. For a reverse proxy, set the complete URL in the Compose project's
 `.env`, for example `UI_PROWLARR_URL=https://prowlarr.example.net`.
 
 For the appliance, the default `docker run` example publishes AIOStreams,
-AIOMetadata, and the web players. To open another UI, publish its port when
+and AIOMetadata. The AIOStreams player uses the AIOStreams port. To open another UI, publish its port when
 creating the container. For example, `-p 192.168.1.10:9696:9696` enables
 Prowlarr on the server's trusted LAN address. Use your actual server IP.
 Other UI ports include Comet `8000`, InfiniDysk `3005`, SubSense `3100`,
@@ -361,10 +362,9 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
-| **`scrapers`** (Default Complete) | `docker compose --profile scrapers up -d` | **~2.8 GB** | Complete streaming appliance with all scrapers, indexers, proxies, Usenet, Stremio Web, SlickSync, and Anime Kitsu (everything except Nuvio). |
+| **`scrapers`** (Default Complete) | `docker compose --profile scrapers up -d` | **~2.8 GB** | Complete streaming appliance with all scrapers, indexers, proxies, Usenet, SlickSync, and Anime Kitsu. |
 | **`core`** (Ultra-Lean) | `docker compose --profile core up -d` | **~1.1 GB** | Fast, minimal Debrid stack: AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL 16, Redis 7, Search Broker, and Portal. Ideal for low-memory VPS. |
-| **`nuvio`** (Dedicated Player) | `docker compose --profile nuvio up -d` | **~250 MB** | Standalone Nuvio Web Player (`:8085`) with full features, AniSkip, IntroDB, and admin dashboard (`/admin`). Combine via `COMPOSE_PROFILES=scrapers,nuvio`. |
-| **`all`** | `docker compose --profile all up -d` | **~3.1 GB** | Full appliance running all 19 continuous containers simultaneously (scrapers + nuvio). |
+| **`all`** | `docker compose --profile all up -d` | **~3.1 GB** | Full stack with optional integrations. |
 
 > [!TIP]
 > The setup scripts start the `all` profile when no profile is selected. You can set a lean default in `.env` using `COMPOSE_PROFILES=core`, or run directly with `./setup.sh start core` or `.\setup.ps1 -Start -Profile core`. The bootstrapper still creates the AIOStreams manifest if optional metadata services are unavailable; those providers are omitted until their profile is enabled.
@@ -408,7 +408,7 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Usenet Engine** | InfiniDysk (`:3005`) | High-throughput Usenet and WebDAV streaming engine |
 
-| **Web Players & Sync** | Stremio Web (`:8082`), Nuvio Web (`:8085`), SlickSync (`:8086`) | Modern web players with AniSkip (auto/hotkey skip) & player shortcuts, Trakt sync hub, collections builder |
+| **Player & Sync** | AIOStreams player (`:3001/jellyfin/web/`), SlickSync (`:8086`) | Built-in player, Trakt sync hub, collections builder |
 
 | **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean, Comet, and AIOMetadata |
 
@@ -505,7 +505,6 @@ Every media query and stream playback undergoes a coordinated journey across the
 
 8. **In-Player Enhancements (Subtitles & AniSkip)**:
    - **SubSense** (`:3100`) injects synchronized subtitles from OpenSubtitles and SubDL on-the-fly.
-   - The bundled Stremio Web player (`:8082` / `:3001`) queries `/api/aniskip`, fetching millisecond-accurate intro/outro timestamps and displaying interactive skip badges (`[Skip Intro (s)]`). Pressing `s` jumps past intro songs and recaps immediately.
 
 For full technical specifications, packet header details, and curl diagnostic commands, see the [End-to-End Streaming Path & Transport Architecture Guide](docs/STREAMING-PATH.md).
 

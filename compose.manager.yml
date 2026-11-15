@@ -105,10 +105,8 @@ services:
     - comet-data:/app/data/comet
     - prowlarr-data:/app/data/prowlarr
     - slicksync-data:/app/data/slicksync
-    - nuvio-data:/app/data/nuvio
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
-    - stremio-web-data:/app/data/stremio-web
     - postersplus-data:/app/data/postersplus
     - stremthru-data:/app/data/stremthru
     - subsense-data:/app/data/subsense
@@ -154,8 +152,6 @@ services:
     - PORT_AIOMETADATA=${PORT_AIOMETADATA:-4005}
     - PORT_POSTERSPLUS=${PORT_POSTERSPLUS:-9039}
     - PORT_SUBSENSE=${PORT_SUBSENSE:-3100}
-    - PORT_NUVIO=${PORT_NUVIO:-8085}
-    - PORT_STREMIO_WEB=${PORT_STREMIO_WEB:-8082}
     - PORT_SLICKSYNC=${PORT_SLICKSYNC:-8086}
     healthcheck:
       test:
@@ -353,26 +349,19 @@ services:
     volumes:
     - prowlarr-data:/prowlarr
     - slicksync-data:/slicksync
-    - nuvio-data:/nuvio
     - aiometadata-data:/aiometadata
     - infinidysk-data:/infinidysk
-    - stremio-web-data:/stremio-web
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
-    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web /postersplus /aiostreams;\n\
-      \  if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
-      \ fi;\n  if grep -q '\\\"uuid\\\": *null' /stremio-web/aiostreams_install.json 2>/dev/null; then rm -f /stremio-web/aiostreams_install.json;\
-      \ fi;\n  if [ ! -f /stremio-web/localStorage.json ]; then\n    echo '{\\\"profile\\\":{\\\"auth\\\":null,\\\"addons\\\
-      \":[],\\\"addonsLocked\\\":false,\\\"settings\\\":{\\\"interfaceLanguage\\\":\\\"eng\\\",\\\"streamingServerUrl\\\"\
-      :\\\"http://127.0.0.1:11470/\\\"}},\\\"streaming_server_urls\\\":{\\\"items\\\":{\\\"http://127.0.0.1:11470/\\\":\\\"\
-      2026-10-15T22:00:00.000Z\\\"}}}' > /stremio-web/localStorage.json;\n  fi;\n  if [ ! -f /prowlarr/config.xml ]; then\n\
-      \    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
+    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams;\n  if grep -q '\\\
+      \"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
+      \ fi;\n  if [ ! -f /prowlarr/config.xml ]; then\n    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
       \ > /prowlarr/config.xml;\n  else\n    sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey>|g'\
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
-      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /nuvio /aiometadata /infinidysk /stremio-web\
-      \ /postersplus /aiostreams 2>/dev/null || true;\n  if [ ! -f /stremio-web/localStorage.json ]; then echo '{}' > /stremio-web/localStorage.json;\
-      \ fi;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;\n\"\n"
+      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams\
+      \ 2>/dev/null || true;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true;\
+      \ fi;\n\"\n"
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     restart: unless-stopped
@@ -418,7 +407,6 @@ services:
     - aiostreams
     - controller
     volumes:
-    - stremio-web-data:/data/stremio-web
     - aiostreams-data:/data/aiostreams
     - aio-config:/app
     environment:
@@ -429,7 +417,6 @@ services:
     - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
     - COMET_URL=http://comet:8000
     - AIOSTREAMS_URL=http://aiostreams:3000
-    - STREMIO_WEB_URL=http://stremio-web:8080
     - AIOMETADATA_URL=http://aiometadata:4005
     - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
     - POSTERSPLUS_URL=http://postersplus:8000
@@ -741,7 +728,7 @@ services:
     - NODE_OPTIONS=--max-old-space-size=192
     - SUBSENSE_ENCRYPTION_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
     - REDIS_URL=redis://shared-redis:6379/1
-    - WARP_ENABLED=true
+    - WARP_ENABLED=${SUBSENSE_WARP_ENABLED:-false}
     - LOG_LEVEL=info
     - OPENSUBTITLES_API_KEY=${OPENSUBTITLES_API_KEY:-}
     - SUBDL_API_KEY=${SUBDL_API_KEY:-}
@@ -751,62 +738,6 @@ services:
     - stremio-net
     depends_on:
     - shared-redis
-  nuvio:
-    image: zedensix/nuvio-web:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-    mem_limit: 256m
-    ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_NUVIO:-8085}:3000
-    environment:
-    - ORIGIN=${NUVIO_ORIGIN:-http://localhost:8085}
-    - PROTOCOL_HEADER=x-forwarded-proto
-    - HOST_HEADER=x-forwarded-host
-    - NUVIO_ADMIN_EMAILS=${NUVIO_ADMIN_EMAILS:-admin@localhost}
-    - NUVIO_DATA_DIR=/app/data
-    - NUVIO_LOG_LEVEL=${NUVIO_LOG_LEVEL:-info}
-    volumes:
-    - nuvio-data:/app/data
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - curl -fsS http://localhost:3000/api/health || curl -fsS http://localhost:3000/ || exit 0
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-    - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
-  stremio-web:
-    image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-stremio-web:${AIO_IMAGE_TAG:-latest}
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-    restart: unless-stopped
-    ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_STREMIO_WEB:-8082}:8080
-    environment:
-    - AUTO_SERVER_URL=false
-    entrypoint:
-    - /bin/sh
-    - /aio-entrypoint.sh
-    volumes:
-    - stremio-web-data:/root/.stremio-server
-    - stremio-web-data:/aio-config:ro
-    networks:
-    - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
   slicksync:
     image: ghcr.io/slicknsliding/slicksync:private
     restart: unless-stopped
@@ -925,10 +856,8 @@ volumes:
   comet-data: {}
   prowlarr-data: {}
   slicksync-data: {}
-  nuvio-data: {}
   aiometadata-data: {}
   infinidysk-data: {}
-  stremio-web-data: {}
   postersplus-data: {}
   stremthru-data: {}
   subsense-data: {}

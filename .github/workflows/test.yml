@@ -27,7 +27,7 @@ jobs:
           docker compose --env-file .env.example -f docker-compose.aio.yml config --quiet
           docker compose --env-file .env.example -f compose.test.yml config --quiet
           docker compose --env-file .env.example -f compose.tools.yml config --quiet
-          for profile in core scrapers nuvio tunnel all; do
+          for profile in core scrapers tunnel all; do
             docker compose --env-file .env.example --profile "$profile" config --quiet
           done
       - name: Verify application service inventory
@@ -38,7 +38,7 @@ jobs:
         run: docker compose -p aio-tests -f compose.test.yml run --rm tests
       - name: PostgreSQL first and repeat initialization
         run: docker compose -p aio-tests -f compose.test.yml run --rm database-test
-      - name: Web player first-visit settings
+      - name: Portal browser regression tests
         run: docker compose -p aio-tests -f compose.test.yml run --rm browser-tests
       - name: Update failure handling (Bash)
         run: |

@@ -47,7 +47,6 @@ jobs:
           - {name: portal, target: portal, file: docker/packaged/Dockerfile}
           - {name: controller, target: controller, file: docker/packaged/Dockerfile}
           - {name: aiostreams, target: aiostreams, file: docker/packaged/Dockerfile}
-          - {name: stremio-web, target: stremio-web, file: docker/packaged/Dockerfile}
           - {name: bootstrap, target: bootstrap, file: docker/packaged/Dockerfile}
           - {name: postgres-init, target: postgres-init, file: docker/packaged/Dockerfile}
           - {name: kitsu, target: '', file: docker/anime-kitsu/Dockerfile}

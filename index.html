@@ -15,6 +15,7 @@
   </div>
   <div class="stack-actions" id="stack-next-actions">
     <a class="text-button" id="open-stack-settings" href="#setup">Stack settings</a>
+    <a class="text-button" id="open-stack-password" href="#stack-admin-password">Set admin password</a>
     <a class="text-button" href="#integrations">Manage services</a>
   </div>
   <div id="ready-actions" hidden>
@@ -23,16 +24,16 @@
   <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
 </div>
 <div id="deployment-players" class="stack-actions player-showcase-bar">
-  <a id="player-link-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Stremio Web (:8082) ↗</a>
-  <a id="nuvio-player-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Nuvio Web (:8085) ↗</a>
   <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch AIOStreams Web Player ↗</a>
 </div>
-<div id="quickconnect-toolbar" class="quickconnect-bar">
-  <span class="quickconnect-label">CLIENT APPS (Infuse · Swiftfin · Kodi · Findroid · Native App):</span>
+<div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
+  <span class="quickconnect-label">Player sign-in</span>
   <button type="button" id="copy-jellyfin-server-url" class="mini-action-btn" title="Copy Jellyfin server endpoint for client apps">Copy Server URL ⧉</button>
-  <a id="open-jellyfin-quickconnect" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Pair client apps via Quick Connect">Quick Connect ↗</a>
+  <button type="button" id="copy-jellyfin-username" class="mini-action-btn">Copy player username ⧉</button>
+  <a id="open-jellyfin-quickconnect" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Open AIOStreams settings, then Save &amp; Install to pair a device">Pair a device ↗</a>
   <a id="install-aiostreams-web" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player">Hosted Web App ↗</a>
 </div>
+<p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
   </div>
   <details class="startup-checklist"><summary>Service checks</summary><pre id="startup-checks">Checking services…</pre></details>
 <section class="progress-panel panel" id="progress-panel" hidden><div><h3 id="progress-title">Setup progress</h3><p id="progress-description">Setup output will appear here when you connect your stack.</p><div class="progress-actions" id="progress-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btn-toggle-setup-logs" class="mini-action-btn" hidden>View setup output ▾</button><button type="button" id="btn-inspect-container-logs" class="mini-action-btn">Inspect container logs ↓</button></div></div><details id="setup-details" class="setup-details-accordion" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
@@ -100,7 +101,7 @@
       <div class="stepper-num">3</div>
       <div class="stepper-content">
         <span class="stepper-title">Stream Anywhere</span>
-        <span class="stepper-desc">Launch AIOStreams Web Player, Stremio, or Infuse / Jellyfin.</span>
+        <span class="stepper-desc">Launch the AIOStreams player or copy the manifest for an external client.</span>
       </div>
     </div>
   </div>
@@ -111,6 +112,11 @@
 <summary>Stack settings</summary>
 <div id="setup-sync-status" class="setup-sync-bar"><span class="sync-dot" id="setup-sync-dot"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
 <form id="setup-form">
+<div class="optional-setup stack-password-setting">
+  <label class="field-label" for="stack-admin-password">Stack admin password</label>
+  <input id="stack-admin-password" type="password" autocomplete="new-password" minlength="8" maxlength="64" aria-describedby="stack-admin-password-help">
+  <p class="field-help" id="stack-admin-password-help">Use this password for AIOStreams, its player, and AIOMetadata. Enter a new password and select <strong>Connect my stack</strong> to apply it. Leave the field blank to keep your current password.</p>
+</div>
 <div class="access-scope-section">
 <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
 <div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
@@ -207,7 +213,6 @@
   <span style="color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:var(--accent-cyan);">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
   <div style="display:flex;gap:6px;align-items:center;">
     <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:var(--accent-cyan);" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
-    <button type="button" id="copy-addon-password" class="mini-action-btn" title="Copy Addon Password (admin) to unlock AIOMetadata">Copy Password (admin) ⧉</button>
     <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--accent-gold);">Open Profile ↗</a>
   </div>
 </div>
@@ -269,7 +274,7 @@
     <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOStreams ↗</a>
     <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOMetadata ↗</a>
   </div>
-  <p class="field-help">Use <strong>admin</strong> and your stack password to sign in to AIOStreams. Use your stack password (<span id="addon-password-display" style="color:var(--text-main);font-weight:600;">admin</span>) to unlock the AIOMetadata profile. <button type="button" id="copy-addon-password-manifest" class="mini-action-btn" style="display:inline-block;padding:2px 6px;margin-left:4px;font-size:11px;">Copy password ⧉</button></p>
+  <p class="field-help">Use <strong>admin</strong> and your stack password for the AIOStreams dashboard. Use your stack password to unlock the AIOMetadata profile.</p>
   <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Open AIOStreams admin dashboard ↗</a>
   <a class="subtle-link" href="#integrations">View all self-hosted service UIs ↓</a>
 </div>
@@ -280,7 +285,6 @@
 </summary>
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
   <a id="install-stremio" class="subtle-link disabled" href="#">Open AIOStreams in Stremio ↗</a>
-  <a id="install-nuvio" class="subtle-link disabled" href="#" target="_blank" rel="noopener noreferrer">Open in Nuvio Web Player (:8085) ↗</a>
 
   <div class="manifest-preview" style="margin-top:8px">
     <div class="code-label"><span>aiometadata · manifest.json</span><span class="code-dot">● ● ●</span></div>
@@ -601,7 +605,7 @@
   </div>
   <div class="log-dialog-toolbar">
     <label for="logs-container-select">Service</label>
-    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="comet">Comet (Scraper)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="stremio-web">Stremio Web (Player)</option><option value="nuvio">Nuvio (Player)</option><option value="slicksync">SlickSync (Sync)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
+    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="comet">Comet (Scraper)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="slicksync">SlickSync (Sync)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
     <button type="button" id="btn-fetch-logs" class="text-button">Refresh</button>
     <button type="button" id="copy-service-logs" class="text-button" disabled>Copy logs</button>
   </div>
@@ -620,8 +624,9 @@
       <button type="button" id="service-frame-close" class="text-button service-frame-close-btn" aria-label="Close service viewer">✕ Close</button>
     </div>
   </div>
+  <p class="service-frame-help">If this page stays blank or refuses to load, choose Pop Out.</p>
   <div class="service-frame-body">
-    <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+    <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="no-referrer" allow="fullscreen"></iframe>
   </div>
 </dialog>
 </main>

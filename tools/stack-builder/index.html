@@ -504,30 +504,6 @@
 
               
 
-              <!-- Nuvio Web Player -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">Nuvio</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8085</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Modern Stremio-compatible web client and player.</p>
-                </div>
-                <input type="checkbox" id="svc-nuvio" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
-
-              <!-- Stremio Web Player -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">Stremio Web</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">:8082</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Official Stremio Web UI with bundled local streaming engine.</p>
-                </div>
-                <input type="checkbox" id="svc-stremio-web" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
-
               <!-- SlickSync -->
               <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
                 <div>
@@ -762,8 +738,6 @@
         aiometadata: true,
         subsense: true,
         stremthru: true,
-        nuvio: true,
-        stremioWeb: true,
         slicksync: true,
         infinidysk: true
       },
@@ -780,8 +754,6 @@
       state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
       state.services.subsense = document.getElementById('svc-subsense').checked;
       state.services.stremthru = document.getElementById('svc-stremthru').checked;
-      state.services.nuvio = document.getElementById('svc-nuvio').checked;
-      state.services.stremioWeb = document.getElementById('svc-stremio-web') ? document.getElementById('svc-stremio-web').checked : true;
       state.services.slicksync = document.getElementById('svc-slicksync').checked;
       state.services.infinidysk = document.getElementById('svc-infinidysk') ? document.getElementById('svc-infinidysk').checked : true;
 
@@ -811,8 +783,6 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          nuvio: true,
-          stremioWeb: true,
           slicksync: true,
           infinidysk: false
         };
@@ -827,8 +797,6 @@
           aiometadata: true,
           subsense: true,
             stremthru: true,
-          nuvio: true,
-          stremioWeb: true,
           slicksync: true,
           infinidysk: false
         };
@@ -843,8 +811,6 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          nuvio: false,
-          stremioWeb: false,
           slicksync: false,
           infinidysk: false
         };
@@ -859,8 +825,6 @@
       document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
       document.getElementById('svc-subsense').checked = state.services.subsense;
       document.getElementById('svc-stremthru').checked = state.services.stremthru;
-      document.getElementById('svc-nuvio').checked = state.services.nuvio;
-      if (document.getElementById('svc-stremio-web')) document.getElementById('svc-stremio-web').checked = state.services.stremioWeb;
       document.getElementById('svc-slicksync').checked = state.services.slicksync;
       if (document.getElementById('svc-infinidysk')) document.getElementById('svc-infinidysk').checked = state.services.infinidysk;
 
@@ -1017,6 +981,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       lines.push(`      - PORT=3000`);
       lines.push(`      - NODE_OPTIONS=--dns-result-order=ipv4first`);
       lines.push(`      - BASE_URL=\${BASE_URL:-http://localhost:3000}`);
+      lines.push(`      - JELLYFIN_ENABLED=true`);
       lines.push(`      - SECRET_KEY=\${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}`);
       lines.push(`      - ADDON_PASSWORD=\${ADDON_PASSWORD}`);
       lines.push(`      - AIOSTREAMS_AUTH=admin:\${ADDON_PASSWORD}`);
@@ -1179,7 +1144,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           if (s.slicksync) lines.push(`      - ./data/slicksync:/slicksync`);
           if (s.aiometadata) lines.push(`      - ./data/aiometadata:/aiometadata`);
           if (s.infinidysk) lines.push(`      - ./data/infinidysk:/infinidysk`);
-          if (s.stremioWeb) lines.push(`      - ./data/stremio-web:/stremio-web`);
                     
           let cmdParts = [];
           let dirs = [];
@@ -1187,7 +1151,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           if (s.slicksync) dirs.push('/slicksync');
           if (s.aiometadata) dirs.push('/aiometadata');
           if (s.infinidysk) dirs.push('/infinidysk');
-          if (s.stremioWeb) dirs.push('/stremio-web');
                     if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
 
           if (s.prowlarr) {
@@ -1280,47 +1243,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
         }
         
 
-      }
-
-      // 7. WEB PLAYERS & STREAM CLIENTS
-      if (s.nuvio || s.stremioWeb) {
-        lines.push(`\n  # ============================================================================`);
-        lines.push(`  # 7. WEB PLAYERS & STREAM CLIENTS (NUVIO & STREMIO WEB)`);
-        lines.push(`  # ============================================================================`);
-        if (s.nuvio) {
-          lines.push(`  nuvio:`);
-          lines.push(`    image: zedensix/nuvio-web:latest`);
-          lines.push(`    container_name: nuvio-web`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "8085:3000"`);
-          lines.push(`    environment:`);
-          lines.push(`      - ORIGIN=\${NUVIO_ORIGIN:-\${BASE_URL:-http://localhost:8085}}`);
-          lines.push(`      - PROTOCOL_HEADER=x-forwarded-proto`);
-          lines.push(`      - HOST_HEADER=x-forwarded-host`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-        }
-        if (s.stremioWeb) {
-          lines.push(`\n  # Stremio Web Player & Server (Official Web UI with streaming engine)`);
-          lines.push(`  stremio-web:`);
-          lines.push(`    image: tsaridas/stremio-docker:latest`);
-          lines.push(`    container_name: stremio-web`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "8082:8080"`);
-          lines.push(`    environment:`);
-          lines.push(`      - AUTO_SERVER_URL=true`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/stremio-web:/root/.stremio-server`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          if (db.needsInitConfigs) {
-            lines.push(`    depends_on:`);
-            lines.push(`      init-configs:`);
-            lines.push(`        condition: service_completed_successfully`);
-          }
-        }
       }
 
       // 8. NUVIO & STREMIO SYNC HUB (SLICKSYNC)
@@ -1490,8 +1412,6 @@ docker run -d \\
         { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
         { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
         { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk },
-        { name: 'Stremio Web Player', port: '8082', enabled: s.stremioWeb },
-        { name: 'Nuvio Web Player', port: '8085', enabled: s.nuvio },
         { name: 'SlickSync (Nuvio & Stremio Hub)', port: '8086', enabled: s.slicksync }
       ];
 

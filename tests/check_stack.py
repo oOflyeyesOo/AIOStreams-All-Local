@@ -17,12 +17,11 @@ HTTP_CHECKS = {
     "aiometadata": ("http://aiometadata:4005/health/live", False),
     "infinidysk": ("http://infinidysk:3000/healthz", False),
     "prowlarr": ("http://prowlarr:9696/ping", False),
-    "stremio-web": ("http://stremio-web:8080/", False),
 }
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
     host: TCP_PORTS[host] for host in (
         "stremthru", "flaresolverr", "subsense",
-        "postersplus", "slicksync", "nuvio", "zilean",
+        "postersplus", "slicksync", "zilean",
     )
 }}
 

@@ -23,7 +23,6 @@ mkdir -p /data/aiostreams \
          /data/aiometadata \
          /data/postersplus \
          /data/infinidysk \
-         /data/stremio-web \
          /var/log \
          /etc/docker \
          /etc/containerd \
@@ -160,7 +159,7 @@ if [ "$daemon_ready" = "true" ]; then
     # cannot prevent the network-connected portal from becoming available.
     enabled_services=$(docker compose config --services)
     mapfile -t startup_services < <(printf '%s\n' "$enabled_services" | sed -e '/^subsense$/d' -e '/^stack-bootstrap$/d' -e '/^$/d')
-    if docker compose up -d --wait --wait-timeout 600 "${startup_services[@]}"; then
+    if docker compose up -d --remove-orphans --wait --wait-timeout 600 "${startup_services[@]}"; then
         # Use the same controller action as the setup button. It applies the
         # saved environment and runs bootstrap inside the service network.
         if ! docker compose exec -T portal python3 -c 'import importlib.util; s=importlib.util.spec_from_file_location("portal", "/app/docker/all-in-one/portal_server.py"); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); p.launch_setup()'; then
@@ -181,8 +180,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo "=================================================================="
     echo " â€¢ Appliance Web Portal:   http://localhost:8088"
     echo " â€¢ AIOStreams Portal:     http://localhost:3001"
-    echo " â€¢ Stremio Web Player:    http://localhost:8082"
-    echo " â€¢ Nuvio Web Player:      http://localhost:8085"
     echo " â€¢ SlickSync Hub:         http://localhost:8086"
     echo " â€¢ AIOMetadata:           http://localhost:4005"
     echo " â€¢ Posters+:              http://localhost:9039"

@@ -72,7 +72,7 @@ def main():
     except Exception as error:
         report.append({'check':'profile readiness','passed':False,'errorType':type(error).__name__})
     # These URLs are private runtime data, never a source artifact or console output.
-    output = ROOT/'data/stremio-web/playback-candidates.json'
+    output = ROOT/'data/aiostreams/playback-candidates.json'
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(candidates))
     try:

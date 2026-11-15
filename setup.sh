@@ -31,7 +31,6 @@ ensure_directories() {
              data/aiometadata \
              data/postersplus \
              data/infinidysk \
-             data/stremio-web \
              init/postgres \
              templates/setup-templates \
              templates/formatters \
@@ -62,7 +61,7 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
-    local ports=(3000 3001 3005 3100 4005 7005 8000 8080 8082 8085 8088 8181 9696)
+    local ports=(3000 3001 3005 3100 4005 7005 8000 8080 8088 8181 9696)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -106,9 +105,9 @@ start_stack() {
 
     if [ -n "$profile" ]; then
         echo -e "${CYAN}[i] Launching with profile: ${profile}...${NC}"
-        docker compose --profile "$profile" up -d
+        docker compose --profile "$profile" up -d --remove-orphans
     else
-        docker compose --profile all up -d
+        docker compose --profile all up -d --remove-orphans
     fi
     echo -e "${GREEN}[✓] Docker stack started.${NC}"
     show_links
@@ -161,8 +160,7 @@ show_links() {
     echo -e "${CYAN}Web Management Portals:${NC}"
     echo -e "  • Appliance Hub (Landing Page): http://localhost:8088"
     echo -e "  • AIOStreams Portal:     http://localhost:3001"
-    echo -e "  • Stremio Web Player:    http://localhost:8082"
-    echo -e "  • Nuvio Web Player:      http://localhost:8085"
+    echo -e "  • AIOStreams Web Player: http://localhost:3001/jellyfin/web/"
     echo -e "  • SlickSync Hub:         http://localhost:8086"
     echo -e "  • Debrid Cloud Search:   http://localhost:3011"
     echo -e "  • AIOMetadata:           http://localhost:4005"
@@ -348,7 +346,7 @@ update_stack() {
     echo -e "${CYAN}[i] Rebuilding local custom images...${NC}"
     docker compose build --pull
     echo -e "${CYAN}[i] Re-launching stack with updated images...${NC}"
-    docker compose up -d
+    docker compose up -d --remove-orphans
     echo -e "${CYAN}[i] Verifying stack health post-update...${NC}"
     docker compose --profile test run --rm --no-deps stack-check
     echo -e "${GREEN}[✓] Stack update completed successfully!${NC}"

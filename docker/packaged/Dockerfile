@@ -22,10 +22,6 @@ FROM ghcr.io/viren070/aiostreams:latest AS aiostreams
 COPY docker/aiostreams/entrypoint.sh /entrypoint.sh
 COPY templates/builtin /app/resources/templates
 
-FROM tsaridas/stremio-docker:latest AS stremio-web
-COPY docker/stremio-web/entrypoint.sh /aio-entrypoint.sh
-COPY docker/stremio-web/bootstrap.js /srv/stremio-server/build/aio-bootstrap.js
-
 FROM python:3.11-alpine AS bootstrap
 COPY init/bootstrap /init
 COPY tools/usenet_config.py /init/tools/usenet_config.py

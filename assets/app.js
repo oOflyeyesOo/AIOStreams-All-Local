@@ -262,8 +262,10 @@ for (const source of extraUsenetSources) {
   });
 }
 
-async function loadSettings() {
-  const env = await api('/api/env');
+async function loadSettings(options) {
+  const env = await api('/api/env', options);
+  const passwordField = document.getElementById('stack-admin-password');
+  if (passwordField) passwordField.value = '';
   cachedEnv = env;
   if (typeof window !== 'undefined') window.cachedEnv = env;
   const schedSelect = document.getElementById('backup-schedule-select');
@@ -347,36 +349,11 @@ async function loadManifest() {
     customization.hidden = false;
   }
   if (info.directManifest) {
-    const manifestPanel = document.getElementById('manifest');
-    if (manifestPanel) manifestPanel.open = true;
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
-    const installNuvio = document.getElementById('install-nuvio');
-    if (installNuvio) {
-      const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
-      installNuvio.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
-      installNuvio.classList.remove('disabled');
-    }
-    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
-    const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
-    const serverUrl = info.jellyfinServer || `${aioBase}/jellyfin`;
-    const installAioWeb = document.getElementById('install-aiostreams-web');
-    if (installAioWeb) {
-      installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
-    }
-    const playerUrl = info.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
-    const aioPlayer = document.getElementById('aiostreams-player-action');
-    if (aioPlayer) {
-      aioPlayer.href = playerUrl;
-      aioPlayer.style.display = 'block';
-    }
-    const qcLink = document.getElementById('open-jellyfin-quickconnect');
-    if (qcLink && (!qcLink.href || qcLink.href.endsWith('#'))) {
-      qcLink.href = `${aioBase}/jellyfin/quickconnect`;
-    }
   }
   if (info.aiometadataProfileUuid) {
     const uuidSpan = document.getElementById('aiom-active-uuid');
@@ -387,10 +364,6 @@ async function loadManifest() {
   if (info.aiometadataConfigure) {
     const quickLink = document.getElementById('quick-configure-aiometa');
     if (quickLink) quickLink.href = info.aiometadataConfigure;
-  }
-  if (info.addonPassword) {
-    const passSpan = document.getElementById('addon-password-display');
-    if (passSpan) passSpan.textContent = info.addonPassword;
   }
   if (info.aiometadataManifest) {
     currentAiometaManifest = info.aiometadataManifest;
@@ -420,38 +393,42 @@ async function loadManifest() {
 }
 
 let activeElementBeforeFrameDialog = null;
+let serviceViewerScroll = null;
 
 function closeServiceViewer() {
   const dialog = document.getElementById('service-frame-modal');
   const iframe = document.getElementById('service-frame-iframe');
   if (!dialog || !dialog.open || dialog.classList?.contains?.('closing')) return;
   dialog.classList?.add?.('closing');
-  const restoreFocus = () => {
-    if (typeof activeElementBeforeFrameDialog !== 'undefined' && activeElementBeforeFrameDialog && typeof activeElementBeforeFrameDialog.focus === 'function') {
-      try { activeElementBeforeFrameDialog.focus(); } catch (_) {}
-      activeElementBeforeFrameDialog = null;
-    }
-  };
-  const onAnimationEnd = () => {
-    dialog.removeEventListener?.('animationend', onAnimationEnd);
+  const finishClosing = () => {
+    clearTimeout(closeFallback);
+    dialog.removeEventListener('animationend', onAnimationEnd);
     dialog.classList?.remove?.('closing');
     if (dialog.open) dialog.close();
     if (iframe) iframe.src = 'about:blank';
-    restoreFocus();
+    if (activeElementBeforeFrameDialog?.isConnected) {
+      activeElementBeforeFrameDialog.focus({preventScroll: true});
+    }
+    if (serviceViewerScroll) window.scrollTo(serviceViewerScroll);
+    activeElementBeforeFrameDialog = null;
+    serviceViewerScroll = null;
   };
-  dialog.addEventListener?.('animationend', onAnimationEnd, { once: true });
-  if (typeof setTimeout === 'function') {
-    setTimeout(() => {
-      if (dialog.classList?.contains?.('closing')) {
-        dialog.classList?.remove?.('closing');
-        if (dialog.open) dialog.close();
-        if (iframe) iframe.src = 'about:blank';
-        restoreFocus();
-      }
-    }, 250);
-  }
+  const onAnimationEnd = event => {
+    if (event.target === dialog) finishClosing();
+  };
+  const closeFallback = setTimeout(finishClosing, 250);
+  dialog.addEventListener('animationend', onAnimationEnd);
 }
 window.closeServiceViewer = closeServiceViewer;
+
+function canEmbedService(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || (url.protocol === 'http:' && location.protocol === 'http:');
+  } catch (_) {
+    return false;
+  }
+}
 
 function openServiceViewer(title, url) {
   const dialog = document.getElementById('service-frame-modal');
@@ -462,15 +439,18 @@ function openServiceViewer(title, url) {
     window.open(url, '_blank', 'noopener,noreferrer');
     return;
   }
+  if (dialog.open) return;
   activeElementBeforeFrameDialog = document.activeElement;
+  serviceViewerScroll = {left: window.scrollX, top: window.scrollY, behavior: 'instant'};
   if (titleEl) titleEl.textContent = title || 'Service Viewer';
   if (external) external.href = url;
+  iframe.title = title || 'Embedded service';
   iframe.src = url;
   if (dialog.classList?.contains?.('closing')) {
     dialog.classList.remove('closing');
   }
   if (typeof dialog.showModal === 'function') {
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
   } else {
     dialog.open = true;
   }
@@ -576,12 +556,6 @@ async function refreshServices() {
     const actions = document.createElement('div');
     actions.className = 'service-card-actions';
     if (service.uiUrl) {
-      card.classList?.add?.('service-card-interactive');
-      card.addEventListener?.('click', (e) => {
-        if (!e.target?.closest?.('a') && !e.target?.closest?.('button')) {
-          openServiceViewer(service.name, service.uiUrl);
-        }
-      });
       const embedBtn = document.createElement('button');
       embedBtn.type = 'button';
       embedBtn.className = 'service-embed-btn';
@@ -592,7 +566,7 @@ async function refreshServices() {
         e.stopPropagation();
         openServiceViewer(service.name, service.uiUrl);
       });
-      actions.append(embedBtn);
+      if (canEmbedService(service.uiUrl)) actions.append(embedBtn);
 
       const link = document.createElement('a');
       link.className = 'service-ui-link';
@@ -603,10 +577,8 @@ async function refreshServices() {
       link.setAttribute('aria-label', `Open ${service.name} UI`);
       actions.append(link);
     }
-    if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
-      const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
-      const aioOrigin = service.uiUrl ? new URL(service.uiUrl).origin : `http://${location.hostname}:${aioPort}`;
-      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web`;
+    if ((service.host === 'aiostreams' || service.name === 'AIOStreams') && cachedManifestInfo?.jellyfinEnabled === true) {
+      const playerUrl = cachedManifestInfo.jellyfinWebPlayer;
 
       const playerEmbedBtn = document.createElement('button');
       playerEmbedBtn.type = 'button';
@@ -618,7 +590,7 @@ async function refreshServices() {
         e.stopPropagation();
         openServiceViewer('AIOStreams Web Player', playerUrl);
       });
-      actions.append(playerEmbedBtn);
+      if (canEmbedService(playerUrl)) actions.append(playerEmbedBtn);
 
       const playerLink = document.createElement('a');
       playerLink.className = 'service-ui-link';
@@ -637,7 +609,7 @@ async function refreshServices() {
       qcBtn.setAttribute('aria-label', 'Copy Jellyfin server address');
       qcBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        copyToClipboard(`${aioOrigin}/jellyfin`, 'Jellyfin server URL copied. Use in Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app.', qcBtn);
+        copyToClipboard(`${cachedManifestInfo.baseUrl}/jellyfin`, 'Jellyfin server URL copied. Use in Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app.', qcBtn);
       });
       actions.append(qcBtn);
     }
@@ -661,36 +633,27 @@ async function refreshServices() {
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
 
-  const stremioSvc = result.integrations.find(s => s.name === 'Stremio Web');
-  const nuvioSvc = result.integrations.find(s => s.name === 'Nuvio');
   const aioSvc = result.integrations.find(s => s.name === 'AIOStreams' || s.host === 'aiostreams');
-  const stremioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.stremio_web) || (cachedEnv && cachedEnv.PORT_STREMIO_WEB) || 8082;
-  const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
-  const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
-  const aioBase = (aioSvc?.uiUrl) ? new URL(aioSvc.uiUrl).origin : `http://${location.hostname}:${aioPort}`;
-
-  const stremioAction = document.getElementById('player-link-action');
-  if (stremioAction) {
-    stremioAction.href = stremioSvc?.uiUrl || `http://${location.hostname}:${stremioPort}`;
-    stremioAction.textContent = `Open Stremio Web ↗`;
-    stremioAction.style.display = (stremioSvc && stremioSvc.enabled !== false) ? 'block' : 'none';
-  }
-  const nuvioAction = document.getElementById('nuvio-player-action');
-  if (nuvioAction) {
-    nuvioAction.href = nuvioSvc?.uiUrl || `http://${location.hostname}:${nuvioPort}`;
-    nuvioAction.textContent = `Open Nuvio Web ↗`;
-    nuvioAction.style.display = (nuvioSvc && nuvioSvc.enabled !== false) ? 'block' : 'none';
-  }
+  const info = cachedManifestInfo;
+  const enabled = info?.jellyfinEnabled === true && info.uuid && aioSvc && aioSvc.enabled !== false;
   const aioAction = document.getElementById('aiostreams-player-action');
   if (aioAction) {
-    const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
-    aioAction.href = playerUrl;
-    aioAction.textContent = `Open AIOStreams Web Player ↗`;
-    aioAction.style.display = (aioSvc && aioSvc.enabled !== false) ? 'block' : 'none';
+    aioAction.style.display = enabled ? 'block' : 'none';
+    if (enabled) aioAction.href = info.jellyfinWebPlayer;
   }
+  const toolbar = document.getElementById('quickconnect-toolbar');
+  if (toolbar) toolbar.hidden = !enabled;
+  const signInHelp = document.getElementById('player-sign-in-help');
+  if (signInHelp) signInHelp.hidden = !enabled;
   const qcLink = document.getElementById('open-jellyfin-quickconnect');
-  if (qcLink) {
-    qcLink.href = `${aioBase}/jellyfin/quickconnect`;
+  if (qcLink && enabled) qcLink.href = info.aiostreamsConfigure;
+  const hosted = document.getElementById('install-aiostreams-web');
+  if (hosted) {
+    hosted.hidden = !enabled || !info.baseUrl.startsWith('https://');
+    if (!hosted.hidden) {
+      const serverUrl = info.baseUrl + '/jellyfin';
+      hosted.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
+    }
   }
 
 }
@@ -730,7 +693,7 @@ async function pollSetup() {
     if (job.status === 'complete' && lastJobStatus !== 'complete') {
       if (progressPanel) progressPanel.hidden = false;
       if (setupDetails) setupDetails.open = false;
-      await Promise.allSettled([loadManifest(), refreshServices()]);
+      await Promise.allSettled([loadManifest().finally(refreshServices)]);
     }
     lastJobStatus = job.status;
     renderPlaybackReadiness();
@@ -784,6 +747,8 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json',
     DISCORD_WEBHOOK_URL: document.getElementById('discord-webhook-url')?.value.trim() || ''
   };
+  const newPassword = document.getElementById('stack-admin-password')?.value;
+  if (newPassword) payload.ADDON_PASSWORD = newPassword;
   const usenetPassword=document.getElementById('usenet-pass').value;
   if(usenetPassword||!usenetPasswordSaved)payload.USENET_PASS=usenetPassword;
   if (typeof readExtraUsenetSources === 'function') readExtraUsenetSources(payload);
@@ -807,8 +772,9 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
   setProgress('Saving your configuration','Connecting local services and checking your keys.',true);
   try {
     await api('/api/save-env',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    await loadSettings();
-    await api('/api/setup',{method:'POST'});
+    const headers = newPassword ? {Authorization: 'Basic ' + btoa('admin:' + newPassword)} : undefined;
+    await api('/api/setup', {method:'POST', headers});
+    await loadSettings(headers ? {headers} : undefined);
     lastJobStatus = 'running';
     renderPlaybackReadiness();
     if (typeof setFormDirty === 'function') setFormDirty(false);
@@ -894,12 +860,16 @@ if (copyAniskipBtn) {
 const copyJellyfinBtn = document.getElementById('copy-jellyfin-server-url');
 if (copyJellyfinBtn) {
   copyJellyfinBtn.addEventListener('click', e => {
-    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
-    const baseUrlInput = document.getElementById('base-url');
-    const aioBase = baseUrlInput?.value ? baseUrlInput.value.replace(/\/+$/, '') : `${location.protocol}//${location.hostname}:${aioPort}`;
-    copyToClipboard(`${aioBase}/jellyfin`, 'Jellyfin Server URL copied (connect Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app).', e.currentTarget);
+    if (!cachedManifestInfo?.jellyfinEnabled) return;
+    copyToClipboard(`${cachedManifestInfo.baseUrl}/jellyfin`, 'Jellyfin server URL copied.', e.currentTarget);
   });
 }
+
+document.getElementById('copy-jellyfin-username')?.addEventListener('click', e => {
+  if (cachedManifestInfo?.uuid) {
+    copyToClipboard(cachedManifestInfo.uuid, 'Player username copied.', e.currentTarget);
+  }
+});
 
 document.getElementById('test-saved-usenet-btn')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
@@ -982,13 +952,7 @@ if (copyTemplateBtn) {
   });
 }
 
-const copyPasswordHandler = e => {
-  const env = (typeof cachedEnv !== 'undefined') ? cachedEnv : {};
-  const pw = env.ADDON_PASSWORD || 'admin';
-  copyToClipboard(pw, `Addon password copied (${pw}). Enter this in AIOMetadata to unlock the profile.`, e.currentTarget);
-};
-document.getElementById('copy-addon-password')?.addEventListener('click', copyPasswordHandler);
-document.getElementById('copy-addon-password-manifest')?.addEventListener('click', copyPasswordHandler);
+
 
 const syncAiomBtn = document.getElementById('btn-sync-aiometadata');
 if (syncAiomBtn) {
@@ -1184,8 +1148,6 @@ function renderPlaybackReadiness() {
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
   if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';
   if (ready && currentManifest) {
-    const manifestPanel = document.getElementById('manifest');
-    if (manifestPanel) manifestPanel.open = true;
   }
   const step1 = document.getElementById('guide-step-1');
   const step2 = document.getElementById('guide-step-2');
@@ -1202,6 +1164,16 @@ function renderPlaybackReadiness() {
 document.getElementById('open-stack-settings')?.addEventListener('click', () => {
   const settings = document.getElementById('setup');
   if (settings) settings.open = true;
+});
+
+document.getElementById('open-stack-password')?.addEventListener('click', event => {
+  const settings = document.getElementById('setup');
+  const password = document.getElementById('stack-admin-password');
+  if (!settings || !password) return;
+  event.preventDefault();
+  settings.open = true;
+  password.scrollIntoView({block: 'center'});
+  password.focus({preventScroll: true});
 });
 
 async function refreshPlaybackReadiness() {
@@ -1621,11 +1593,7 @@ async function runOperations() {
   document.getElementById('service-frame-reload')?.addEventListener('click', () => {
     const iframe = document.getElementById('service-frame-iframe');
     if (iframe && iframe.src && iframe.src !== 'about:blank') {
-      const current = iframe.src;
-      iframe.src = 'about:blank';
-      if (typeof setTimeout === 'function') {
-        setTimeout(() => { if (iframe) iframe.src = current; }, 50);
-      }
+      iframe.src = iframe.src;
     }
   });
 
@@ -1867,7 +1835,7 @@ function initHealthTelemetry() {
 
 runOperations();
 initHealthTelemetry();
-Promise.allSettled([loadSettings(),loadManifest(),refreshServices(),pollSetup()]).then(results=>{
+Promise.allSettled([loadSettings(),loadManifest().finally(refreshServices),pollSetup()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);
 });

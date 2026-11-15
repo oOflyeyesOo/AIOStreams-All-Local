@@ -252,20 +252,6 @@ def test_slicksync():
         record("18. SlickSync Trakt & Sync Hub", False, str(e))
 
 
-def test_stremio_web():
-    try:
-        with urllib.request.urlopen("http://stremio-web:8080/", timeout=5) as resp:
-            record("19. Stremio Web Player", True, "Web application bundles delivered (200 OK)")
-    except Exception as e:
-        record("19. Stremio Web Player", False, str(e))
-
-
-def test_nuvio_web():
-    try:
-        with urllib.request.urlopen("http://nuvio:3000/", timeout=5) as resp:
-            record("20. Nuvio Web Player", True, "Web application responsive (200 OK)")
-    except Exception as e:
-        record("20. Nuvio Web Player", False, str(e))
 
 
 def test_aiostreams_and_playback():
@@ -364,8 +350,6 @@ def main():
     test_anime_kitsu()
     test_stremthru()
     test_slicksync()
-    test_stremio_web()
-    test_nuvio_web()
     test_aiostreams_and_playback()
     test_portal()
 

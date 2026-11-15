@@ -147,6 +147,18 @@ def apply():
                 subtitle_warning = f'Warning: {error}. Setup can continue without SubSense.'
         log_command(run + ['run', '--rm', '--no-deps', 'stack-bootstrap'],
                     'Connecting indexers, metadata, subtitles and players')
+        aio = rendered['services'].get('aiostreams', {}).get('environment', {})
+        if 'aiostreams' in applications and env_file.is_file():
+            # Import the refreshed profile link before declaring the stack ready.
+            # AIOStreams reads aliases from its environment at startup.
+            previous_alias = aio.get('ALIASED_CONFIGURATIONS', '')
+            for line in env_file.read_text().splitlines():
+                key, _, value = line.partition('=')
+                if key in ('ALIASED_CONFIGURATIONS', 'DEFAULT_AIO_UUID', 'DEFAULT_AIO_ENCRYPTED_PASSWORD'):
+                    aio[key] = value.strip().strip("\"'")
+            if aio.get('ALIASED_CONFIGURATIONS', '') != previous_alias:
+                Path(temporary).write_text(json.dumps(rendered))
+                log_command(run + up + ['aiostreams'], 'Refreshing AIOStreams player links')
         with LOCK:
             if subtitle_warning:
                 JOB['logs'].append(redact(subtitle_warning))

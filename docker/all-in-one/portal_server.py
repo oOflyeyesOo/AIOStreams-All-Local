@@ -103,7 +103,7 @@ def launch_setup():
                     SETUP_JOB["logs"].append(line.rstrip())
                     for marker, step in (("Prowlarr", "Connecting public indexers"), 
                                          ("AIOMetadata Setup", "Preparing metadata"), ("AIOStreams Setup", "Building your manifest"),
-                                         ("Stremio Web Pre-Seed", "Connecting your players"), ("Test ", "Checking the result")):
+                                         ("Test ", "Checking the result")):
                         if marker in line:
                             SETUP_JOB["step"] = step
             code = process.wait()
@@ -120,14 +120,13 @@ def launch_setup():
 HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "comet": 8000, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
-    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "stremio-web": 8082,
-    "nuvio": 8085, "slicksync": 8086
+    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "slicksync": 8086
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/stremio/configure", "aiometadata": "/configure",
     "comet": "/configure", "prowlarr": "/", "infinidysk": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
-    "anime-kitsu": "/", "stremio-web": "/", "nuvio": "/", "slicksync": "/",
+    "anime-kitsu": "/", "slicksync": "/",
 }
 
 def probe_integration(item):
@@ -140,7 +139,6 @@ def probe_integration(item):
         "aiometadata": {"core", "scrapers", "all"},
         "postersplus": {"core", "scrapers", "all"},
         "subsense": {"core", "scrapers", "all"},
-        "nuvio": {"nuvio", "all"},
     }
     enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))
     if host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE", "debrid") == "debrid":
@@ -717,8 +715,9 @@ def optimized_profile_export():
             except Exception:
                 pass
 
+    saved_env = read_saved_env()
     if install_uuid:
-        for pw in ("admin_local_secret", os.environ.get("ADDON_PASSWORD") or "admin"):
+        for pw in (saved_env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin", "admin_local_secret"):
             try:
                 auth = base64.b64encode(f"{install_uuid}:{pw}".encode()).decode("ascii")
                 req = urllib.request.Request(
@@ -740,7 +739,7 @@ def optimized_profile_export():
             key for key in ("REALDEBRID_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY",
                             "PREMIUMIZE_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY",
                             "OFFCLOUD_API_KEY", "SEEDR_API_KEY", "TMDB_API_KEY", "TVDB_API_KEY")
-            if os.environ.get(key) or read_saved_env().get(key)
+            if os.environ.get(key) or saved_env.get(key)
         ),
         "config": live_config if live_config is not None else module.build_default_config(probe_services=False),
     }
@@ -762,6 +761,15 @@ def proxy_config(kind, base_url):
 def save_env_updates(updates):
     """Serialize concurrent portal writes and replace the file only when complete."""
     with ENV_LOCK:
+        if "ADDON_PASSWORD" in updates:
+            saved = read_saved_env()
+            prior = saved.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
+            if prior != updates["ADDON_PASSWORD"] or saved.get("AIO_PORTAL_MANAGED_PASSWORD") != "true":
+                if saved.get("AIO_PASSWORD_PREVIOUS") and prior != updates["ADDON_PASSWORD"]:
+                    raise ValueError("Finish applying the previous password change before entering another password")
+                updates = {**updates,
+                           "AIO_PORTAL_MANAGED_PASSWORD": "true",
+                           "AIO_PASSWORD_PREVIOUS": saved.get("AIO_PASSWORD_PREVIOUS") or prior}
         target = ENV_PATH if os.path.isfile(ENV_PATH) else ENV_EXAMPLE_PATH
         lines = []
         if os.path.isfile(target):
@@ -909,7 +917,7 @@ def public_service_urls(base_url):
         is_local = host == "localhost" or "." not in host or host.endswith((".local", ".lan"))
     if ":" in host:
         host = f"[{host}]"
-    ports = {"NUVIO_ORIGIN": 8085, "KITSU_URL": 7005}
+    ports = {"KITSU_URL": 7005}
     urls = {key: f"{parsed.scheme}://{host}:{port}" for key, port in ports.items()}
     if is_local:
         urls["AIOMETADATA_HOST"] = f"{parsed.scheme}://{host}:4005"
@@ -993,7 +1001,7 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
             "embeds": [{
                 "title": title,
                 "description": message,
-                "url": url or "http://localhost:8082",
+                "url": url or os.environ.get("BASE_URL", "http://localhost:3001"),
                 "color": 15115627,
                 "footer": {"text": "AIO Local • Simulcast Alerts"}
             }]
@@ -1074,7 +1082,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         auth_required = (os.environ.get("PORTAL_AUTH_REQUIRED") or read_saved_env().get("PORTAL_AUTH_REQUIRED", "false")).lower() in ("true", "1", "yes")
         if not auth_required:
             return True
-        password = os.environ.get("ADDON_PASSWORD") or read_saved_env().get("ADDON_PASSWORD") or "admin"
+        password = read_saved_env().get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
         client = self.client_address[0]
         now = time.monotonic()
         if len(AUTH_FAILURES) > 100:
@@ -1658,7 +1666,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     normalize_base_url(supplied["BASE_URL"])
                 if "COMPOSE_PROFILES" in supplied:
                     profiles = {profile.strip() for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip()}
-                    if not profiles or not profiles.issubset({"core", "scrapers", "nuvio", "proxies", "web", "usenet", "tunnel", "all"}):
+                    if not profiles or not profiles.issubset({"core", "scrapers", "proxies", "web", "usenet", "tunnel", "all"}):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
                 updates = supplied
@@ -1787,14 +1795,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 return default
 
         ports = {
-            "stremio_web": safe_port(env_vars.get("PORT_STREMIO_WEB") or os.environ.get("PORT_STREMIO_WEB"), 8082),
-            "nuvio": safe_port(env_vars.get("PORT_NUVIO") or os.environ.get("PORT_NUVIO"), 8085),
             "portal": safe_port(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL"), 8088),
             "aiostreams": safe_port(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001),
             "aiometadata": safe_port(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005),
             "slicksync": safe_port(env_vars.get("PORT_SLICKSYNC") or os.environ.get("PORT_SLICKSYNC"), 8086),
         }
-        for port_key in ("PORT_STREMIO_WEB", "PORT_NUVIO", "PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA", "PORT_SLICKSYNC"):
+        for port_key in ("PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA", "PORT_SLICKSYNC"):
             val = env_vars.get(port_key) or os.environ.get(port_key)
             if val:
                 resp_env[port_key] = val
@@ -1898,7 +1904,6 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aiometadataManifest": aiom_manifest,
             "aiometadataProfileUuid": aiom_profile or None,
             "aiometadataTemplate": env_vars.get("AIOMETADATA_TEMPLATE") or os.environ.get("AIOMETADATA_TEMPLATE") or "tamtaro-aiometadata-with-anime.json",
-            "addonPassword": env_vars.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
         }
         self.json_response(resp)
 
@@ -1926,7 +1931,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         safe_containers = {
             "aiostreams", "portal", "controller", "flaresolverr", "comet",
             "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
-            "stremio-web", "nuvio", "postersplus", "anime-kitsu", "subsense",
+            "postersplus", "anime-kitsu", "subsense",
             "stremthru", "aiometadata", "slicksync", "setup"
         }
 
@@ -2072,6 +2077,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def handle_api_save_env(self):
         try:
             data = self.read_json_body()
+            if {"AIO_PASSWORD_PREVIOUS", "AIO_PORTAL_MANAGED_PASSWORD"} & data.keys():
+                raise ValueError("Password migration settings are managed by the stack")
+            if "ADDON_PASSWORD" in data:
+                password = data["ADDON_PASSWORD"]
+                if not isinstance(password, str) or not re.fullmatch(r"[A-Za-z0-9_.!@%+~=-]{8,64}", password):
+                    raise ValueError("Use 8–64 characters: letters, numbers, or _ . ! @ % + ~ = -")
             data = form_updates(data, read_saved_env())
             for key, value in data.items():
                 if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
@@ -2088,7 +2099,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
-            port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_STREMIO_WEB', 'PORT_NUVIO', 'PORT_SLICKSYNC', 'PORT_SUBSENSE', 'USENET_PORT')
+            port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_SLICKSYNC', 'PORT_SUBSENSE', 'USENET_PORT')
             for pkey in port_keys:
                 if pkey in keys_to_update and keys_to_update[pkey]:
                     try:

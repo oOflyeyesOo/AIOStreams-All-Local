@@ -21,6 +21,8 @@ def prepare(root, data, environment):
     allowed = set(re.findall(r'^\s*(?:#\s*)?([A-Z][A-Z0-9_]*)=', template, re.M))
     existing = dict(line.split('=', 1) for line in lines if '=' in line and not line.lstrip().startswith('#'))
     incoming = {key: value for key, value in environment.items() if key in allowed and value}
+    if existing.get('AIO_PORTAL_MANAGED_PASSWORD') == 'true':
+        incoming.pop('ADDON_PASSWORD', None)
     updates = form_updates(incoming, existing)
     for key, value in updates.items():
         if any(c in value for c in '\r\n\x00$\'"'):

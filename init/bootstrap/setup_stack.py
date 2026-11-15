@@ -7,7 +7,6 @@ Automates zero-touch configuration across all stack services upon launch:
 4. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
    template (Comet, Torrentio, AIOMetadata, SubSense, InfiniDysk,
    and Debrid Search) with Premiumize & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
-5. Stremio Web: Pre-seeds local storage so the AIOStreams super-addon is already installed out-of-the-box.
 6. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
 """
 import os
@@ -135,7 +134,6 @@ FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191"
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-STREMIO_WEB_URL = os.environ.get("STREMIO_WEB_URL", "http://stremio-web:8080").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
@@ -586,8 +584,22 @@ def setup_aiometadata_tamtaro():
 
     existing_profile = os.environ.get("AIOMETADATA_PROFILE_UUID")
     if existing_profile:
-        loaded = make_request(f"{AIOMETADATA_URL}/api/config/load/{existing_profile}", method="POST",
-                              data={"password": ADDON_PASSWORD, "addonPassword": ADDON_PASSWORD})
+        load_url = f"{AIOMETADATA_URL}/api/config/load/{existing_profile}"
+        credentials = {"password": ADDON_PASSWORD, "addonPassword": ADDON_PASSWORD}
+        loaded = make_request(load_url, method="POST", data=credentials)
+        previous_password = os.environ.get("AIO_PASSWORD_PREVIOUS")
+        if previous_password and isinstance(loaded, dict) and loaded.get("error") == 401:
+            old_profile = make_request(load_url, method="POST",
+                                       data={**credentials, "password": previous_password})
+            if isinstance(old_profile, dict) and old_profile.get("success"):
+                reset = make_request(
+                    f"{AIOMETADATA_URL}/api/admin/users/{existing_profile}/reset-password",
+                    method="POST", headers={"X-Admin-Key": SECRET_KEY},
+                    data={"newPassword": ADDON_PASSWORD},
+                )
+                if not isinstance(reset, dict) or not reset.get("success"):
+                    raise RuntimeError("AIOMetadata could not change the saved profile password")
+                loaded = make_request(load_url, method="POST", data=credentials)
         if not isinstance(loaded, dict) or not loaded.get("success") or not isinstance(loaded.get("config"), dict):
             raise RuntimeError("Existing metadata profile could not be loaded; refusing to overwrite linked accounts.")
         existing_cfg = loaded["config"]
@@ -600,7 +612,7 @@ def setup_aiometadata_tamtaro():
                 config[field] = existing_cfg[field]
         saved_tmpl = os.environ.get("AIOMETADATA_TEMPLATE")
         if not saved_tmpl or saved_tmpl == template_name:
-            if "catalogs" in config:
+            if "catalogs" in config and not previous_password:
                 existing_cfg["catalogs"] = config["catalogs"]
             for k, v in config.get("apiKeys", {}).items():
                 existing_cfg.setdefault("apiKeys", {})[k] = v
@@ -745,7 +757,8 @@ def setup_aiometadata_tamtaro():
 
 def setup_optional_metadata():
     """Configure the metadata addon only when its profile services are ready."""
-    if not wait_for_postersplus():
+    rotating_saved_profile = os.environ.get("AIO_PASSWORD_PREVIOUS") and os.environ.get("AIOMETADATA_PROFILE_UUID")
+    if not rotating_saved_profile and not wait_for_postersplus():
         print("[AIOMetadata Setup] ℹ️ Posters+ is unavailable; continuing without optional metadata.", flush=True)
         return None
     if not wait_for_aiometadata():
@@ -1353,6 +1366,34 @@ def get_aiostreams_auth_headers():
         pass
     return headers
 
+def aiostreams_profile_headers(uuid, password):
+    encoded = base64.b64encode(f"{uuid}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {encoded}"}
+
+
+def unlock_aiostreams_profile(uuid, encrypted_password):
+    endpoint = f"{AIOSTREAMS_URL}/api/v1/user"
+    previous = os.environ.get("AIO_PASSWORD_PREVIOUS")
+    candidates = dict.fromkeys(filter(None, (ADDON_PASSWORD, previous, "admin_local_secret")))
+    for password in candidates:
+        headers = aiostreams_profile_headers(uuid, password)
+        response = make_request(endpoint, headers=headers)
+        if not isinstance(response, dict) or not response.get("success"):
+            continue
+        if not previous:
+            return password, encrypted_password
+        if password != ADDON_PASSWORD:
+            response = make_request(endpoint + "/password", method="POST", headers=headers,
+                                    data={"newPassword": ADDON_PASSWORD})
+            if not isinstance(response, dict) or not response.get("success"):
+                raise RuntimeError("AIOStreams could not change the saved profile password")
+        token = (response.get("data") or {}).get("encryptedPassword")
+        if not token:
+            raise RuntimeError("AIOStreams did not return an updated profile link")
+        return ADDON_PASSWORD, token
+    raise RuntimeError("AIOStreams could not unlock the saved profile")
+
+
 def setup_aiostreams_default_user(aiometadata_manifest=None):
     print("[AIOStreams Setup] Configuring default out-of-the-box configuration with Tamtaro & Debrid...", flush=True)
 
@@ -1360,6 +1401,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
 
     uuid = None
     encrypted_password = None
+    profile_password = ADDON_PASSWORD
 
     # Check candidates for existing install info
     for candidate in [
@@ -1400,7 +1442,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
         config = build_default_config(aiometadata_manifest=aiometadata_manifest)
         create_payload = {
             "config": config,
-            "password": "admin_local_secret"
+            "password": profile_password
         }
 
         res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload)
@@ -1427,11 +1469,8 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
         try:
             print("[AIOStreams Setup] Updating existing user configuration with 20s scraper timeouts and service keys...", flush=True)
             config = build_default_config(aiometadata_manifest=aiometadata_manifest)
-            user_auth = base64.b64encode(f"{uuid}:admin_local_secret".encode()).decode("ascii")
-            u_headers = {
-                "Authorization": f"Basic {user_auth}",
-                "Content-Type": "application/json"
-            }
+            profile_password, encrypted_password = unlock_aiostreams_profile(uuid, encrypted_password)
+            u_headers = aiostreams_profile_headers(uuid, profile_password)
             u_res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="PUT", data={"config": config}, headers=u_headers)
             if isinstance(u_res, dict) and u_res.get("success"):
                 print("[AIOStreams Setup] ✓ User configuration successfully updated with 20s timeouts!", flush=True)
@@ -1463,7 +1502,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
         if not prof_id:
             profile_payload = {
                 "uuid": uuid,
-                "password": "admin_local_secret",
+                "password": profile_password,
                 "label": "All-Local Default"
             }
             p_res = make_request(f"{AIOSTREAMS_URL}/api/v1/profiles", method="POST", data=profile_payload, headers=auth_headers)
@@ -1494,7 +1533,6 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
         }
         for path in [
             os.path.join(DATA_AIOSTREAMS, "aiostreams_install.json"),
-            os.path.join(DATA_STREMIO_WEB, "aiostreams_install.json"),
             "/data/aiostreams_install.json",
             "/data/aiostreams/aiostreams_install.json"
         ]:
@@ -1525,164 +1563,50 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
     }
 
 # ==============================================================================
-# 5. PRE-SEED STREMIO WEB LOCAL STORAGE (ADDON ALREADY INSTALLED)
-# ==============================================================================
-def preseed_stremio_web(config_info, aiometadata_manifest=None):
-    manifest_urls = config_info.get("manifest_urls", [])
-    primary_manifest = manifest_urls[1] if len(manifest_urls) > 1 else (manifest_urls[0] if manifest_urls else f"{BASE_URL}/stremio/u/local/manifest.json")
-    local_manifest = f"{AIOSTREAMS_URL}/stremio/u/local/manifest.json"
-
-    print(f"[Stremio Web Pre-Seed] Pre-installing AIOStreams and AIOMetadata into Stremio Web...", flush=True)
-    print(f"[Stremio Web Pre-Seed] Target AIOStreams manifest: {primary_manifest}", flush=True)
-
-    # Browser clients cannot resolve Docker service names. Install one real
-    # aggregator manifest, which already includes the metadata/catalog addons.
-    uuid = config_info.get("uuid")
-    encrypted = config_info.get("encrypted_password")
-    actual_manifest = make_request(f"{AIOSTREAMS_URL}/stremio/{uuid}/{encrypted}/manifest.json")
-    if not isinstance(actual_manifest, dict) or not actual_manifest.get("id"):
-        raise RuntimeError("Cannot seed Stremio Web without a valid aggregator manifest")
-    addons_list = [{"manifest": actual_manifest, "transportUrl": primary_manifest,
-                    "flags": {"official": False, "protected": False}}]
-
-    local_storage_payload = {
-        "profile": {
-            "auth": None,
-            "addons": addons_list,
-            "addonsLocked": False,
-            "settings": {
-                "interfaceLanguage": "eng",
-                "streamingServerUrl": "http://127.0.0.1:11470/",
-                "playerType": None,
-                "bingeWatching": True,
-                "playInBackground": True,
-                "hardwareDecoding": True,
-                "frameRateMatchingStrategy": "FrameRateOnly",
-                "nextVideoNotificationDuration": 35000,
-                "audioPassthrough": False,
-                "audioLanguage": "eng",
-                "subtitlesLanguage": "eng",
-                "subtitlesSize": 100,
-                "subtitlesFont": "Roboto",
-                "subtitlesTextColor": "#FFFFFFFF",
-                "streamingServerWarningDismissed": "2075-02-13T17:43:53.678Z"
-            }
-        },
-        "streaming_server_urls": {
-            "items": {
-                "http://127.0.0.1:11470/": "2026-10-15T22:00:00.000Z"
-            }
-        }
-    }
-
-    try:
-        os.makedirs(DATA_STREMIO_WEB, exist_ok=True)
-        target_path = os.path.join(DATA_STREMIO_WEB, "localStorage.json")
-        with open(target_path, "w", encoding="utf-8") as f:
-            json.dump(local_storage_payload, f, indent=2)
-        print(f"[Stremio Web Pre-Seed] ✓ Successfully saved pre-seeded library to {target_path}", flush=True)
-
-        uuid = config_info.get("uuid")
-        enc = config_info.get("encrypted_password")
-        if uuid and enc and str(uuid).strip() not in ("null", "None", "") and str(enc).strip() not in ("null", "None", ""):
-            install_info = dict(config_info)
-            if aiometadata_manifest:
-                install_info["aiometadata_manifest"] = aiometadata_manifest
-            install_info["saved_at"] = time.time()
-            install_info["base_url"] = BASE_URL
-
-            # Save to stremio-web directory
-            info_path = os.path.join(DATA_STREMIO_WEB, "aiostreams_install.json")
-            with open(info_path, "w", encoding="utf-8") as f:
-                json.dump(install_info, f, indent=2)
-            print(f"[Stremio Web Pre-Seed] ✓ Saved installation metadata to {info_path}", flush=True)
-
-            # Save to aiostreams data volume directory for entrypoint auto-hydration
-            for candidate_dir in [
-                DATA_AIOSTREAMS,
-                "/data/aiostreams",
-                "/data",
-                "/app/data/aiostreams",
-                "/app/data",
-                DATA_ROOT
-            ]:
-                try:
-                    if os.path.isdir(candidate_dir):
-                        dest = os.path.join(candidate_dir, "aiostreams_install.json")
-                        with open(dest, "w", encoding="utf-8") as f:
-                            json.dump(install_info, f, indent=2)
-                        print(f"[Setup] ✓ Synced install metadata to {dest}", flush=True)
-                except Exception:
-                    pass
-        else:
-            print(f"[Setup] ℹ️ AIOStreams user profile not yet registered (uuid={uuid}). Purging any invalid metadata.", flush=True)
-            for candidate_dir in [DATA_STREMIO_WEB, DATA_AIOSTREAMS, "/data/aiostreams", "/data", "/app/data/aiostreams", "/app/data", DATA_ROOT]:
-                try:
-                    target_file = os.path.join(candidate_dir, "aiostreams_install.json")
-                    if os.path.isfile(target_file):
-                        with open(target_file, "r", encoding="utf-8") as f:
-                            c_data = json.load(f)
-                        if not c_data.get("uuid") or c_data.get("uuid") in ("null", "None"):
-                            os.remove(target_file)
-                            print(f"[Setup] 🧹 Purged invalid metadata file: {target_file}", flush=True)
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f"[Stremio Web Pre-Seed] Notice writing local storage: {e}", flush=True)
-
-# ==============================================================================
-# 6. DIAGNOSTIC STREAM VERIFICATION TEST
+# 5. DIAGNOSTIC STREAM VERIFICATION TEST
 # ==============================================================================
 def run_stream_diagnostics(config_info, aiometadata_manifest=None):
     print("==================================================", flush=True)
     print("   Running Verification Test On Internal Server   ", flush=True)
     print("==================================================", flush=True)
 
-    # 1. Test Stremio Web UI / Streaming Server
-    print(f"[Test 1/5] Testing internal Stremio server ({STREMIO_WEB_URL})...", flush=True)
-    s_res = make_request(f"{STREMIO_WEB_URL}/")
-    if not isinstance(s_res, dict) or s_res.get("error") not in [-1]:
-        print(f"[Test 1/5] ✓ Internal Stremio Web server is reachable and active!", flush=True)
-    else:
-        print(f"[Test 1/5] ℹ️ Stremio Web server status: {s_res}", flush=True)
-
     # 2. Test Posters+ Server
-    print(f"[Test 2/5] Testing Posters+ server ({POSTERSPLUS_URL})...", flush=True)
+    print(f"[Test 1/4] Testing Posters+ server ({POSTERSPLUS_URL})...", flush=True)
     p_res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}")
     if not isinstance(p_res, dict) or p_res.get("error") not in [-1] or "access_key" in str(p_res):
-        print(f"[Test 2/5] ✓ Posters+ server is reachable and active!", flush=True)
+        print(f"[Test 1/4] ✓ Posters+ server is reachable and active!", flush=True)
     else:
-        print(f"[Test 2/5] ℹ️ Posters+ server status: {p_res}", flush=True)
+        print(f"[Test 1/4] ℹ️ Posters+ server status: {p_res}", flush=True)
 
     # 3. Test AIOMetadata Manifest
     aiom_target = aiometadata_manifest or f"{AIOMETADATA_URL}/manifest.json"
-    print(f"[Test 3/5] Testing AIOMetadata manifest ({aiom_target})...", flush=True)
+    print(f"[Test 2/4] Testing AIOMetadata manifest ({aiom_target})...", flush=True)
     aiom_res = make_request(aiom_target)
     if isinstance(aiom_res, dict) and "name" in aiom_res:
-        print(f"[Test 3/5] ✓ AIOMetadata manifest verified: '{aiom_res.get('name')}' (v{aiom_res.get('version')})", flush=True)
+        print(f"[Test 2/4] ✓ AIOMetadata manifest verified: '{aiom_res.get('name')}' (v{aiom_res.get('version')})", flush=True)
     else:
-        print(f"[Test 3/5] ℹ️ AIOMetadata manifest response: {aiom_res}", flush=True)
+        print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {aiom_res}", flush=True)
 
     # 4. Test AIOStreams Manifest Availability (Both Direct & Alias)
     uuid = config_info.get("uuid")
     enc = config_info.get("encrypted_password")
 
     if uuid and enc:
-        print(f"[Test 4/5] Testing Direct Canonical Manifest (/stremio/{uuid}/{enc[:8]}.../manifest.json)...", flush=True)
+        print(f"[Test 3/4] Testing Direct Canonical Manifest (/stremio/{uuid}/{enc[:8]}.../manifest.json)...", flush=True)
         direct_manifest = make_request(f"{AIOSTREAMS_URL}/stremio/{uuid}/{enc}/manifest.json")
         if isinstance(direct_manifest, dict) and "name" in direct_manifest:
-            print(f"[Test 4/5] ✓ Direct UUID Manifest verified: '{direct_manifest.get('name')}' (v{direct_manifest.get('version')})", flush=True)
+            print(f"[Test 3/4] ✓ Direct UUID Manifest verified: '{direct_manifest.get('name')}' (v{direct_manifest.get('version')})", flush=True)
         else:
-            print(f"[Test 4/5] Note retrieving direct manifest: {direct_manifest}", flush=True)
+            print(f"[Test 3/4] Note retrieving direct manifest: {direct_manifest}", flush=True)
 
-    print(f"[Test 4/5] Testing Vanity Alias Manifest (/stremio/u/local/manifest.json)...", flush=True)
+    print(f"[Test 3/4] Testing Vanity Alias Manifest (/stremio/u/local/manifest.json)...", flush=True)
     manifest = make_request(f"{AIOSTREAMS_URL}/stremio/u/local/manifest.json")
     if isinstance(manifest, dict) and "name" in manifest:
-        print(f"[Test 4/5] ✓ Alias manifest successfully retrieved: '{manifest.get('name')}' (v{manifest.get('version')})", flush=True)
-        print(f"[Test 4/5]   Supported resources: {manifest.get('resources')}", flush=True)
-        print(f"[Test 4/5]   Supported types: {manifest.get('types')}", flush=True)
+        print(f"[Test 3/4] ✓ Alias manifest successfully retrieved: '{manifest.get('name')}' (v{manifest.get('version')})", flush=True)
+        print(f"[Test 3/4]   Supported resources: {manifest.get('resources')}", flush=True)
+        print(f"[Test 3/4]   Supported types: {manifest.get('types')}", flush=True)
     else:
-        print(f"[Test 4/5] Note on alias manifest (active after AIOStreams reload): {manifest}", flush=True)
+        print(f"[Test 3/4] Note on alias manifest (active after AIOStreams reload): {manifest}", flush=True)
 
     # 5. Test movie and episode stream resolution with the configured provider.
     for kind, content_id, label in CORE_SMOKE_CASES:
@@ -1755,6 +1679,10 @@ def main():
         print(f"[AIOMetadata/Posters+ Setup] Error: {e}", flush=True)
         print("[AIOMetadata/Posters+ Setup] ℹ️ Continuing with AIOStreams providers only.", flush=True)
 
+    if os.environ.get("AIO_PASSWORD_PREVIOUS") and os.environ.get("AIOMETADATA_PROFILE_UUID") and not aiometadata_manifest:
+        print("[Setup] ERROR: The saved AIOMetadata profile could not be updated. Check its setup output and retry the password change.", flush=True)
+        return 1
+
     # 5. AIOStreams Default User & Addon Configuration (Tamtaro All-Local)
     config_info = {}
     try:
@@ -1766,11 +1694,8 @@ def main():
         print("[Setup] ERROR: AIOStreams profile was not provisioned. Fix the error and rerun stack-bootstrap.", flush=True)
         return 1
 
-    # 6. Pre-seed Stremio Web
-    try:
-        preseed_stremio_web(config_info, aiometadata_manifest=aiometadata_manifest)
-    except Exception as e:
-        print(f"[Stremio Web Pre-Seed] Error: {e}", flush=True)
+    if os.environ.get("AIO_PASSWORD_PREVIOUS"):
+        update_env_file("AIO_PASSWORD_PREVIOUS", "")
 
     # 7. Verification Diagnostics
     try:

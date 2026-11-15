@@ -20,7 +20,7 @@ function form(saved){
       if(path==='/api/env')return saved;
       calls.push({path,payload:options.body?JSON.parse(options.body):null});return {success:true};
     }});
-  const load=source.match(/async function loadSettings\(\) \{[\s\S]*?\n\}/)[0];
+  const load=source.match(/async function loadSettings\(options\) \{[\s\S]*?\n\}/)[0];
   const submit=source.slice(source.indexOf("document.getElementById('setup-form').addEventListener('submit'"),source.indexOf("document.getElementById('refresh-services').addEventListener"));
   vm.runInContext(load+'\n'+submit,context);
   return {context,nodes,calls,document};

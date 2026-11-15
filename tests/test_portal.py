@@ -36,12 +36,10 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 14)
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 12)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,
-            "stremio-web": 8080,
-            "nuvio": 3000,
             "slicksync": 3000,
         }
         actual = {host: port for _, host, port, _ in portal.INTEGRATIONS}
@@ -406,6 +404,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data["jellyfinQuickConnect"], "https://aio.example.com/jellyfin/quickconnect")
         self.assertEqual(data["officialWebPlayer"], "https://web.aiostreams.org")
         self.assertTrue(data["jellyfinEnabled"])
+        self.assertNotIn("addonPassword", data)
 
         portal.save_env_updates({"JELLYFIN_ENABLED": "false"})
         status, body, _ = self.request("/api/manifest-info", auth=True)
@@ -425,6 +424,22 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123")
         self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123/web/")
         self.assertIn("frame-src 'self' http: https: data: blob:;", headers.get("Content-Security-Policy", ""))
+
+    def test_admin_password_saved_as_write_only_setting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text("ADDON_PASSWORD=test-password\n", encoding="utf-8")
+            with patch.object(portal, "ENV_PATH", str(env_path)), patch.dict(os.environ, {}):
+                status, _, _ = self.request("/api/save-env", "POST", {"ADDON_PASSWORD": "bad,password"}, auth=True)
+                self.assertEqual(status, 400)
+                status, _, _ = self.request("/api/save-env", "POST", {"ADDON_PASSWORD": "fixture-new-password"}, auth=True)
+                self.assertEqual(status, 200)
+                self.assertEqual(portal.read_saved_env()["AIO_PASSWORD_PREVIOUS"], "test-password")
+                auth = "Basic " + base64.b64encode(b"admin:fixture-new-password").decode()
+                status, body, _ = self.request("/api/manifest-info", headers={"Authorization": auth})
+                self.assertEqual(status, 200)
+                self.assertNotIn(b"fixture-new-password", body)
+                self.assertNotIn(b"test-password", body)
 
     def test_dashboard_links_on_fresh_lan_install(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -673,9 +688,12 @@ class PortalTests(unittest.TestCase):
 
 
     def test_custom_ports_in_status_and_env(self):
+        self.enterContext(patch.dict(os.environ))
+        env_path = self.root / ".env"
+        self.addCleanup(env_path.write_bytes, env_path.read_bytes())
         status, body, _ = self.request(
             "/api/save-env", "POST",
-            {"PORT_STREMIO_WEB": "18082", "PORT_NUVIO": "18085"},
+            {"PORT_AIOSTREAMS": "18082", "PORT_AIOMETADATA": "18085"},
             auth=True, headers={"Content-Type": "application/json"}
         )
         self.assertEqual(status, 200)
@@ -683,17 +701,17 @@ class PortalTests(unittest.TestCase):
         status, body, _ = self.request("/api/env", auth=True)
         self.assertEqual(status, 200)
         env_data = json.loads(body)
-        self.assertEqual(env_data.get("PORT_STREMIO_WEB"), "18082")
-        self.assertEqual(env_data.get("PORT_NUVIO"), "18085")
-        self.assertEqual(env_data.get("ports", {}).get("stremio_web"), 18082)
-        self.assertEqual(env_data.get("ports", {}).get("nuvio"), 18085)
+        self.assertEqual(env_data.get("PORT_AIOSTREAMS"), "18082")
+        self.assertEqual(env_data.get("PORT_AIOMETADATA"), "18085")
+        self.assertEqual(env_data.get("ports", {}).get("aiostreams"), 18082)
+        self.assertEqual(env_data.get("ports", {}).get("aiometadata"), 18085)
 
         with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
             status, body, _ = self.request("/api/status", auth=True)
         self.assertEqual(status, 200)
         status_data = json.loads(body)
-        self.assertEqual(status_data.get("ports", {}).get("stremio_web"), 18082)
-        self.assertEqual(status_data.get("ports", {}).get("nuvio"), 18085)
+        self.assertEqual(status_data.get("ports", {}).get("aiostreams"), 18082)
+        self.assertEqual(status_data.get("ports", {}).get("aiometadata"), 18085)
 
     def test_validate_provider_with_saved_key(self):
         portal.save_env_updates({"REALDEBRID_API_KEY": "saved-rd-key"})
@@ -864,13 +882,16 @@ class PortalTests(unittest.TestCase):
         self.assertIn("found", data)
 
     def test_status_endpoint_resilient_to_corrupt_port_values(self):
-        portal.save_env_updates({"PORT_STREMIO_WEB": "not-a-port", "PORT_NUVIO": "9999999"})
+        self.enterContext(patch.dict(os.environ))
+        env_path = self.root / ".env"
+        self.addCleanup(env_path.write_bytes, env_path.read_bytes())
+        portal.save_env_updates({"PORT_AIOSTREAMS": "not-a-port", "PORT_AIOMETADATA": "9999999"})
         with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
             status, body, _ = self.request("/api/status", auth=True)
         self.assertEqual(status, 200)
         data = json.loads(body)
-        self.assertEqual(data["ports"]["stremio_web"], 8082)
-        self.assertEqual(data["ports"]["nuvio"], 8085)
+        self.assertEqual(data["ports"]["aiostreams"], 3001)
+        self.assertEqual(data["ports"]["aiometadata"], 4005)
 
     def test_validate_provider_headers_and_urls(self):
         with patch.object(portal.urllib.request, "urlopen") as mock_url:
@@ -971,8 +992,6 @@ class PortalTests(unittest.TestCase):
             "PORT_PORTAL": "8088",
             "PORT_AIOSTREAMS": "3001",
             "PORT_AIOMETADATA": "4005",
-            "PORT_STREMIO_WEB": "8082",
-            "PORT_NUVIO": "8085"
         }, auth=True)
         self.assertEqual(status, 200)
 
@@ -992,7 +1011,7 @@ class PortalTests(unittest.TestCase):
 
         # Invalid port: non-numeric string
         status, body, _ = self.request("/api/save-env", "POST", {
-            "PORT_NUVIO": "notaport"
+            "PORT_AIOMETADATA": "notaport"
         }, auth=True)
         self.assertEqual(status, 400)
         self.assertIn(b"must be a valid port number", body)

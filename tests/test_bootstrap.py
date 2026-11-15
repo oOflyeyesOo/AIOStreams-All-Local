@@ -146,6 +146,32 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):bootstrap.setup_aiometadata_tamtaro()
         self.assertEqual(request.call_count,1)
 
+    def test_metadata_rotation_preserves_existing_profile_and_catalogs(self):
+        saved_catalogs = [{"id": "custom-catalog"}]
+        config = {"catalogs": saved_catalogs, "apiKeys": {}}
+        replies = [{"error": 401}, {"success": True, "config": config}, {"success": True},
+                   {"success": True, "config": config}, {"success": True, "userUUID": "saved-profile"}]
+        with patch.dict(bootstrap.os.environ, {"AIOMETADATA_PROFILE_UUID": "saved-profile", "AIO_PASSWORD_PREVIOUS": "before-password"}), \
+             patch.object(bootstrap, "ADDON_PASSWORD", "after-password"), \
+             patch.object(bootstrap, "make_request", side_effect=replies) as request, \
+             patch.object(bootstrap, "update_env_file"):
+            bootstrap.setup_aiometadata_tamtaro()
+        reset = request.call_args_list[2]
+        self.assertTrue(reset.args[0].endswith("/saved-profile/reset-password"))
+        self.assertEqual(reset.kwargs["data"], {"newPassword": "after-password"})
+        self.assertEqual(request.call_args.kwargs["data"]["config"]["catalogs"], saved_catalogs)
+
+    def test_legacy_aiostreams_profile_rotation_returns_updated_link(self):
+        replies = [{"error": 401}, {"error": 401}, {"success": True},
+                   {"success": True, "data": {"encryptedPassword": "new-link-token"}}]
+        with patch.dict(bootstrap.os.environ, {"AIO_PASSWORD_PREVIOUS": "before-password"}), \
+             patch.object(bootstrap, "ADDON_PASSWORD", "after-password"), \
+             patch.object(bootstrap, "make_request", side_effect=replies) as request:
+            self.assertEqual(bootstrap.unlock_aiostreams_profile("saved-profile", "old-link-token"),
+                             ("after-password", "new-link-token"))
+        self.assertTrue(request.call_args.args[0].endswith("/user/password"))
+        self.assertEqual(request.call_args.kwargs["data"], {"newPassword": "after-password"})
+
     def test_metadata_rejection_is_not_reported_as_saved(self):
         with patch.object(bootstrap, "make_request", return_value={"error": 401}):
             with self.assertRaises(RuntimeError):

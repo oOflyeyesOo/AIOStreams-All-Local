@@ -48,7 +48,7 @@ def apply():
 
 def installed_profile():
     install=json.loads(Path('/app/data/aiostreams/aiostreams_install.json').read_text())
-    user_auth=base64.b64encode((install['uuid']+':admin_local_secret').encode()).decode()
+    user_auth=base64.b64encode((install['uuid']+':'+os.environ['ADDON_PASSWORD']).encode()).decode()
     return request('http://aiostreams:3000/api/v1/user',headers={'Authorization':'Basic '+user_auth})['data']['userData']
 
 class Nntp(socketserver.StreamRequestHandler):

@@ -106,10 +106,8 @@ existing profiles. Most upstream service images still use `latest`; validate
 updates before deploying them to your main host. Anime Kitsu's build is pinned to
 a verified revision and its optional Fanart patch fails if the source changes.
 
-For returning Stremio Web browsers, accept its user-interface update banner when
-shown. The startup loader versions its app shell, preserves signed-in accounts
-and adds the local aggregator to a guest profile. A browser that previously
-loaded a broken test configuration may need its test-only site data cleared.
+The AIOStreams player uses the AIOStreams service URL. Open it from the portal,
+or copy the manifest for an external player.
 
 ### Additional native sources
 

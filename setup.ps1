@@ -64,7 +64,6 @@ function Ensure-Directories {
         "data/aiometadata",
         "data/postersplus",
         "data/infinidysk",
-        "data/stremio-web",
         "init/postgres",
         "templates/setup-templates",
         "templates/formatters",
@@ -120,10 +119,8 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" },
         @{ Port = 4005; Service = "AIOMetadata" },
         @{ Port = 3100; Service = "SubSense Subtitles" },
-        @{ Port = 8085; Service = "Nuvio Web Player" },
         @{ Port = 8086; Service = "SlickSync (Nuvio & Stremio Hub)" },
         @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
-        @{ Port = 8082; Service = "Stremio Web Player & Engine" },
         @{ Port = 3011; Service = "Stremio Debrid Search (Personal Cloud)" },
     )
 
@@ -344,9 +341,9 @@ function Start-Stack {
     Write-Success "Internal credentials verified and missing values generated."
     if ($ComposeProfile) {
         Write-Info "Launching with profile: $ComposeProfile..."
-        docker compose --profile $ComposeProfile up -d
+        docker compose --profile $ComposeProfile up -d --remove-orphans
     } else {
-        docker compose --profile all up -d
+        docker compose --profile all up -d --remove-orphans
     }
     Write-Success "Docker stack start command completed."
     Show-StremioLinks
@@ -381,8 +378,7 @@ function Show-StremioLinks {
     Write-Host "`nWeb Management Portals:" -ForegroundColor Cyan
     Write-Host "  • Appliance Hub (Landing Page): http://localhost:8088"
     Write-Host "  • AIOStreams Portal:     http://localhost:3001"
-    Write-Host "  • Stremio Web Player:    http://localhost:8082"
-    Write-Host "  • Nuvio Web Player:      http://localhost:8085"
+    Write-Host "  • AIOStreams Web Player: http://localhost:3001/jellyfin/web/"
     Write-Host "  • SlickSync Hub:         http://localhost:8086"
     Write-Host "  • Debrid Cloud Search:   http://localhost:3011"
     Write-Host "  • AIOMetadata:           http://localhost:4005"

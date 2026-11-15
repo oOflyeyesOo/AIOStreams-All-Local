@@ -11,13 +11,21 @@ import urllib.error
 
 assert os.environ.get('AIO_READONLY_AUDIT')=='true','Explicit read-only audit flag required'
 install=json.loads(Path('/app/data/aiostreams/aiostreams_install.json').read_text())
-auth=base64.b64encode((install['uuid']+':admin_local_secret').encode()).decode()
 def get(url,headers=None,timeout=40,limit=8*1024*1024):
  start=time.monotonic()
  with urllib.request.urlopen(urllib.request.Request(url,headers=headers or {}),timeout=timeout) as response:
   ttfb=time.monotonic()-start;body=response.read(limit)
   return response.status,body,round(ttfb,3),round(time.monotonic()-start,3),response.headers.get('Content-Type','')
-_,body,_,_,_=get('http://aiostreams:3000/api/v1/user',{'Authorization':'Basic '+auth})
+for password in dict.fromkeys((os.environ.get('ADDON_PASSWORD') or 'admin', 'admin_local_secret')):
+ auth=base64.b64encode(f"{install['uuid']}:{password}".encode()).decode()
+ try:
+  _,body,_,_,_=get('http://aiostreams:3000/api/v1/user',{'Authorization':'Basic '+auth})
+  break
+ except urllib.error.HTTPError as error:
+  if error.code not in (401,403):
+   raise
+else:
+ raise RuntimeError('Could not authenticate the installed profile')
 profile=json.loads(body)['data']['userData']
 report={'scope':'existing installation; configuration unchanged; credentials stay in container memory',
         'cachePolicy':'first-observed/warm/concurrent; shared caches are not cleared',

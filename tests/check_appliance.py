@@ -13,7 +13,7 @@ def main():
     image = sys.argv[1]
     name = 'aio-appliance-smoke'
     created = run(['docker', 'run', '-d', '--privileged', '--name', name,
-                   '-p', '127.0.0.1::8082', '-p', '127.0.0.1::9696',
+                   '-p', '127.0.0.1::3001', '-p', '127.0.0.1::9696',
                    '-e', 'COMPOSE_PROFILES=scrapers', '-e', 'ADDON_PASSWORD=appliance-test-password',
                    '-e', 'BASE_URL=http://127.0.0.1:3001', image])
     if created.returncode:
@@ -54,13 +54,13 @@ print('PASS: AIOMetadata profile save and manifest without Fanart')
             result = run(['docker', 'exec', name, 'docker', 'compose', 'exec', '-T', 'portal', 'python3', '-c', probe])
             if result.returncode == 0:
                 print(result.stdout)
-                for port, path in ((8082, '/'), (9696, '/ping')):
+                for port, path in ((3001, '/jellyfin/web/'), (9696, '/ping')):
                     mapping = run(['docker', 'port', name, f'{port}/tcp'])
                     if mapping.returncode:
                         raise RuntimeError(f'Appliance did not publish port {port}')
                     with urllib.request.urlopen('http://' + mapping.stdout.strip() + path, timeout=15) as response:
                         assert response.status == 200, f'Published service on {port} is unavailable'
-                print('PASS: published Stremio Web and Prowlarr ports are reachable')
+                print('PASS: published AIOStreams player and Prowlarr ports are reachable')
                 metadata = run(['docker', 'exec', name, 'docker', 'compose',
                                 'exec', '-T', 'portal', 'python3', '-c', metadata_probe])
                 if metadata.returncode:

@@ -22,8 +22,17 @@ for(const [name,url] of Object.entries(endpoints)){
 let cometToken,providerKey;
 try{
   const install=JSON.parse(fs.readFileSync('/data/aiostreams_install.json','utf8'));
-  const r=await fetch('http://127.0.0.1:3000/api/v1/user',{headers:{Authorization:'Basic '+Buffer.from(install.uuid+':admin_local_secret').toString('base64')}});
-  const user=(await r.json()).data.userData;
+  let user;
+  for(const password of new Set([process.env.ADDON_PASSWORD || 'admin','admin_local_secret'])){
+    const auth=Buffer.from(install.uuid+':'+password).toString('base64');
+    const response=await fetch('http://127.0.0.1:3000/api/v1/user',{headers:{Authorization:'Basic '+auth}});
+    if(response.ok){
+      user=(await response.json()).data.userData;
+      break;
+    }
+    if(![401,403].includes(response.status)) throw new Error('Profile request failed');
+  }
+  if(!user) throw new Error('Could not authenticate the installed profile');
   const services=user.services.filter(s=>s.enabled&&s.id==='premiumize'&&s.credentials?.apiKey);
   providerKey=services[0]?.credentials.apiKey;
   cometToken=Buffer.from(JSON.stringify({debridServices:services.map(s=>({service:s.id,apiKey:s.credentials.apiKey})),

@@ -35,7 +35,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/setup.sh /app/docker/all-in-one/p
 # Expose all client and service ports
 # 8088: Appliance Web Portal & Setup
 # 3001: AIOStreams Super-Addon
-# 8085: Nuvio Web Player
 # 8086: SlickSync Hub
 # 4005: AIOMetadata
 # 9039: Posters+
@@ -44,9 +43,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/setup.sh /app/docker/all-in-one/p
 # 7005: Anime Kitsu
 # 8181: Zilean
 # 3005: InfiniDysk Usenet WebDAV
-# 8082: Stremio Web Player
 # 8080: StremThru
 # 9696: Prowlarr
-EXPOSE 8088 3001 3005 8082 8085 8086 4005 9039 3100 8000 7005 8181 9696 8080
+EXPOSE 8088 3001 3005 8086 4005 9039 3100 8000 7005 8181 9696 8080
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

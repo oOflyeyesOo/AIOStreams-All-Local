@@ -31,6 +31,8 @@ def seed(source, destination, environment):
     # Reject dotenv syntax in these settings instead of changing its meaning.
     managed_keys = {key for key in environment if key.startswith('PORT_')}
     for key in managed_keys | set(('ENABLE_ANIME_SOURCES', 'ADDON_PASSWORD', 'AIO_RELEASE_LOCK_B64', 'AIO_IMAGE_TAG', 'AIO_IMAGE_PREFIX', 'PORT_PORTAL', 'INTERNAL_BIND_IP', 'BASE_URL', 'AIOMETADATA_HOST', 'DOCKER_SOCKET')):
+        if key == 'ADDON_PASSWORD' and values.get('AIO_PORTAL_MANAGED_PASSWORD') == 'true':
+            continue
         value = environment.get(key)
         if value:
             if any(char in value for char in ('\n', '\r', '$', '"', "'", '#')):

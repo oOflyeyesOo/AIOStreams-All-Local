@@ -1,5 +1,7 @@
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -73,3 +75,30 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual([args[-1] for args in steps], ['aiostreams', 'subsense', 'stack-bootstrap'])
         self.assertEqual(controller.JOB['status'], 'complete')
         self.assertIn('SubSense is unhealthy', controller.JOB['logs'][-1])
+
+    def test_refreshes_only_aiostreams_when_bootstrap_changes_player_alias(self):
+        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
+               'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
+        config = {'services': {'aiostreams': {'environment': {'ALIASED_CONFIGURATIONS': 'local:id:before'}},
+                              'comet': {}, 'stack-bootstrap': {'restart': 'no'}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = root / '.env'
+            env.write_text('ALIASED_CONFIGURATIONS=local:id:before\n')
+
+            def command(args, step, **kwargs):
+                if args[-1] == 'stack-bootstrap':
+                    env.write_text('ALIASED_CONFIGURATIONS=local:id:after\n')
+                if step == 'Refreshing AIOStreams player links':
+                    self.assertEqual(args[args.index('--wait-timeout') + 2:], ['aiostreams'])
+                    updated = json.loads(Path(args[args.index('-f') + 1]).read_text())
+                    self.assertEqual(updated['services']['aiostreams']['environment']['ALIASED_CONFIGURATIONS'],
+                                     'local:id:after')
+
+            with patch.object(controller, 'ROOT', root), patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), \
+                 patch.object(controller, 'command_json', side_effect=[[own], config]), \
+                 patch.object(controller, 'log_command', side_effect=command) as logged:
+                controller.apply()
+
+        self.assertEqual(logged.call_args.args[1], 'Refreshing AIOStreams player links')
+        self.assertEqual(controller.JOB['status'], 'complete')

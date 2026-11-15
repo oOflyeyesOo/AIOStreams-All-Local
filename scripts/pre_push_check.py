@@ -51,7 +51,6 @@ def main():
     if shutil.which("node"):
         if not run_gate("Browser & UI Tests", [
             "node", "--test",
-            "tests/browser-bootstrap.test.cjs",
             "tests/maintenance-ui.test.cjs",
             "tests/optional-setup-ui.test.cjs"
         ]):
@@ -70,7 +69,7 @@ def main():
             if not run_gate(f"Compose Config Validation ({cf})", ["docker", "compose", "--env-file", ".env.example", "-f", cf, "config", "--quiet"]):
                 return 1
 
-        for profile in ["core", "scrapers", "nuvio", "tunnel", "all"]:
+        for profile in ["core", "scrapers", "tunnel", "all"]:
             if not run_gate(f"Compose Profile Validation ({profile})", ["docker", "compose", "--env-file", ".env.example", "--profile", profile, "config", "--quiet"]):
                 return 1
 
