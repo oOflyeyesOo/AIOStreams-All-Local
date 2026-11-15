@@ -74,6 +74,38 @@
 </div>
 </section>
 
+<section class="onboarding-guide-card" aria-label="Quick Start Guide">
+  <div class="onboarding-header">
+    <div class="onboarding-badge"><span class="badge-spark">⚡</span> QUICK START GUIDE</div>
+    <p class="onboarding-subtitle">Only <strong>1 provider key</strong> is needed to start streaming. All other sections (Anime, Usenet, Tracking, Subtitles, Advanced) are optional with optimized defaults already enabled.</p>
+  </div>
+  <div class="stepper-grid">
+    <div class="stepper-step active" id="guide-step-1">
+      <div class="stepper-num">1</div>
+      <div class="stepper-content">
+        <span class="stepper-title">Add Provider Key</span>
+        <span class="stepper-desc">Enter Real-Debrid, TorBox, PM, or Usenet in Stack settings below.</span>
+      </div>
+    </div>
+    <div class="stepper-divider">→</div>
+    <div class="stepper-step" id="guide-step-2">
+      <div class="stepper-num">2</div>
+      <div class="stepper-content">
+        <span class="stepper-title">Connect Stack</span>
+        <span class="stepper-desc">Click "Connect my stack" to automatically configure services.</span>
+      </div>
+    </div>
+    <div class="stepper-divider">→</div>
+    <div class="stepper-step" id="guide-step-3">
+      <div class="stepper-num">3</div>
+      <div class="stepper-content">
+        <span class="stepper-title">Stream Anywhere</span>
+        <span class="stepper-desc">Launch AIOStreams Web Player, Stremio, or Infuse / Jellyfin.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <div class="workspace-grid">
 <details class="panel setup-panel" id="setup" open>
 <summary>Stack settings</summary>
@@ -100,11 +132,11 @@
 <input type="hidden" id="streaming-mode" name="STREAMING_MODE" value="debrid">
 </div>
 <div id="debrid-provider-container">
-<div class="section-divider"><span>Debrid provider</span><span class="optional">HIGH-SPEED CLOUD CACHE</span></div>
+<div class="section-divider"><span>Primary Debrid Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 KEY NEEDED TO START)</strong></span><span class="optional">HIGH-SPEED CLOUD CACHE</span></div>
 <div id="provider-fields" class="field-grid"></div>
 </div>
 <div id="usenet-primary-container" style="display:none">
-<div class="section-divider"><span>Usenet servers and NZB indexers</span></div>
+<div class="section-divider"><span>Primary Usenet Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 SERVER NEEDED TO START)</strong></span></div>
 <div class="usenet-primary-card">
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
   <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
@@ -181,7 +213,7 @@
 </div>
 </div>
 <div id="metadata-fields" class="field-grid"></div>
-<details class="more-options"><summary>Public databases, anime, Usenet, tracking, subtitles & optional services <span>+</span></summary>
+<details class="more-options"><summary>Optional Customizations (Anime, Subtitles, Scrobbling, Discord) · Defaults Active <span>+</span></summary>
 <div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
 <label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
 <div class="credential-sharing-notice notice-callout notice-callout-warning">
@@ -270,7 +302,7 @@
 </div>
 </div>
 <section id="integrations" class="integrations-section"><div class="integrations-heading"><div><h2>Manage services</h2></div><div class="service-toolbar"><button type="button" id="open-service-logs" class="text-button">View logs</button><button id="refresh-services" class="text-button">Refresh status</button></div></div><p class="section-description">Open a service to customize it, or view its logs here. If a UI cannot open from your browser, check that its port is published or that its reverse proxy URL is set.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>
-<details class="panel advanced-tools" id="advanced-tools"><summary>Advanced tools</summary>
+<details class="panel advanced-tools" id="advanced-tools"><summary>System Diagnostics, Backups &amp; Maintenance (Optional)</summary>
 <details class="tool-group"><summary>Health and telemetry</summary>
 <section class="operations-section panel" id="telemetry"><div class="integrations-heading"><div><div class="eyebrow">LIVE TELEMETRY &amp; SELF-HEALING</div><h2>Stack Health &amp; Watchdog.</h2></div><div class="telemetry-controls"><select id="auto-refresh-select" class="subtle-select" aria-label="Telemetry auto-refresh interval"><option value="0">Auto-refresh: Off</option><option value="5000">Auto-refresh: 5s</option><option value="10000" selected>Auto-refresh: 10s</option><option value="30000">Auto-refresh: 30s</option></select><button id="refresh-health" class="light-button">Refresh Health ↻</button><button id="run-watchdog-probe" class="light-button">Run Probe 🛡️</button></div></div><p class="section-description">Real-time resource telemetry across your active containers, self-healing endpoint watchdog status, and automated backup rotation.</p><div class="telemetry-grid"><div class="telemetry-card"><div class="stat-label">Active Containers</div><div class="stat-val text-green" id="health-fleet-count">-- / --</div><div class="stat-sub" id="health-fleet-status">All containers monitored</div></div><div class="telemetry-card"><div class="stat-label">Stack Memory</div><div class="stat-val" id="health-mem-used">-- GB</div><div class="stat-sub" id="health-mem-host">of -- GB Host (--%)</div><div class="stat-bar"><div class="stat-fill" id="health-mem-fill" style="width: 0%"></div></div></div><div class="telemetry-card"><div class="stat-label">Stack CPU Load</div><div class="stat-val text-blue" id="health-cpu-load">--%</div><div class="stat-sub" id="health-cpu-sub">Across active containers</div></div><div class="telemetry-card"><div class="stat-label">Watchdog &amp; Backups</div><div class="stat-val text-green" id="health-watchdog-state">-- / -- Online</div><div class="stat-sub" id="health-backup-summary">Checking storage…</div></div></div><details id="fleet-details" class="fleet-details">
 <summary>

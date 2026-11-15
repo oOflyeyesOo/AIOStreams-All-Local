@@ -345,6 +345,8 @@ async function loadManifest() {
     customization.hidden = false;
   }
   if (info.directManifest) {
+    const manifestPanel = document.getElementById('manifest');
+    if (manifestPanel) manifestPanel.open = true;
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
     const install = document.getElementById('install-stremio');
@@ -1087,6 +1089,20 @@ function renderPlaybackReadiness() {
   const list = document.getElementById('startup-checks');
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
   if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';
+  if (ready && currentManifest) {
+    const manifestPanel = document.getElementById('manifest');
+    if (manifestPanel) manifestPanel.open = true;
+  }
+  const step1 = document.getElementById('guide-step-1');
+  const step2 = document.getElementById('guide-step-2');
+  const step3 = document.getElementById('guide-step-3');
+  if (step1 && step2 && step3) {
+    step1.classList?.toggle?.('active', !running && !ready);
+    step1.classList?.toggle?.('completed', Boolean(ready || running));
+    step2.classList?.toggle?.('active', Boolean(running || setupFormDirty));
+    step2.classList?.toggle?.('completed', Boolean(ready));
+    step3.classList?.toggle?.('active', Boolean(ready));
+  }
 }
 
 document.getElementById('open-stack-settings')?.addEventListener('click', () => {
