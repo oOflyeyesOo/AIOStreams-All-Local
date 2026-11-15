@@ -9,7 +9,7 @@ function form(saved){
   const document={
     querySelectorAll(){ return []; },
     getElementById(id){
-      if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},handlers:{},addEventListener(type,handler){this.handlers[type]=handler;},scrollIntoView(){}});
+      if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},handlers:{},addEventListener(type,handler){this.handlers[type]=handler;},scrollIntoView(){},closest(){return this;}});
       return nodes.get(id);
     }
   };
@@ -208,3 +208,4 @@ test('aiometadata template selector updates description and links on change', as
   assert.match(desc.textContent, /20\+ Anime catalogs/i);
   assert.equal(dl.download, 'tamtaro-aiometadata-with-anime.json');
 });
+

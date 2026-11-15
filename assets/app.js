@@ -80,8 +80,29 @@ function getProviderCode(key) {
 
 function renderFields(id, values) {
   const target = document.getElementById(id);
+  if (values.length > 3) {
+    const picker = document.createElement('select');
+    picker.setAttribute('aria-label', 'Choose a service');
+    picker.className = 'service-picker';
+    picker.innerHTML = '<option value="">Add or edit a service…</option>';
+    for (const [key, label] of values) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = label;
+      picker.append(option);
+    }
+    picker.addEventListener('change', () => {
+      const input = document.getElementById(picker.value);
+      if (input) {
+        input.closest('label').hidden = false;
+        input.focus();
+      }
+    });
+    target.append(picker);
+  }
   for (const [key,label,icon] of values) {
     const wrapper = document.createElement('label');
+    wrapper.hidden = values.length > 3 && key !== values[0][0];
     wrapper.htmlFor = key;
     const title = document.createElement('span');
     title.className = 'field-label';
@@ -288,6 +309,10 @@ async function loadSettings(options) {
   if (typeof loadExtraUsenetSources === 'function') loadExtraUsenetSources(env);
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
+  for (const key of savedKeys) {
+    const input = document.getElementById(key);
+    if (input) input.closest('label').hidden = false;
+  }
   const modeVal = env.STREAMING_MODE || (env.USENET_ENABLED === 'true' && !providers.some(([k]) => savedKeys.has(k) || env[k]) ? 'usenet' : (env.USENET_ENABLED === 'true' ? 'hybrid' : 'debrid'));
   if (typeof setStreamingMode === 'function') setStreamingMode(modeVal);
   const detectedServer = new URL(location.origin);
@@ -1100,7 +1125,6 @@ let setupFormDirty = false;
 let readinessTimer;
 let readinessRequest;
 
-let settingsRestored = false;
 
 function renderPlaybackReadiness() {
   const failed = lastJobStatus === 'failed' || playbackReadiness?.state === 'failed';
@@ -1139,11 +1163,6 @@ function renderPlaybackReadiness() {
   if (test) test.disabled = !ready || playbackBusy;
   const copy = document.getElementById('copy-manifest');
   if (copy) copy.disabled = !ready || !currentManifest;
-  const settings = document.getElementById('setup');
-  if (!settingsRestored && ready && settings && !settings.contains?.(document.activeElement)) {
-    settings.open = false;
-    settingsRestored = true;
-  }
   const list = document.getElementById('startup-checks');
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
   if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';

@@ -75,41 +75,9 @@
 </div>
 </section>
 
-<section class="onboarding-guide-card" aria-label="Quick Start Guide">
-  <div class="onboarding-header">
-    <div class="onboarding-badge"><span class="badge-spark">⚡</span> QUICK START GUIDE</div>
-    <p class="onboarding-subtitle">Only <strong>1 provider key</strong> is needed to start streaming. All other sections (Anime, Usenet, Tracking, Subtitles, Advanced) are optional with optimized defaults already enabled.</p>
-  </div>
-  <div class="stepper-grid">
-    <div class="stepper-step active" id="guide-step-1">
-      <div class="stepper-num">1</div>
-      <div class="stepper-content">
-        <span class="stepper-title">Add Provider Key</span>
-        <span class="stepper-desc">Enter Real-Debrid, TorBox, PM, or Usenet in Stack settings below.</span>
-      </div>
-    </div>
-    <div class="stepper-divider">→</div>
-    <div class="stepper-step" id="guide-step-2">
-      <div class="stepper-num">2</div>
-      <div class="stepper-content">
-        <span class="stepper-title">Connect Stack</span>
-        <span class="stepper-desc">Click "Connect my stack" to automatically configure services.</span>
-      </div>
-    </div>
-    <div class="stepper-divider">→</div>
-    <div class="stepper-step" id="guide-step-3">
-      <div class="stepper-num">3</div>
-      <div class="stepper-content">
-        <span class="stepper-title">Stream Anywhere</span>
-        <span class="stepper-desc">Launch the AIOStreams player or copy the manifest for an external client.</span>
-      </div>
-    </div>
-  </div>
-</section>
-
 <div class="workspace-grid">
-<details class="panel setup-panel" id="setup" open>
-<summary>Stack settings</summary>
+<section class="panel setup-panel" id="setup">
+<h2>Set up your stack</h2>
 <div id="setup-sync-status" class="setup-sync-bar"><span class="sync-dot" id="setup-sync-dot"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
 <form id="setup-form">
 <div class="optional-setup stack-password-setting">
@@ -265,9 +233,9 @@
 <button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
 <p class="under-button">Your services, configured together. Setup details stay available below.</p>
 </form>
-</details>
+</section>
 <div class="right-column">
-<details class="manifest-panel" id="manifest"><summary>Addon configuration and exports</summary><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div>
+<section class="manifest-panel" id="manifest"><h2>Your player &amp; manifests</h2><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div>
 <div class="optional-setup" id="addon-customization" hidden>
   <h3>Customize your addons</h3>
   <div class="manifest-actions">
@@ -279,10 +247,7 @@
   <a class="subtle-link" href="#integrations">View all self-hosted service UIs ↓</a>
 </div>
 
-<details class="share-export-menu" id="share-export-menu">
-<summary>
-  <span>Manifest links and downloads</span>
-</summary>
+<section class="share-export-menu" id="share-export-menu"><h3>Links and downloads</h3>
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
   <a id="install-stremio" class="subtle-link disabled" href="#">Open AIOStreams in Stremio ↗</a>
 
@@ -301,8 +266,8 @@
     <a class="subtle-link" href="/api/backup" download>Download stack backup archive ⤓</a>
   </div>
 </div>
-</details>
-</details>
+</section>
+</section>
 </div>
 </div>
 <section id="integrations" class="integrations-section"><div class="integrations-heading"><div><h2>Manage services</h2></div><div class="service-toolbar"><button type="button" id="open-service-logs" class="text-button">View logs</button><button id="refresh-services" class="text-button">Refresh status</button></div></div><p class="section-description">Open a service to customize it, or view its logs here. If a UI cannot open from your browser, check that its port is published or that its reverse proxy URL is set.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>

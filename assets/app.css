@@ -2426,3 +2426,27 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Setup and outputs remain visible throughout configuration. */
+main { max-width: 1600px; }
+.workspace-grid { grid-template-columns: minmax(0, 1fr); }
+.setup-panel, .manifest-panel { padding: 24px; }
+.setup-panel > h2, .manifest-panel > h2 { margin: 0 0 18px; font-size: 22px; }
+#setup-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
+#setup-form > * { grid-column: 1 / -1; min-width: 0; }
+#setup-form > .stack-password-setting, #setup-form > .access-scope-section { grid-column: auto; }
+#provider-fields, #metadata-fields, #extra-fields, #tracking-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.service-picker { grid-column: 1 / -1; max-width: 400px; padding: 12px; font-size: 16px; }
+.field-grid > label[hidden] { display: none; }
+.right-column { position: static; }
+#manifest { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+#manifest > h2, #manifest > .manifest-preview { grid-column: 1 / -1; }
+#manifest code { overflow-wrap: anywhere; }
+.startup-readiness { padding: 18px 24px; margin-bottom: 20px; }
+#startup-title { font-size: 24px; }
+.player-showcase-bar { margin: 10px 0; padding: 0; }
+@media (max-width: 760px) {
+  #setup-form, #manifest { grid-template-columns: minmax(0, 1fr); }
+  #provider-fields, #metadata-fields, #extra-fields, #tracking-fields { grid-template-columns: minmax(0, 1fr); }
+  .setup-panel, .manifest-panel { padding: 18px; }
+}
