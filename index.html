@@ -608,6 +608,22 @@
   <p id="service-log-status" role="status" aria-live="polite"></p>
   <pre id="container-logs-output" tabindex="0" aria-label="Service log output">Select a service to see its recent output.</pre>
 </dialog>
+<dialog id="service-frame-modal" class="service-frame-dialog" aria-labelledby="service-frame-title" aria-modal="true">
+  <div class="service-frame-header">
+    <div class="service-frame-title-group">
+      <span class="service-frame-badge">ADMIN VIEW</span>
+      <h2 id="service-frame-title">Service Viewer</h2>
+    </div>
+    <div class="service-frame-actions">
+      <button type="button" id="service-frame-reload" class="text-button" title="Reload frame" aria-label="Reload frame">↻ Reload</button>
+      <a id="service-frame-external" class="text-button" href="#" target="_blank" rel="noopener noreferrer" title="Open in new tab" aria-label="Open in new tab">↗ Pop Out</a>
+      <button type="button" id="service-frame-close" class="text-button service-frame-close-btn" aria-label="Close service viewer">✕ Close</button>
+    </div>
+  </div>
+  <div class="service-frame-body">
+    <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+  </div>
+</dialog>
 </main>
 <div id="toast" role="status" hidden></div>
 </body></html>

@@ -413,6 +413,19 @@ class PortalTests(unittest.TestCase):
         data = json.loads(body)
         self.assertFalse(data["jellyfinEnabled"])
 
+        # Auto-login URL when UUID and encrypted password are configured
+        portal.save_env_updates({
+            "JELLYFIN_ENABLED": "true",
+            "DEFAULT_AIO_UUID": "test-user-uuid",
+            "DEFAULT_AIO_ENCRYPTED_PASSWORD": "enc-pass-123"
+        })
+        status, body, headers = self.request("/api/manifest-info", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123")
+        self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123/web/")
+        self.assertIn("frame-src 'self' http: https: data: blob:;", headers.get("Content-Security-Policy", ""))
+
     def test_dashboard_links_on_fresh_lan_install(self):
         with tempfile.TemporaryDirectory() as temp:
             env_path = Path(temp) / ".env"

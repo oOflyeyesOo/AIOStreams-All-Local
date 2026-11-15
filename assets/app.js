@@ -333,9 +333,11 @@ async function loadSettings() {
   if (typeof setFormDirty === 'function') setFormDirty(false);
 }
 
+let cachedManifestInfo = null;
 let manifestLoaded = false;
 async function loadManifest() {
   const info = await api('/api/manifest-info');
+  cachedManifestInfo = info;
   manifestLoaded = true;
   const customization = document.getElementById('addon-customization');
   if (customization && info.aiostreamsConfigure && info.aiostreamsDashboard && info.aiometadataConfigure) {
@@ -360,13 +362,15 @@ async function loadManifest() {
     }
     const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
     const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+    const serverUrl = info.jellyfinServer || `${aioBase}/jellyfin`;
     const installAioWeb = document.getElementById('install-aiostreams-web');
     if (installAioWeb) {
-      installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(aioBase + '/jellyfin')}`;
+      installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
     }
+    const playerUrl = info.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
     const aioPlayer = document.getElementById('aiostreams-player-action');
-    if (aioPlayer && (!aioPlayer.href || aioPlayer.href.endsWith('#'))) {
-      aioPlayer.href = `${aioBase}/jellyfin/web`;
+    if (aioPlayer) {
+      aioPlayer.href = playerUrl;
       aioPlayer.style.display = 'block';
     }
     const qcLink = document.getElementById('open-jellyfin-quickconnect');
@@ -415,6 +419,63 @@ async function loadManifest() {
   }
 }
 
+let activeElementBeforeFrameDialog = null;
+
+function closeServiceViewer() {
+  const dialog = document.getElementById('service-frame-modal');
+  const iframe = document.getElementById('service-frame-iframe');
+  if (!dialog || !dialog.open || dialog.classList?.contains?.('closing')) return;
+  dialog.classList?.add?.('closing');
+  const restoreFocus = () => {
+    if (typeof activeElementBeforeFrameDialog !== 'undefined' && activeElementBeforeFrameDialog && typeof activeElementBeforeFrameDialog.focus === 'function') {
+      try { activeElementBeforeFrameDialog.focus(); } catch (_) {}
+      activeElementBeforeFrameDialog = null;
+    }
+  };
+  const onAnimationEnd = () => {
+    dialog.removeEventListener?.('animationend', onAnimationEnd);
+    dialog.classList?.remove?.('closing');
+    if (dialog.open) dialog.close();
+    if (iframe) iframe.src = 'about:blank';
+    restoreFocus();
+  };
+  dialog.addEventListener?.('animationend', onAnimationEnd, { once: true });
+  if (typeof setTimeout === 'function') {
+    setTimeout(() => {
+      if (dialog.classList?.contains?.('closing')) {
+        dialog.classList?.remove?.('closing');
+        if (dialog.open) dialog.close();
+        if (iframe) iframe.src = 'about:blank';
+        restoreFocus();
+      }
+    }, 250);
+  }
+}
+window.closeServiceViewer = closeServiceViewer;
+
+function openServiceViewer(title, url) {
+  const dialog = document.getElementById('service-frame-modal');
+  const titleEl = document.getElementById('service-frame-title');
+  const iframe = document.getElementById('service-frame-iframe');
+  const external = document.getElementById('service-frame-external');
+  if (!dialog || !iframe) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  activeElementBeforeFrameDialog = document.activeElement;
+  if (titleEl) titleEl.textContent = title || 'Service Viewer';
+  if (external) external.href = url;
+  iframe.src = url;
+  if (dialog.classList?.contains?.('closing')) {
+    dialog.classList.remove('closing');
+  }
+  if (typeof dialog.showModal === 'function') {
+    dialog.showModal();
+  } else {
+    dialog.open = true;
+  }
+}
+window.openServiceViewer = openServiceViewer;
 
 let activeElementBeforeDialog = null;
 
@@ -515,6 +576,24 @@ async function refreshServices() {
     const actions = document.createElement('div');
     actions.className = 'service-card-actions';
     if (service.uiUrl) {
+      card.classList?.add?.('service-card-interactive');
+      card.addEventListener?.('click', (e) => {
+        if (!e.target?.closest?.('a') && !e.target?.closest?.('button')) {
+          openServiceViewer(service.name, service.uiUrl);
+        }
+      });
+      const embedBtn = document.createElement('button');
+      embedBtn.type = 'button';
+      embedBtn.className = 'service-embed-btn';
+      embedBtn.textContent = 'View ⧉';
+      embedBtn.title = `Open ${service.name} in embedded viewer`;
+      embedBtn.setAttribute('aria-label', `View ${service.name} in embedded viewer`);
+      embedBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openServiceViewer(service.name, service.uiUrl);
+      });
+      actions.append(embedBtn);
+
       const link = document.createElement('a');
       link.className = 'service-ui-link';
       link.href = service.uiUrl;
@@ -527,9 +606,23 @@ async function refreshServices() {
     if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
       const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
       const aioOrigin = service.uiUrl ? new URL(service.uiUrl).origin : `http://${location.hostname}:${aioPort}`;
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web`;
+
+      const playerEmbedBtn = document.createElement('button');
+      playerEmbedBtn.type = 'button';
+      playerEmbedBtn.className = 'service-embed-btn';
+      playerEmbedBtn.textContent = 'Player ⧉';
+      playerEmbedBtn.title = 'Open AIOStreams Web Player in embedded viewer';
+      playerEmbedBtn.setAttribute('aria-label', 'Open AIOStreams Web Player in embedded viewer');
+      playerEmbedBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openServiceViewer('AIOStreams Web Player', playerUrl);
+      });
+      actions.append(playerEmbedBtn);
+
       const playerLink = document.createElement('a');
       playerLink.className = 'service-ui-link';
-      playerLink.href = `${aioOrigin}/jellyfin/web`;
+      playerLink.href = playerUrl;
       playerLink.target = '_blank';
       playerLink.rel = 'noopener noreferrer';
       playerLink.textContent = 'Web Player ↗';
@@ -590,7 +683,8 @@ async function refreshServices() {
   }
   const aioAction = document.getElementById('aiostreams-player-action');
   if (aioAction) {
-    aioAction.href = `${aioBase}/jellyfin/web`;
+    const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
+    aioAction.href = playerUrl;
     aioAction.textContent = `Open AIOStreams Web Player ↗`;
     aioAction.style.display = (aioSvc && aioSvc.enabled !== false) ? 'block' : 'none';
   }
@@ -1486,6 +1580,53 @@ async function runOperations() {
   document.getElementById('close-log-dialog')?.addEventListener('click', (e) => {
     e.preventDefault();
     closeLogDialog();
+  });
+
+  const frameDialog = document.getElementById('service-frame-modal');
+  let frameDialogPointerDownBackdrop = false;
+  if (frameDialog) {
+    frameDialog.addEventListener('pointerdown', (e) => {
+      const rect = frameDialog.getBoundingClientRect();
+      frameDialogPointerDownBackdrop = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+    });
+    frameDialog.addEventListener('click', (e) => {
+      const rect = frameDialog.getBoundingClientRect();
+      const isOutside = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+      if (isOutside && frameDialogPointerDownBackdrop) {
+        closeServiceViewer();
+      }
+      frameDialogPointerDownBackdrop = false;
+    });
+    frameDialog.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      closeServiceViewer();
+    });
+  }
+
+  document.getElementById('service-frame-close')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeServiceViewer();
+  });
+
+  document.getElementById('service-frame-reload')?.addEventListener('click', () => {
+    const iframe = document.getElementById('service-frame-iframe');
+    if (iframe && iframe.src && iframe.src !== 'about:blank') {
+      const current = iframe.src;
+      iframe.src = 'about:blank';
+      if (typeof setTimeout === 'function') {
+        setTimeout(() => { if (iframe) iframe.src = current; }, 50);
+      }
+    }
   });
 
   document.getElementById('btn-toggle-setup-logs')?.addEventListener('click', () => {

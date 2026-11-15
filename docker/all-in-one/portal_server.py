@@ -1023,7 +1023,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';")
+        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-src 'self' http: https: data: blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';")
         super().end_headers()
 
     def read_json_body(self, max_size=65536):
@@ -1877,6 +1877,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         aiom_manifest = f"{aiom_host}{aiom_path}/manifest.json" if aiom_path else None
 
         jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
+        jellyfin_server = f"{base_url}/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else f"{base_url}/jellyfin"
+        jellyfin_web_player = f"{base_url}/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else f"{base_url}/jellyfin/web"
         resp = {
             "success": True,
             "uuid": uuid,
@@ -1886,8 +1888,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aliasManifest": alias_manifest,
             "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/stremio/configure",
             "aiostreamsDashboard": f"{base_url}/dashboard",
-            "jellyfinServer": f"{base_url}/jellyfin",
-            "jellyfinWebPlayer": f"{base_url}/jellyfin/web",
+            "jellyfinServer": jellyfin_server,
+            "jellyfinWebPlayer": jellyfin_web_player,
             "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
             "officialWebPlayer": "https://web.aiostreams.org",
             "jellyfinEnabled": jellyfin_enabled_val,
