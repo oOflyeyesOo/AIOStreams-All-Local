@@ -19,13 +19,14 @@
     <a class="text-button" href="#integrations">Manage services</a>
   </div>
   <div id="ready-actions" hidden>
-<div class="stack-actions">
+<div class="stack-actions playback-actions">
+<div id="deployment-players" class="stack-actions player-showcase-bar">
+  <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open player ↗</a>
+</div>
   <button type="button" id="copy-manifest" class="primary-button" disabled><span>Copy manifest</span><span>⧉</span></button>
   <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
 </div>
-<div id="deployment-players" class="stack-actions player-showcase-bar">
-  <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch AIOStreams Web Player ↗</a>
-</div>
+
 <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
   <span class="quickconnect-label">Player sign-in</span>
   <button type="button" id="copy-jellyfin-server-url" class="mini-action-btn" title="Copy Jellyfin server endpoint for client apps">Copy Server URL ⧉</button>
@@ -35,6 +36,7 @@
 </div>
 <p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
   </div>
+<div class="primary-manifest"><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div><a class="text-button" href="/api/export-manifest" download>Download manifest JSON ↓</a></div>
   <details class="startup-checklist"><summary>Service checks</summary><pre id="startup-checks">Checking services…</pre></details>
 <section class="progress-panel panel" id="progress-panel" hidden><div><h3 id="progress-title">Setup progress</h3><p id="progress-description">Setup output will appear here when you connect your stack.</p><div class="progress-actions" id="progress-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btn-toggle-setup-logs" class="mini-action-btn" hidden>View setup output ▾</button><button type="button" id="btn-inspect-container-logs" class="mini-action-btn">Inspect container logs ↓</button></div></div><details id="setup-details" class="setup-details-accordion" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
 <div id="playback-test-card" class="playback-test-card" style="display:none;">
@@ -235,7 +237,7 @@
 </form>
 </section>
 <div class="right-column">
-<section class="manifest-panel" id="manifest"><h2>Your player &amp; manifests</h2><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div>
+<section class="manifest-panel" id="manifest"><h2>Addon settings &amp; exports</h2>
 <div class="optional-setup" id="addon-customization" hidden>
   <h3>Customize your addons</h3>
   <div class="manifest-actions">
@@ -261,7 +263,6 @@
 
   <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
     <button type="button" id="copy-aniskip-api" class="light-button" style="width:100%;">Copy AniSkip auto-skip API URL <span>⧉</span></button>
-    <a class="subtle-link" href="/api/export-manifest" download>Download AIO manifest JSON ↓</a>
     <a id="download-aiometa-json" class="subtle-link" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json">Download AIOMetadata anime config JSON ↓</a>
     <a class="subtle-link" href="/api/backup" download>Download stack backup archive ⤓</a>
   </div>
