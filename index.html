@@ -19,60 +19,60 @@
   </div>
   <div id="ready-actions" hidden>
 <div class="stack-actions">
-  <button type="button" id="copy-manifest" class="primary-button" disabled>Copy manifest</button>
-  <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn" ><span>Test my setup</span><span>▶</span></button>
+  <button type="button" id="copy-manifest" class="primary-button" disabled><span>Copy manifest</span><span>⧉</span></button>
+  <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
 </div>
 <div id="deployment-players" class="stack-actions">
-  <a id="player-link-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:14px;padding:8px 12px;display:none;">Launch Stremio Web (:8082) ↗</a>
-  <a id="nuvio-player-action" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;font-size:14px;padding:8px 12px;display:none;">Launch Nuvio Web (:8085) ↗</a>
+  <a id="player-link-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Stremio Web (:8082) ↗</a>
+  <a id="nuvio-player-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Nuvio Web (:8085) ↗</a>
 </div>
   </div>
   <details class="startup-checklist"><summary>Service checks</summary><pre id="startup-checks">Checking services…</pre></details>
-<section class="progress-panel panel" id="progress-panel" hidden><div style="flex:1;"><h3 id="progress-title">Setup progress</h3><p id="progress-description">Setup output will appear here when you connect your stack.</p><div class="progress-actions" id="progress-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btn-toggle-setup-logs" class="mini-action-btn" style="font-size:12px;padding:3px 8px;" hidden>View setup output ▾</button><button type="button" id="btn-inspect-container-logs" class="mini-action-btn" style="font-size:12px;padding:3px 8px;">Inspect container logs ↓</button></div></div><details id="setup-details" class="setup-details-accordion" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
-<div id="playback-test-card" class="playback-test-card" style="display:none;margin-top:14px;padding:14px;background:#141a1c;border:1px solid #232a2e;border-radius:10px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <h4 style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">Live Playback Verification</h4>
-    <span id="playback-test-status" style="font-size:14px;font-weight:600;color:#38bdf8;">Testing…</span>
+<section class="progress-panel panel" id="progress-panel" hidden><div><h3 id="progress-title">Setup progress</h3><p id="progress-description">Setup output will appear here when you connect your stack.</p><div class="progress-actions" id="progress-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btn-toggle-setup-logs" class="mini-action-btn" hidden>View setup output ▾</button><button type="button" id="btn-inspect-container-logs" class="mini-action-btn">Inspect container logs ↓</button></div></div><details id="setup-details" class="setup-details-accordion" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
+<div id="playback-test-card" class="playback-test-card" style="display:none;">
+  <div class="op-card-header">
+    <h4>Live Playback Verification</h4>
+    <span id="playback-test-status">Testing…</span>
   </div>
-  <div id="playback-test-steps" style="display:flex;flex-direction:column;gap:8px;font-size:14px;">
-    <div class="test-step" id="step-auth" style="display:flex;align-items:center;gap:8px;color:#8fa1a8;">
+  <div id="playback-test-steps">
+    <div class="test-step" id="step-auth">
       <span class="step-icon" id="icon-step-auth">○</span>
-      <span class="step-label" style="font-weight:600;">1. Provider Credentials:</span>
-      <span class="step-desc" id="desc-step-auth" style="color:#cbd5e1;">Pending</span>
+      <span class="step-label">1. Provider Credentials:</span>
+      <span class="step-desc" id="desc-step-auth">Pending</span>
     </div>
-    <div class="test-step" id="step-resolution" style="display:flex;align-items:center;gap:8px;color:#8fa1a8;">
+    <div class="test-step" id="step-resolution">
       <span class="step-icon" id="icon-step-resolution">○</span>
-      <span class="step-label" style="font-weight:600;">2. Stream Discovery:</span>
-      <span class="step-desc" id="desc-step-resolution" style="color:#cbd5e1;">Pending</span>
+      <span class="step-label">2. Stream Discovery:</span>
+      <span class="step-desc" id="desc-step-resolution">Pending</span>
     </div>
-    <div class="test-step" id="step-media" style="display:flex;align-items:center;gap:8px;color:#8fa1a8;">
+    <div class="test-step" id="step-media">
       <span class="step-icon" id="icon-step-media">○</span>
-      <span class="step-label" style="font-weight:600;">3. Media Range Read:</span>
-      <span class="step-desc" id="desc-step-media" style="color:#cbd5e1;">Pending</span>
+      <span class="step-label">3. Media Range Read:</span>
+      <span class="step-desc" id="desc-step-media">Pending</span>
     </div>
-    <div class="test-step" id="step-playback" style="display:flex;align-items:center;gap:8px;color:#8fa1a8;">
+    <div class="test-step" id="step-playback">
       <span class="step-icon" id="icon-step-playback">○</span>
-      <span class="step-label" style="font-weight:600;">4. Player Playback:</span>
-      <span class="step-desc" id="desc-step-playback" style="color:#cbd5e1;">Awaiting stream resolution</span>
+      <span class="step-label">4. Player Playback:</span>
+      <span class="step-desc" id="desc-step-playback">Awaiting stream resolution</span>
     </div>
   </div>
-  <div id="playback-video-container" style="display:none;margin-top:14px;border-top:1px solid #232a2e;padding-top:12px;">
+  <div id="playback-video-container" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="font-size:14px;font-weight:600;color:#34d399;">▶ Stream preview</span>
-      <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;font-size:14px;">Open stream directly ↗</a>
+      <span style="font-size:14px;font-weight:600;color:var(--green);">▶ Stream preview</span>
+      <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;">Open stream directly ↗</a>
     </div>
-    <video id="playback-video-preview" controls preload="none" style="width:100%;max-height:220px;border-radius:6px;background:#0a0d0e;outline:none;border:1px solid #263136;"></video>
+    <video id="playback-video-preview" controls preload="none"></video>
   </div>
-  <div id="playback-troubleshoot" style="display:none;margin-top:12px;padding:10px;background:#241416;border:1px solid #7f1d1d;border-radius:6px;font-size:14px;color:#fca5a5;line-height:1.4;"></div>
+  <div id="playback-troubleshoot" style="display:none;"></div>
 </div>
 </section>
 
 <div class="workspace-grid">
 <details class="panel setup-panel" id="setup" open>
 <summary>Stack settings</summary>
-<div id="setup-sync-status" class="setup-sync-bar" style="margin-bottom:14px;padding:8px 12px;background:#141b1e;border:1px solid #232c30;border-radius:6px;font-size:14px;display:flex;align-items:center;gap:8px;color:#94a3b8;"><span class="sync-dot" id="setup-sync-dot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
+<div id="setup-sync-status" class="setup-sync-bar"><span class="sync-dot" id="setup-sync-dot"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
 <form id="setup-form">
-<div class="access-scope-section" style="margin-bottom:14px;">
+<div class="access-scope-section">
 <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
 <div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
 <button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Server (No Domain Required)</span></button>
@@ -81,10 +81,10 @@
 </div>
 <label class="field-label" for="base-url">AIOStreams address (Port 3001) <span>REQUIRED</span></label>
 <input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help" id="base-url-help">Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.</p>
-<label class="field-label" for="aiometadata-host" style="margin-top:14px">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
-<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help" id="aiometa-url-help">Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.</p>
+<label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
+<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help" id="aiometa-url-help">Attach your aiometa subdomain to port 4005 for rich external catalogs &amp; posters.</p>
 <div class="streaming-mode-section">
-<label class="field-label" style="margin-top:14px">Streaming provider mode <span>BACKEND</span></label>
+<label class="field-label">Streaming provider mode <span>BACKEND</span></label>
 <div class="mode-selector-pills" role="radiogroup" aria-label="Streaming Provider Mode">
 <button type="button" class="mode-pill active" id="mode-debrid" data-mode="debrid" role="radio" aria-checked="true"><span class="mode-pill-icon">⚡</span><span class="mode-pill-title">Debrid (Default)</span><span class="mode-pill-desc">Real-Debrid, TorBox, PM, AllDebrid</span></button>
 <button type="button" class="mode-pill" id="mode-usenet" data-mode="usenet" role="radio" aria-checked="false"><span class="mode-pill-icon">📰</span><span class="mode-pill-title">Usenet Only</span><span class="mode-pill-desc">NNTP &amp; NZB Indexers (No Debrid)</span></button>
@@ -129,7 +129,7 @@
     <button type="button" class="text-button" data-remove-source>Remove server</button>
   </fieldset>
 </template>
-<div style="margin-top:14px;border-top:1px solid #232a2e;padding-top:12px">
+<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
 <h3>NZB indexers</h3>
 <label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
 <div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
@@ -149,7 +149,7 @@
 <p class="field-help" style="margin-top:10px">Streams are fetched on-demand by InfiniDysk via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
 </div>
 </div>
-<div class="section-divider"><span>Metadata & artwork</span><span class="optional">RECOMMENDED</span></div>
+<div class="section-divider"><span>Metadata &amp; artwork</span><span class="optional">RECOMMENDED</span></div>
 <div class="template-selector-box">
 <div class="template-header">
 <label class="field-label" for="aiometadata-template">Metadata catalog template <span>PRESET</span></label>
@@ -164,12 +164,12 @@
 <option value="grabberhawk-aiometadata-config.json">Grabberhawk Metadata Preset</option>
 </select>
 <p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
-<div class="template-profile-pill" style="margin-top:10px;padding:8px 12px;background:#141a1d;border:1px solid #232c30;border-radius:6px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-  <span style="color:#94a3b8;display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:#38bdf8;">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
+<div class="template-profile-pill">
+  <span style="color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:var(--accent-cyan);">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
   <div style="display:flex;gap:6px;align-items:center;">
-    <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:#38bdf8;" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
+    <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:var(--accent-cyan);" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
     <button type="button" id="copy-addon-password" class="mini-action-btn" title="Copy Addon Password (admin) to unlock AIOMetadata">Copy Password (admin) ⧉</button>
-    <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:#e6a56b;">Open Profile ↗</a>
+    <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--accent-gold);">Open Profile ↗</a>
   </div>
 </div>
 </div>
@@ -177,29 +177,29 @@
 <details class="more-options"><summary>Public databases, anime, Usenet, tracking, subtitles & optional services <span>+</span></summary>
 <div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
 <label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
-<div class="credential-sharing-notice" style="margin:8px 0 12px;padding:10px 12px;background:#181d20;border-left:3px solid #f59e0b;border-radius:4px;font-size:14px;color:#cbd5e1;line-height:1.4;">
-  <strong style="color:#f59e0b;">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Comet, TorBox/Real-Debrid direct).
+<div class="credential-sharing-notice notice-callout notice-callout-warning">
+  <strong style="color:var(--accent-gold);">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Comet, TorBox/Real-Debrid direct).
 </div>
-<div id="overlap-warning-banner" class="overlap-warning-banner" style="margin:8px 0 12px;padding:10px 12px;background:rgba(56,189,248,0.08);border-left:3px solid #38bdf8;border-radius:4px;font-size:14px;color:#cbd5e1;line-height:1.4;">
-  <strong style="color:#38bdf8;">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr / Comet) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
+<div id="overlap-warning-banner" class="overlap-warning-banner notice-callout notice-callout-info">
+  <strong style="color:var(--accent-cyan);">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr / Comet) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
 </div>
-<p>Calls out to the public Torrentio index database (<code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;">https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
-<div class="field-grid" style="margin-top: 8px;">
+<p>Calls out to the public Torrentio index database (<code>https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
+<div class="field-grid" style="margin-top:10px;">
 <label><span class="field-label">Custom Torrentio endpoint (optional)</span><input id="torrentio-url" placeholder="https://torrentio.strem.fun (default)" autocomplete="off"></label>
 </div>
 
-<div style="margin-top: 18px;">
+<div style="margin-top:16px;">
 <label class="optional-service"><input id="enable-dmm" type="checkbox" checked> Enable DMM Database (Debrid Media Manager)</label>
 <p>Calls out to community Debrid Media Manager (DMM) hashlists over the internet to periodically sync curated torrent hashes into your local Zilean container. This gives you instant (&lt;50ms) local cache hits for popular releases without scraping public trackers from scratch.</p>
 </div>
 
-<div style="margin-top: 18px;">
+<div style="margin-top:16px;">
 <label class="optional-service"><input id="enable-remuxdb" type="checkbox" checked> Enable RemuxDB (MediaInfo &amp; Codec Probes)</label>
 <p>Calls out to the public RemuxDB database over the internet to source accurate container probe data (TrueHD 7.1 Atmos, DTS-HD MA, and Dolby Vision / HDR10+ profiles), enabling high-precision ranking and filtering for 4K Remux releases.</p>
 </div>
 </div>
 <div class="optional-setup"><h3>Anime sources · optional</h3><label class="optional-service"><input id="enable-anime-sources" type="checkbox"> Enable additional native anime sources</label><p>Anime Tosho, nekoBT and TsukiHime run directly through AIOStreams for anime requests only. Sources without a compatible account stay disabled.</p>
-<div class="aniskip-box" style="margin-top:14px;border:1px solid #232a2e;border-radius:8px;padding:12px;background:#14191c;">
+<div class="aniskip-box">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
     <label class="field-label" style="margin:0;font-weight:600;">AniSkip Opening / Ending Auto-Skip <span>ANIME API</span></label>
     <button type="button" id="copy-aniskip-endpoint-btn" class="mini-action-btn" title="Copy AniSkip endpoint for Nuvio / outside players">Copy API URL ⧉</button>
@@ -208,14 +208,14 @@
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <input id="aniskip-test-id" aria-label="IMDb ID or MyAnimeList ID" placeholder="IMDb (e.g. tt9335498) or MAL ID" style="flex:2;min-width:140px;" value="tt9335498">
     <input id="aniskip-test-ep" aria-label="Episode number" type="number" min="1" max="1000" placeholder="Ep #" value="1" style="flex:1;min-width:60px;">
-    <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;font-size:14px;">Test Skip Timestamps ⚡</button>
+    <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;">Test Skip Timestamps ⚡</button>
   </div>
-  <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#1a2226;border-radius:6px;font-size:14px;color:#cbd5e1;"></div>
+  <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#101720;border-radius:6px;font-size:13.5px;color:var(--text-sub);"></div>
 </div>
 </div>
 
 
-<div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid #232a2e;padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
+<div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
 <div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div></details>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
 <button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
@@ -230,15 +230,14 @@
     <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOStreams ↗</a>
     <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOMetadata ↗</a>
   </div>
-  <p class="field-help">Use <strong>admin</strong> and your stack password to sign in to AIOStreams. Use your stack password (<span id="addon-password-display" style="color:#e2e8f0;font-weight:600;">admin</span>) to unlock the AIOMetadata profile. <button type="button" id="copy-addon-password-manifest" class="mini-action-btn" style="display:inline-block;padding:2px 6px;margin-left:4px;font-size:11px;">Copy password ⧉</button></p>
+  <p class="field-help">Use <strong>admin</strong> and your stack password to sign in to AIOStreams. Use your stack password (<span id="addon-password-display" style="color:var(--text-main);font-weight:600;">admin</span>) to unlock the AIOMetadata profile. <button type="button" id="copy-addon-password-manifest" class="mini-action-btn" style="display:inline-block;padding:2px 6px;margin-left:4px;font-size:11px;">Copy password ⧉</button></p>
   <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Open AIOStreams admin dashboard ↗</a>
   <a class="subtle-link" href="#integrations">View all self-hosted service UIs ↓</a>
 </div>
 
-<details class="share-export-menu" id="share-export-menu" style="margin-top:16px;border:1px solid #232a2e;border-radius:8px;padding:10px 14px;background:#14191c;">
-<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+<details class="share-export-menu" id="share-export-menu">
+<summary>
   <span>Manifest links and downloads</span>
-
 </summary>
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
   <a id="install-stremio" class="subtle-link disabled" href="#">Open AIOStreams in Stremio ↗</a>
@@ -252,7 +251,7 @@
   <a id="install-aiometa-stremio" class="subtle-link disabled" href="#">Open optional AIOMetadata in Stremio ↗</a>
   <a id="connect-tracking" class="subtle-link disabled" href="#" target="_blank" rel="noopener noreferrer">Connect tracking accounts in AIOMetadata ↗</a>
 
-  <div style="border-top:1px solid #232a2e;margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
+  <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
     <button type="button" id="copy-aniskip-api" class="light-button" style="width:100%;">Copy AniSkip auto-skip API URL <span>⧉</span></button>
     <a class="subtle-link" href="/api/export-manifest" download>Download AIO manifest JSON ↓</a>
     <a id="download-aiometa-json" class="subtle-link" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json">Download AIOMetadata anime config JSON ↓</a>
@@ -266,12 +265,12 @@
 <section id="integrations" class="integrations-section"><div class="integrations-heading"><div><h2>Manage services</h2></div><div class="service-toolbar"><button type="button" id="open-service-logs" class="text-button">View logs</button><button id="refresh-services" class="text-button">Refresh status</button></div></div><p class="section-description">Open a service to customize it, or view its logs here. If a UI cannot open from your browser, check that its port is published or that its reverse proxy URL is set.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>
 <details class="panel advanced-tools" id="advanced-tools"><summary>Advanced tools</summary>
 <details class="tool-group"><summary>Health and telemetry</summary>
-<section class="operations-section panel" id="telemetry"><div class="integrations-heading"><div><div class="eyebrow">LIVE TELEMETRY &amp; SELF-HEALING</div><h2>Stack Health &amp; Watchdog.</h2></div><div class="telemetry-controls"><select id="auto-refresh-select" class="subtle-select" aria-label="Telemetry auto-refresh interval"><option value="0">Auto-refresh: Off</option><option value="5000">Auto-refresh: 5s</option><option value="10000" selected>Auto-refresh: 10s</option><option value="30000">Auto-refresh: 30s</option></select><button id="refresh-health" class="light-button">Refresh Health ↻</button><button id="run-watchdog-probe" class="light-button">Run Probe 🛡️</button></div></div><p class="section-description">Real-time resource telemetry across your active containers, self-healing endpoint watchdog status, and automated backup rotation.</p><div class="telemetry-grid"><div class="telemetry-card"><div class="stat-label">Active Containers</div><div class="stat-val text-green" id="health-fleet-count">-- / --</div><div class="stat-sub" id="health-fleet-status">All containers monitored</div></div><div class="telemetry-card"><div class="stat-label">Stack Memory</div><div class="stat-val" id="health-mem-used">-- GB</div><div class="stat-sub" id="health-mem-host">of -- GB Host (--%)</div><div class="stat-bar"><div class="stat-fill" id="health-mem-fill" style="width: 0%"></div></div></div><div class="telemetry-card"><div class="stat-label">Stack CPU Load</div><div class="stat-val text-blue" id="health-cpu-load">--%</div><div class="stat-sub" id="health-cpu-sub">Across active containers</div></div><div class="telemetry-card"><div class="stat-label">Watchdog &amp; Backups</div><div class="stat-val text-green" id="health-watchdog-state">-- / -- Online</div><div class="stat-sub" id="health-backup-summary">Checking storage…</div></div></div><details id="fleet-details" class="fleet-details" style="margin-top:20px;border:1px solid #232a2e;border-radius:8px;padding:12px;background:#14191c;">
-<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+<section class="operations-section panel" id="telemetry"><div class="integrations-heading"><div><div class="eyebrow">LIVE TELEMETRY &amp; SELF-HEALING</div><h2>Stack Health &amp; Watchdog.</h2></div><div class="telemetry-controls"><select id="auto-refresh-select" class="subtle-select" aria-label="Telemetry auto-refresh interval"><option value="0">Auto-refresh: Off</option><option value="5000">Auto-refresh: 5s</option><option value="10000" selected>Auto-refresh: 10s</option><option value="30000">Auto-refresh: 30s</option></select><button id="refresh-health" class="light-button">Refresh Health ↻</button><button id="run-watchdog-probe" class="light-button">Run Probe 🛡️</button></div></div><p class="section-description">Real-time resource telemetry across your active containers, self-healing endpoint watchdog status, and automated backup rotation.</p><div class="telemetry-grid"><div class="telemetry-card"><div class="stat-label">Active Containers</div><div class="stat-val text-green" id="health-fleet-count">-- / --</div><div class="stat-sub" id="health-fleet-status">All containers monitored</div></div><div class="telemetry-card"><div class="stat-label">Stack Memory</div><div class="stat-val" id="health-mem-used">-- GB</div><div class="stat-sub" id="health-mem-host">of -- GB Host (--%)</div><div class="stat-bar"><div class="stat-fill" id="health-mem-fill" style="width: 0%"></div></div></div><div class="telemetry-card"><div class="stat-label">Stack CPU Load</div><div class="stat-val text-blue" id="health-cpu-load">--%</div><div class="stat-sub" id="health-cpu-sub">Across active containers</div></div><div class="telemetry-card"><div class="stat-label">Watchdog &amp; Backups</div><div class="stat-val text-green" id="health-watchdog-state">-- / -- Online</div><div class="stat-sub" id="health-backup-summary">Checking storage…</div></div></div><details id="fleet-details" class="fleet-details">
+<summary>
   <span>Per-container fleet metrics (CPU, RAM, Net I/O) ▾</span>
-  <span style="font-size:14px;color:#859296;">Click to expand</span>
+  <span style="font-size:13px;color:var(--text-muted);">Click to expand</span>
 </summary>
-<div style="margin-top: 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;"><h4 style="margin: 0; font-size: 14px; font-weight: 600; color:#e2e8f0;">Container Fleet Telemetry</h4><div style="display: flex; gap: 8px;"><a class="subtle-link" href="/api/backup" download style="margin: 0;">Download Backup (Keep 5) ↓</a><label for="backup-schedule-select" style="font-size:14px;color:#8b949e;display:flex;align-items:center;gap:6px">Schedule:<select id="backup-schedule-select" class="subtle-select" style="font-size:14px;padding:3px 6px"><option value="daily" selected>Daily (Keep 5)</option><option value="weekly">Weekly (Keep 5)</option><option value="off">Manual Only</option></select></label><button id="btn-prune-backups" class="subtle-link" style="background: none; border: none; cursor: pointer; color: var(--orange, #f39c12); font-size: 13px;">Prune Old Backups ⤓</button></div></div><div class="telemetry-table-wrapper" style="margin-top: 12px;"><table class="telemetry-table"><thead><tr><th>Container</th><th>CPU %</th><th>RAM Used / Limit</th><th>RAM %</th><th>Net I/O</th><th>Status</th></tr></thead><tbody id="telemetry-table-body"><tr><td colspan="6" style="text-align:center; padding: 18px; color: #8b949e;">Loading live container metrics…</td></tr></tbody></table></div>
+<div class="fleet-controls"><h4 style="margin: 0; font-size: 14px; font-weight: 600; color:var(--text-main);">Container Fleet Telemetry</h4><div style="display: flex; gap: 8px;"><a class="subtle-link" href="/api/backup" download style="margin: 0;">Download Backup (Keep 5) ↓</a><label for="backup-schedule-select" style="font-size:13.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px">Schedule:<select id="backup-schedule-select" class="subtle-select" style="font-size:13px;padding:3px 6px"><option value="daily" selected>Daily (Keep 5)</option><option value="weekly">Weekly (Keep 5)</option><option value="off">Manual Only</option></select></label><button id="btn-prune-backups" class="subtle-link" style="background: none; border: none; cursor: pointer; color: var(--accent-gold); font-size: 13px;">Prune Old Backups ⤓</button></div></div><div class="telemetry-table-wrapper" style="margin-top: 12px;"><table class="telemetry-table"><thead><tr><th>Container</th><th>CPU %</th><th>RAM Used / Limit</th><th>RAM %</th><th>Net I/O</th><th>Status</th></tr></thead><tbody id="telemetry-table-body"><tr><td colspan="6" style="text-align:center; padding: 18px; color: var(--text-muted);">Loading live container metrics…</td></tr></tbody></table></div>
 </details></section>
 </details>
 <details class="tool-group"><summary>Backups and maintenance</summary>

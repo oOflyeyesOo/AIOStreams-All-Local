@@ -101,7 +101,6 @@ function renderFields(id, values) {
     testSavedBtn.textContent = 'Test Saved Key';
     testSavedBtn.hidden = true;
     testSavedBtn.title = `Test saved ${label} key without re-entering it`;
-    testSavedBtn.style.cssText = 'background:none;border:1px solid #3b82f6;color:#60a5fa;border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;margin-left:6px;';
     testSavedBtn.addEventListener('click', async event => {
       event.preventDefault();
       testSavedBtn.disabled = true;
@@ -170,10 +169,25 @@ async function api(path, options, attempt=0) {
     throw error;
   }
 }
-function notify(message) {
+function notify(message, isError = false) {
   const toast = document.getElementById('toast');
-  toast.textContent = message; toast.hidden = false;
-  clearTimeout(notify.timer); notify.timer = setTimeout(() => toast.hidden = true, 5000);
+  if (!toast) return;
+  toast.textContent = message;
+  toast.hidden = false;
+  if (isError) {
+    toast.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+    toast.style.background = '#2a1215';
+    toast.style.color = '#fecdd3';
+  } else {
+    toast.style.borderColor = '';
+    toast.style.background = '';
+    toast.style.color = '';
+  }
+  clearTimeout(notify.timer);
+  notify.timer = setTimeout(() => { toast.hidden = true; }, 5000);
+}
+function flashStatus(message, isError = false) {
+  notify(message, isError);
 }
 window.showToast = notify;
 function setProgress(title,message,running=false) {
