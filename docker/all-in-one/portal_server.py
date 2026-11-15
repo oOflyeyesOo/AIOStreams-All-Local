@@ -884,6 +884,16 @@ def service_ui_url(service, request_host, env):
             return normalize_base_url(override)
         except ValueError:
             pass
+    if service == "aiometadata":
+        aiom_profile = env.get("AIOMETADATA_PROFILE_UUID") if "AIOMETADATA_PROFILE_UUID" in env else os.environ.get("AIOMETADATA_PROFILE_UUID")
+        if aiom_profile and str(aiom_profile).strip():
+            path = f"/stremio/{urllib.parse.quote(str(aiom_profile).strip(), safe='')}/configure"
+        else:
+            path = "/configure"
+    elif service == "aiostreams":
+        aios_uuid = env.get("DEFAULT_AIO_UUID") or os.environ.get("DEFAULT_AIO_UUID")
+        if aios_uuid:
+            path = "/stremio/u/local/configure"
     address_key = {"aiostreams": "BASE_URL", "aiometadata": "AIOMETADATA_HOST"}.get(service)
     address = (env.get(address_key) or os.environ.get(address_key)) if address_key else None
     port = env.get(f"PORT_{suffix}") or os.environ.get(f"PORT_{suffix}")
@@ -995,6 +1005,9 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
     except Exception as e:
         return False, str(e)
 
+_STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
+
+
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     server_version = "AIO-Portal"
     sys_version = ""
@@ -1092,8 +1105,11 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     self.rfile.read(65536)
             except Exception:
                 pass
+        self.close_connection = True
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="AIOStreams Portal"')
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
         self.end_headers()
         return False
 
@@ -1506,6 +1522,81 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             except (OSError, ValueError, RuntimeError):
                 self.json_response({"error": "Compose controller is unavailable. Check its container health."}, 503)
             return
+        if path == "/api/aiometadata/apply-template":
+            try:
+                payload = self.read_json_body()
+                raw_tmpl = str(payload.get("template") or "tamtaro-aiometadata-with-anime.json").strip()
+                if not raw_tmpl or raw_tmpl.startswith(".") or ".." in raw_tmpl or "/" in raw_tmpl or "\\" in raw_tmpl or not re.fullmatch(r"[A-Za-z0-9_.-]+", raw_tmpl):
+                    self.json_response({"success": False, "error": "Invalid template filename"}, 400)
+                    return
+                tmpl = os.path.basename(raw_tmpl)
+                tmpl_dir = (pathlib.Path(WEB_ROOT) / "templates" / "aiometadata-configs").resolve()
+                tmpl_path = (tmpl_dir / tmpl).resolve()
+                if not tmpl_path.is_file() or not tmpl_path.is_relative_to(tmpl_dir):
+                    repo_dir = (pathlib.Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs").resolve()
+                    tmpl_path = (repo_dir / tmpl).resolve()
+                    if not tmpl_path.is_file() or not tmpl_path.is_relative_to(repo_dir):
+                        self.json_response({"success": False, "error": f"Template {tmpl} not found"}, 404)
+                        return
+
+                with open(tmpl_path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                    tmpl_cfg = raw.get("config", raw)
+
+                env_vars = read_saved_env()
+                addon_pw = env_vars.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
+                existing_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or os.environ.get("AIOMETADATA_PROFILE_UUID")
+                aiom_base = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
+
+                api_keys = tmpl_cfg.setdefault("apiKeys", {})
+                for k, env_k in [("tmdb", "TMDB_API_KEY"), ("tvdb", "TVDB_API_KEY"), ("mdblist", "MDBLIST_API_KEY"),
+                                 ("rpdb", "RPDB_API_KEY"), ("fanart", "FANART_API_KEY"), ("gemini", "GEMINI_API_KEY")]:
+                    val = env_vars.get(env_k) or os.environ.get(env_k)
+                    if val:
+                        api_keys[k] = val
+
+                save_data = json.dumps({"config": tmpl_cfg, "password": addon_pw, "addonPassword": addon_pw}).encode()
+                endpoint = f"{aiom_base}/api/config/update/{existing_profile}" if existing_profile else f"{aiom_base}/api/config/save"
+                req_method = "PUT" if existing_profile else "POST"
+                req = urllib.request.Request(endpoint, data=save_data, method=req_method, headers={"Content-Type": "application/json"})
+                aiom_res = {}
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        aiom_res = json.load(resp)
+                except Exception as e:
+                    if existing_profile:
+                        req_fb = urllib.request.Request(f"{aiom_base}/api/config/save", data=save_data, method="POST", headers={"Content-Type": "application/json"})
+                        try:
+                            with urllib.request.urlopen(req_fb, timeout=10) as resp:
+                                aiom_res = json.load(resp)
+                        except Exception as e2:
+                            self.json_response({"success": False, "error": f"Failed to contact AIOMetadata: {e2}"}, 502)
+                            return
+                    else:
+                        self.json_response({"success": False, "error": f"Failed to contact AIOMetadata: {e}"}, 502)
+                        return
+
+                user_uuid = aiom_res.get("userUUID") or aiom_res.get("uuid") or existing_profile
+                updates = {"AIOMETADATA_TEMPLATE": tmpl}
+                if user_uuid:
+                    updates["AIOMETADATA_PROFILE_UUID"] = str(user_uuid)
+                save_env_updates(updates)
+
+                request_host = self.headers.get("Host", "localhost")
+                aiom_host = dashboard_origin(
+                    env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST"),
+                    request_host, env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005,
+                )
+                self.json_response({
+                    "success": True,
+                    "template": tmpl,
+                    "uuid": user_uuid,
+                    "configureUrl": f"{aiom_host}/stremio/{user_uuid}/configure" if user_uuid else f"{aiom_host}/configure",
+                    "manifestUrl": f"{aiom_host}/stremio/{user_uuid}/manifest.json" if user_uuid else f"{aiom_host}/manifest.json"
+                })
+            except Exception as e:
+                self.json_response({"success": False, "error": str(e)}, 500)
+            return
         if path == "/api/validate-provider":
             try:
                 payload = self.read_json_body()
@@ -1625,27 +1716,36 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         k, v = line.split("=", 1)
                         env_vars[k.strip()] = v.strip()
 
-        docker_ready = False
-        try:
-            if not env_only:
-                res = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
-                docker_ready = (res.returncode == 0)
-        except Exception:
+        now = time.monotonic()
+        if not env_only and (now - _STATUS_PROBE_CACHE["timestamp"] < 5.0):
+            docker_ready = _STATUS_PROBE_CACHE["docker_ready"]
+            aggregator_ready = _STATUS_PROBE_CACHE["aggregator_ready"]
+        else:
             docker_ready = False
+            try:
+                if not env_only:
+                    res = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                    docker_ready = (res.returncode == 0)
+            except Exception:
+                docker_ready = False
 
-        aggregator_ready = False
-        if not env_only:
-            # Fallback: check if aiostreams aggregator is reachable
-            import urllib.request
-            aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-            for endpoint in [aio_url + "/api/v1/status"]:
-                try:
-                    with urllib.request.urlopen(endpoint, timeout=1) as resp_check:
-                        if resp_check.status in (200, 301, 302):
-                            aggregator_ready = True
-                            break
-                except Exception:
-                    pass
+            aggregator_ready = False
+            if not env_only:
+                # Fallback: check if aiostreams aggregator is reachable
+                import urllib.request
+                aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+                for endpoint in [aio_url + "/api/v1/status"]:
+                    try:
+                        with urllib.request.urlopen(endpoint, timeout=1) as resp_check:
+                            if resp_check.status in (200, 301, 302):
+                                aggregator_ready = True
+                                break
+                    except Exception:
+                        pass
+            if not env_only:
+                _STATUS_PROBE_CACHE["docker_ready"] = docker_ready
+                _STATUS_PROBE_CACHE["aggregator_ready"] = aggregator_ready
+                _STATUS_PROBE_CACHE["timestamp"] = now
 
         # Send only saved-key indicators, never stored credential values.
         base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
@@ -1764,7 +1864,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         alias_manifest = f"{base_url}/stremio/u/local/manifest.json"
 
         # AIOMetadata public subdomain and manifest
-        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or os.environ.get("AIOMETADATA_PROFILE_UUID")
+        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") if "AIOMETADATA_PROFILE_UUID" in env_vars else os.environ.get("AIOMETADATA_PROFILE_UUID")
         configured_meta = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST")
         aiom_host = dashboard_origin(
             configured_meta, request_host,
@@ -1785,7 +1885,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aiostreamsDashboard": f"{base_url}/dashboard",
             "aiometadataHost": aiom_host,
             "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
-            "aiometadataManifest": aiom_manifest
+            "aiometadataManifest": aiom_manifest,
+            "aiometadataProfileUuid": aiom_profile or None,
+            "aiometadataTemplate": env_vars.get("AIOMETADATA_TEMPLATE") or os.environ.get("AIOMETADATA_TEMPLATE") or "tamtaro-aiometadata-with-anime.json",
+            "addonPassword": env_vars.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
         }
         self.json_response(resp)
 

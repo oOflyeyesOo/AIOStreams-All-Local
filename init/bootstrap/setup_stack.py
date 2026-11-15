@@ -591,9 +591,20 @@ def setup_aiometadata_tamtaro():
         if not isinstance(loaded, dict) or not loaded.get("success") or not isinstance(loaded.get("config"), dict):
             raise RuntimeError("Existing metadata profile could not be loaded; refusing to overwrite linked accounts.")
         existing_cfg = loaded["config"]
-        if "catalogs" in config:
-            existing_cfg["catalogs"] = config["catalogs"]
-        config = existing_cfg
+        existing_keys = existing_cfg.get("apiKeys", {})
+        for k, v in existing_keys.items():
+            if "Token" in k or "token" in k or "Account" in k or "oauth" in k:
+                config.setdefault("apiKeys", {})[k] = v
+        for field in ("tokens", "accounts", "oauth", "linkedAccounts"):
+            if field in existing_cfg:
+                config[field] = existing_cfg[field]
+        saved_tmpl = os.environ.get("AIOMETADATA_TEMPLATE")
+        if not saved_tmpl or saved_tmpl == template_name:
+            if "catalogs" in config:
+                existing_cfg["catalogs"] = config["catalogs"]
+            for k, v in config.get("apiKeys", {}).items():
+                existing_cfg.setdefault("apiKeys", {})[k] = v
+            config = existing_cfg
 
     # Refresh environment variables
     load_env_file()

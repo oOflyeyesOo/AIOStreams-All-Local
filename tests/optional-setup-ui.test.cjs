@@ -183,3 +183,28 @@ test('showContainerLogs opens the viewer for the requested service', async () =>
   assert.deepEqual(calls, ['/api/logs?container=prowlarr']);
   assert.equal(env.document.getElementById('container-logs-output').textContent, 'Sample Prowlarr Log');
 });
+
+test('aiometadata template selector updates description and links on change', async () => {
+  const env = form({});
+  const updateCode = source.slice(source.indexOf('function updateTemplateDisplay('), source.indexOf('function setFormDirty('));
+  vm.runInContext(updateCode, env.context);
+
+  const sel = env.document.getElementById('aiometadata-template');
+  const desc = env.document.getElementById('template-description');
+  const dl = env.document.getElementById('download-template-json');
+
+  sel.value = 'grabberhawk-aiometadata-config.json';
+  vm.runInContext('updateTemplateDisplay()', env.context);
+  assert.match(desc.textContent, /Grabberhawk/i);
+  assert.equal(dl.download, 'grabberhawk-aiometadata-config.json');
+
+  sel.value = 'tamtaro-aiometadata-without-anime.json';
+  vm.runInContext('updateTemplateDisplay()', env.context);
+  assert.match(desc.textContent, /without anime/i);
+  assert.equal(dl.download, 'tamtaro-aiometadata-without-anime.json');
+
+  sel.value = 'tamtaro-aiometadata-with-anime.json';
+  vm.runInContext('updateTemplateDisplay()', env.context);
+  assert.match(desc.textContent, /20\+ Anime catalogs/i);
+  assert.equal(dl.download, 'tamtaro-aiometadata-with-anime.json');
+});

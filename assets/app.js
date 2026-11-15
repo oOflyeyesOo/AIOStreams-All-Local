@@ -343,6 +343,20 @@ async function loadManifest() {
       installNuvio.classList.remove('disabled');
     }
   }
+  if (info.aiometadataProfileUuid) {
+    const uuidSpan = document.getElementById('aiom-active-uuid');
+    if (uuidSpan) uuidSpan.textContent = info.aiometadataProfileUuid.slice(0, 8) + '...';
+    const profileBadge = document.getElementById('aiom-profile-badge');
+    if (profileBadge) profileBadge.style.color = '#10b981';
+  }
+  if (info.aiometadataConfigure) {
+    const quickLink = document.getElementById('quick-configure-aiometa');
+    if (quickLink) quickLink.href = info.aiometadataConfigure;
+  }
+  if (info.addonPassword) {
+    const passSpan = document.getElementById('addon-password-display');
+    if (passSpan) passSpan.textContent = info.addonPassword;
+  }
   if (info.aiometadataManifest) {
     currentAiometaManifest = info.aiometadataManifest;
     const tracking = document.getElementById('connect-tracking');
@@ -766,9 +780,81 @@ function updateTemplateDisplay() {
     desc.textContent = isAnime
       ? 'Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.'
       : val.includes('grabberhawk')
-      ? 'Grabberhawk curated metadata configuration for movies and series.'
-      : 'Standard Tamtaro configuration with TMDB & TVDB catalogs without anime collections.';
+      ? 'Curated Grabberhawk metadata configuration with extensive movie & TV series discovery, spotlight collections, and Posters+ artwork.'
+      : 'Clean standard Tamtaro configuration with TMDB & TVDB catalogs without anime collections. Fast loading with Posters+ ratings.';
   }
+}
+
+const templateSelectEl = document.getElementById('aiometadata-template');
+if (templateSelectEl) {
+  templateSelectEl.addEventListener('change', () => {
+    updateTemplateDisplay();
+    if (typeof setFormDirty === 'function') setFormDirty(true);
+  });
+  templateSelectEl.addEventListener('input', updateTemplateDisplay);
+}
+
+const copyTemplateBtn = document.getElementById('copy-template-json');
+if (copyTemplateBtn) {
+  copyTemplateBtn.addEventListener('click', async e => {
+    const select = document.getElementById('aiometadata-template');
+    const val = select ? (select.value || 'tamtaro-aiometadata-with-anime.json') : 'tamtaro-aiometadata-with-anime.json';
+    try {
+      const res = await fetch(`/templates/aiometadata-configs/${val}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      copyToClipboard(text, `${val} JSON copied to clipboard.`, e.currentTarget);
+    } catch (err) {
+      flashStatus(`Failed to copy template JSON: ${err.message}`, true);
+    }
+  });
+}
+
+const copyPasswordHandler = e => {
+  const env = (typeof cachedEnv !== 'undefined') ? cachedEnv : {};
+  const pw = env.ADDON_PASSWORD || 'admin';
+  copyToClipboard(pw, `Addon password copied (${pw}). Enter this in AIOMetadata to unlock the profile.`, e.currentTarget);
+};
+document.getElementById('copy-addon-password')?.addEventListener('click', copyPasswordHandler);
+document.getElementById('copy-addon-password-manifest')?.addEventListener('click', copyPasswordHandler);
+
+const syncAiomBtn = document.getElementById('btn-sync-aiometadata');
+if (syncAiomBtn) {
+  syncAiomBtn.addEventListener('click', async e => {
+    const select = document.getElementById('aiometadata-template');
+    const val = select ? select.value : 'tamtaro-aiometadata-with-anime.json';
+    syncAiomBtn.disabled = true;
+    syncAiomBtn.textContent = 'Applying preset…';
+    try {
+      const res = await api('/api/aiometadata/apply-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: val })
+      });
+      if (res && res.success) {
+        flashStatus(`✓ Applied ${val} to AIOMetadata!`);
+        if (res.configureUrl) {
+          const quickLink = document.getElementById('quick-configure-aiometa');
+          if (quickLink) quickLink.href = res.configureUrl;
+          const confAiom = document.getElementById('configure-aiometadata');
+          if (confAiom) confAiom.href = res.configureUrl;
+        }
+        if (res.uuid) {
+          const uuidSpan = document.getElementById('aiom-active-uuid');
+          if (uuidSpan) uuidSpan.textContent = res.uuid.slice(0, 8) + '...';
+          const profileBadge = document.getElementById('aiom-profile-badge');
+          if (profileBadge) profileBadge.style.color = '#10b981';
+        }
+      } else {
+        flashStatus(res.error || 'Failed to apply preset', true);
+      }
+    } catch (err) {
+      flashStatus(`Preset sync error: ${err.message}`, true);
+    } finally {
+      syncAiomBtn.disabled = false;
+      syncAiomBtn.textContent = 'Apply Preset ⚡';
+    }
+  });
 }
 
 function setFormDirty(dirty) {

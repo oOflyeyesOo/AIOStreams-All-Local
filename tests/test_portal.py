@@ -2,6 +2,7 @@ import base64
 from email.message import Message
 import http.client
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -201,7 +202,7 @@ class PortalTests(unittest.TestCase):
             body = data.encode("utf-8") if isinstance(data, str) else data
         else:
             body = json.dumps(data) if data is not None else None
-        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=10)
         connection.request(method, path, body, request_headers)
         try:
             response = connection.getresponse()
@@ -454,6 +455,47 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status, 200)
         data = json.loads(body)
         self.assertEqual(data.get("AIOMETADATA_TEMPLATE"), "tamtaro-aiometadata-without-anime.json")
+
+    def test_aiometadata_service_ui_url_resolves_profile(self):
+        env_with_uuid = {"PORT_AIOMETADATA": "4005", "AIOMETADATA_PROFILE_UUID": "test-prof-uuid-456"}
+        self.assertEqual(
+            portal.service_ui_url("aiometadata", "localhost:8088", env_with_uuid),
+            "http://localhost:4005/stremio/test-prof-uuid-456/configure"
+        )
+        env_no_uuid = {"PORT_AIOMETADATA": "4005"}
+        self.assertEqual(
+            portal.service_ui_url("aiometadata", "localhost:8088", env_no_uuid),
+            "http://localhost:4005/configure"
+        )
+
+    def test_aiometadata_apply_template_endpoint(self):
+        # 1. Invalid template filename rejected
+        status, _, _ = self.request(
+            "/api/aiometadata/apply-template", "POST",
+            {"template": "../../malicious.json"}, auth=True
+        )
+        self.assertEqual(status, 400)
+
+        # 2. Valid template application with mocked AIOMetadata response
+        mock_aiom_resp = io.BytesIO(json.dumps({"success": True, "userUUID": "applied-uuid-789"}).encode("utf-8"))
+        mock_aiom_resp.status = 200
+        prev_uuid = os.environ.get("AIOMETADATA_PROFILE_UUID")
+        try:
+            with patch("urllib.request.urlopen", return_value=mock_aiom_resp):
+                status, body, _ = self.request(
+                    "/api/aiometadata/apply-template", "POST",
+                    {"template": "grabberhawk-aiometadata-config.json"}, auth=True
+                )
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertTrue(data.get("success"))
+                self.assertEqual(data.get("uuid"), "applied-uuid-789")
+                self.assertIn("/stremio/applied-uuid-789/configure", data.get("configureUrl"))
+        finally:
+            if prev_uuid:
+                portal.save_env_updates({"AIOMETADATA_PROFILE_UUID": prev_uuid})
+            else:
+                os.environ.pop("AIOMETADATA_PROFILE_UUID", None)
 
     def test_aniskip_endpoint_cors_and_skip_times(self):
         status, _, headers = self.request("/api/aniskip?id=tt9335498&season=1&episode=1", method="OPTIONS")

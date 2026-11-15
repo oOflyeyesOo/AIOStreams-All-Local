@@ -164,6 +164,14 @@
 <option value="grabberhawk-aiometadata-config.json">Grabberhawk Metadata Preset</option>
 </select>
 <p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
+<div class="template-profile-pill" style="margin-top:10px;padding:8px 12px;background:#141a1d;border:1px solid #232c30;border-radius:6px;font-size:13px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <span style="color:#94a3b8;display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:#38bdf8;">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
+  <div style="display:flex;gap:6px;align-items:center;">
+    <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:#38bdf8;" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
+    <button type="button" id="copy-addon-password" class="mini-action-btn" title="Copy Addon Password (admin) to unlock AIOMetadata">Copy Password (admin) ⧉</button>
+    <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:#e6a56b;">Open Profile ↗</a>
+  </div>
+</div>
 </div>
 <div id="metadata-fields" class="field-grid"></div>
 <details class="more-options"><summary>Public databases, anime, Usenet, tracking, subtitles & optional services <span>+</span></summary>
@@ -222,7 +230,7 @@
     <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOStreams ↗</a>
     <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOMetadata ↗</a>
   </div>
-  <p class="field-help">Use <strong>admin</strong> and your stack password to sign in to AIOStreams. Use your stack password to unlock the AIOMetadata profile.</p>
+  <p class="field-help">Use <strong>admin</strong> and your stack password to sign in to AIOStreams. Use your stack password (<span id="addon-password-display" style="color:#e2e8f0;font-weight:600;">admin</span>) to unlock the AIOMetadata profile. <button type="button" id="copy-addon-password-manifest" class="mini-action-btn" style="display:inline-block;padding:2px 6px;margin-left:4px;font-size:11px;">Copy password ⧉</button></p>
   <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Open AIOStreams admin dashboard ↗</a>
   <a class="subtle-link" href="#integrations">View all self-hosted service UIs ↓</a>
 </div>
@@ -267,13 +275,281 @@
 </details></section>
 </details>
 <details class="tool-group"><summary>Backups and maintenance</summary>
-<section class="operations-section panel" id="maintenance"><div class="eyebrow">YOUR INSTANCE</div><h2>Readiness and maintenance.</h2><p class="section-description">Configured keys and reachable services are separate from authorization and playback checks.</p><button id="refresh-maintenance" class="light-button">Refresh status</button><div class="operations-grid"><div><h3>Readiness</h3><pre id="readiness-output" aria-live="polite">Checking configuration…</pre></div><div><h3>Release and backup</h3><pre id="maintenance-output" aria-live="polite">Checking saved release…</pre><a class="subtle-link" href="/api/backup" download>Make and download a fresh backup ↓</a></div><div><h3>Resource use</h3><button id="refresh-resources" class="light-button">Check resource use</button><pre id="resources-output" aria-live="polite">Not checked yet.</pre></div><div><h3>Temporary cache</h3><p>Clears temporary search data. Databases and configuration are retained.</p><button id="clean-cache" class="light-button">Clear temporary cache</button><pre id="cache-output" aria-live="polite">No cleanup requested.</pre></div><div><h3>Search requests</h3><button id="refresh-search-status" class="light-button">Check search activity</button><pre id="search-status-output" aria-live="polite">Not checked yet.</pre></div></div></section>
+<section class="operations-section panel" id="maintenance">
+<div class="integrations-heading">
+  <div><div class="eyebrow">STACK READINESS &amp; STORAGE</div><h2>Readiness and maintenance.</h2></div>
+  <button id="refresh-maintenance" class="light-button">Refresh status ↻</button>
+</div>
+<p class="section-description">Configured keys and reachable services are separate from authorization and playback checks.</p>
+<div class="operations-grid">
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">STATUS</span>
+        <h3>Readiness</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Validates core services, database connections, and configured credentials.</p>
+    <div class="op-console">
+      <div class="op-console-header"><span>readiness · audit</span><span class="code-dot">● ● ●</span></div>
+      <pre id="readiness-output" aria-live="polite">Checking configuration…</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">STORAGE</span>
+        <h3>Release and backup</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Generates a complete standalone archive of your configs, databases, and keys.</p>
+    <div class="op-card-actions">
+      <a class="light-button" href="/api/backup" download style="text-decoration:none;">Download fresh backup ⤓</a>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>backup · release</span><span class="code-dot">● ● ●</span></div>
+      <pre id="maintenance-output" aria-live="polite">Checking saved release…</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">MEMORY</span>
+        <h3>Resource use</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Inspects memory consumption and active threads across container processes.</p>
+    <div class="op-card-actions">
+      <button id="refresh-resources" class="light-button">Check resource use 📊</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>resources · monitor</span><span class="code-dot">● ● ●</span></div>
+      <pre id="resources-output" aria-live="polite">Not checked yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">CACHE</span>
+        <h3>Temporary cache</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Clears transient scrapers and search caches while preserving credentials and DBs.</p>
+    <div class="op-card-actions">
+      <button id="clean-cache" class="light-button">Clear temporary cache 🧹</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>cache · flush</span><span class="code-dot">● ● ●</span></div>
+      <pre id="cache-output" aria-live="polite">No cleanup requested.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">METRICS</span>
+        <h3>Search requests</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Live request counts and response latency across internal search brokers.</p>
+    <div class="op-card-actions">
+      <button id="refresh-search-status" class="light-button">Check search activity 📈</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>broker · activity</span><span class="code-dot">● ● ●</span></div>
+      <pre id="search-status-output" aria-live="polite">Not checked yet.</pre>
+    </div>
+  </div>
+</div>
+</section>
 </details>
 <details id="operations-details" class="tool-group">
-<summary style="cursor:pointer;font-weight:600;font-size:14px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;user-select:none;">
-  <span>Diagnostics and benchmarks</span>
-</summary>
-<div class="operations-grid" style="margin-top:14px;"><div><h3>Diagnostics</h3><div style="display:flex;gap:8px;flex-wrap:wrap;"><button id="run-diagnostics" class="light-button">Run diagnostics</button><a id="btn-download-diagnostics" class="light-button" href="/api/diagnostics/export" download="aio-diagnostics-report.txt" style="text-decoration:none;">Download Report ⤓</a></div><pre id="diagnostics-output" aria-live="polite">Not run yet.</pre></div><div><h3>Smoke test</h3><label class="field-label" for="smoke-kind">Content type</label><select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option></select><input id="smoke-id" aria-label="Smoke test content ID" placeholder="IMDb or provider content ID"><button id="run-smoke-test" class="light-button">Test manifest stream</button><pre id="smoke-output" aria-live="polite">Not run yet.</pre></div><div><h3>Provider validation</h3><select id="provider-check" aria-label="Provider service to validate"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option></select><input id="provider-key" aria-label="One-time check API key" type="password" placeholder="Enter key for one-time check"><button id="validate-provider" class="light-button">Validate key</button><pre id="provider-output" aria-live="polite">Not run yet.</pre></div><div><h3>FlareSolverr antibot probe</h3><p class="field-help" style="margin-bottom:8px;">Validates FlareSolverr reachability and browser challenge solving for scrapers.</p><button type="button" id="btn-probe-flaresolverr" class="light-button">Probe FlareSolverr 🛡️</button><pre id="flaresolverr-output" aria-live="polite">Not probed yet.</pre></div><div><h3>Speed &amp; latency benchmark</h3><p class="field-help" style="margin-bottom:8px;">Measures internal stack and provider network round-trip response times.</p><button type="button" id="btn-run-benchmark" class="light-button">Run benchmark ⚡</button><pre id="benchmark-output" aria-live="polite">Not run yet.</pre></div><div><h3>Profile recommendation</h3><button id="recommend-profile" class="light-button">Check host resources</button><pre id="profile-output" aria-live="polite">Not run yet.</pre></div><div><h3>Reverse proxy config</h3><select id="proxy-format" aria-label="Reverse proxy configuration format"><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option><option value="cloudflare">Cloudflare Tunnel</option></select><button id="generate-proxy" class="light-button">Generate snippet</button><pre id="proxy-output" aria-live="polite">Not generated yet.</pre></div><div><h3>Updates &amp; Safety Net</h3><button id="show-update-plan" class="light-button">Show safe update plan</button><pre id="update-output" aria-live="polite">Backup is recommended before updates.</pre><div style="margin-top:8px;padding:8px 10px;background:#182023;border-radius:6px;border:1px solid #2a3438;font-size:14px;color:#8fa1a8;line-height:1.4;"><strong style="color:#e2e8f0;">Rollback Recovery:</strong> If an upgrade fails: <code style="color:#f59e0b;font-size:14px;">docker compose exec portal python3 /app/tools/release_manager.py rollback --project aio --state backups/upgrade-state.json</code></div></div></div>
+<summary>Diagnostics and benchmarks</summary>
+<section class="operations-section panel" id="operations">
+<div class="integrations-heading">
+  <div><div class="eyebrow">DIAGNOSTICS &amp; BENCHMARKS</div><h2>Check services, traffic, and providers.</h2></div>
+</div>
+<p class="section-description">Deep network diagnostic suites, provider API verifiers, latency benchmarks, and host hardware probes.</p>
+<div class="operations-grid">
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">SYSTEM</span>
+        <h3>Diagnostics suite</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Runs an end-to-end audit across container fleet health, network sockets, and permissions.</p>
+    <div class="op-card-actions op-actions-split">
+      <button id="run-diagnostics" class="light-button">Run diagnostics 🔍</button>
+      <a id="btn-download-diagnostics" class="light-button" href="/api/diagnostics/export" download="aio-diagnostics-report.txt" style="text-decoration:none;">Download ⤓</a>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>diagnostics · audit</span><span class="code-dot">● ● ●</span></div>
+      <pre id="diagnostics-output" aria-live="polite">Not run yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">STREAM</span>
+        <h3>Smoke test</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Tests stream resolution and manifest generation for a specific IMDb ID or provider content.</p>
+    <div class="op-card-inputs">
+      <div class="op-input-group">
+        <label class="field-label" for="smoke-kind">Type</label>
+        <select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option></select>
+      </div>
+      <div class="op-input-group">
+        <label class="field-label" for="smoke-id">ID</label>
+        <input id="smoke-id" aria-label="Smoke test content ID" placeholder="IMDb (e.g. tt9335498)">
+      </div>
+    </div>
+    <div class="op-card-actions">
+      <button id="run-smoke-test" class="light-button">Test manifest stream ▶</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>smoke-test · stream</span><span class="code-dot">● ● ●</span></div>
+      <pre id="smoke-output" aria-live="polite">Not run yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">AUTH</span>
+        <h3>Provider validation</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Tests single API keys directly against provider authentication endpoints without saving.</p>
+    <div class="op-card-inputs">
+      <div class="op-input-group">
+        <label class="field-label" for="provider-check">Provider</label>
+        <select id="provider-check" aria-label="Provider service to validate"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option></select>
+      </div>
+      <div class="op-input-group">
+        <label class="field-label" for="provider-key">Key</label>
+        <input id="provider-key" aria-label="One-time check API key" type="password" placeholder="Paste key to test">
+      </div>
+    </div>
+    <div class="op-card-actions">
+      <button id="validate-provider" class="light-button">Validate key 🛡️</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>provider · auth</span><span class="code-dot">● ● ●</span></div>
+      <pre id="provider-output" aria-live="polite">Not run yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">BYPASS</span>
+        <h3>FlareSolverr antibot probe</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Validates FlareSolverr reachability and browser challenge solving for scrapers.</p>
+    <div class="op-card-actions">
+      <button type="button" id="btn-probe-flaresolverr" class="light-button">Probe FlareSolverr 🛡️</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>flaresolverr · session</span><span class="code-dot">● ● ●</span></div>
+      <pre id="flaresolverr-output" aria-live="polite">Not probed yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">LATENCY</span>
+        <h3>Speed &amp; latency benchmark</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Measures internal stack and provider network round-trip response times.</p>
+    <div class="op-card-actions">
+      <button type="button" id="btn-run-benchmark" class="light-button">Run benchmark ⚡</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>benchmark · latency</span><span class="code-dot">● ● ●</span></div>
+      <pre id="benchmark-output" aria-live="polite">Not run yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">HARDWARE</span>
+        <h3>Profile recommendation</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Checks available host CPU &amp; RAM to recommend the best profile (core vs all).</p>
+    <div class="op-card-actions">
+      <button id="recommend-profile" class="light-button">Check host resources 💻</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>profile · recommendation</span><span class="code-dot">● ● ●</span></div>
+      <pre id="profile-output" aria-live="polite">Not run yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">PROXY</span>
+        <h3>Reverse proxy config</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Generates ready-to-use reverse proxy routing snippets for your external domain.</p>
+    <div class="op-card-actions op-actions-split">
+      <select id="proxy-format" aria-label="Reverse proxy configuration format"><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option><option value="cloudflare">Cloudflare Tunnel</option></select>
+      <button id="generate-proxy" class="light-button">Generate snippet ↗</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
+      <pre id="proxy-output" aria-live="polite">Not generated yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card op-card-wide">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">SAFETY</span>
+        <h3>Updates &amp; Safety Net</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Inspects upgrade requirements, creates pre-flight backups, and manages rollback recovery.</p>
+    <div class="op-card-actions">
+      <button id="show-update-plan" class="light-button">Show safe update plan 🔄</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>update · safety-plan</span><span class="code-dot">● ● ●</span></div>
+      <pre id="update-output" aria-live="polite">Backup is recommended before updates.</pre>
+    </div>
+    <div class="op-safety-callout">
+      <div class="op-safety-title"><strong style="color:#f59e0b;">Rollback Recovery:</strong> If an upgrade encounters issues:</div>
+      <code>docker compose exec portal python3 /app/tools/release_manager.py rollback --project aio --state backups/upgrade-state.json</code>
+    </div>
+  </div>
+</div>
+</section>
 </details>
 <details class="tool-group"><summary>Configuration import and export</summary>
 <section class="operations-section panel" id="configuration-tools"><div class="eyebrow">CONFIGURATION PORTABILITY</div><h2>Move or protect your setup.</h2><p class="section-description">Export the optimized AIOStreams profile after entering your provider and metadata keys.</p><button id="export-profile" class="light-button">Download optimized profile JSON</button><button id="export-aiometa-profile" class="light-button">Download AIOMetadata profile JSON</button><button id="export-config" class="light-button">Download redacted config</button><label class="light-button" for="import-config">Import config<input id="import-config" type="file" accept="application/json" hidden></label><span id="config-output" role="status"></span></section>
