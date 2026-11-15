@@ -22,9 +22,16 @@
   <button type="button" id="copy-manifest" class="primary-button" disabled><span>Copy manifest</span><span>⧉</span></button>
   <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
 </div>
-<div id="deployment-players" class="stack-actions">
+<div id="deployment-players" class="stack-actions player-showcase-bar">
   <a id="player-link-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Stremio Web (:8082) ↗</a>
   <a id="nuvio-player-action" class="light-button player-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch Nuvio Web (:8085) ↗</a>
+  <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Launch AIOStreams Web Player ↗</a>
+</div>
+<div id="quickconnect-toolbar" class="quickconnect-bar">
+  <span class="quickconnect-label">CLIENT APPS (Infuse · Swiftfin · Kodi · Findroid · Native App):</span>
+  <button type="button" id="copy-jellyfin-server-url" class="mini-action-btn" title="Copy Jellyfin server endpoint for client apps">Copy Server URL ⧉</button>
+  <a id="open-jellyfin-quickconnect" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Pair client apps via Quick Connect">Quick Connect ↗</a>
+  <a id="install-aiostreams-web" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player">Hosted Web App ↗</a>
 </div>
   </div>
   <details class="startup-checklist"><summary>Service checks</summary><pre id="startup-checks">Checking services…</pre></details>

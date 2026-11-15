@@ -134,6 +134,12 @@ class PortalTests(unittest.TestCase):
             auth=True, headers={"Content-Type": "application/json"},
         )
         self.assertEqual(status, 400)
+        status, body, _ = self.request(
+            "/api/config-import", "POST",
+            {"format": "aio-local-config-v1", "values": {"JELLYFIN_ENABLED": "true"}},
+            auth=True, headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 200)
 
     def test_machine_readable_health_endpoints(self):
         for path, expected in (("/healthz", "ok"), ("/version", portal.APP_VERSION)):
@@ -387,7 +393,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(portal.derive_aiometadata_host("https://aio.example.com", "https://custom-meta.example.com"), "https://custom-meta.example.com")
 
     def test_manifest_info_includes_aiometadata_subdomain_and_manifest(self):
-        portal.save_env_updates({"BASE_URL": "https://aio.example.com", "AIOMETADATA_PROFILE_UUID": "test-uuid-123"})
+        portal.save_env_updates({"BASE_URL": "https://aio.example.com", "AIOMETADATA_PROFILE_UUID": "test-uuid-123", "JELLYFIN_ENABLED": "true"})
         status, body, _ = self.request("/api/manifest-info", auth=True)
         self.assertEqual(status, 200)
         data = json.loads(body)
@@ -395,6 +401,17 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data.get("aiometadataManifest"), "https://aiometa.example.com/stremio/test-uuid-123/manifest.json")
         self.assertEqual(data["aiometadataConfigure"], "https://aiometa.example.com/stremio/test-uuid-123/configure")
         self.assertEqual(data["aiostreamsDashboard"], "https://aio.example.com/dashboard")
+        self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin")
+        self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/web")
+        self.assertEqual(data["jellyfinQuickConnect"], "https://aio.example.com/jellyfin/quickconnect")
+        self.assertEqual(data["officialWebPlayer"], "https://web.aiostreams.org")
+        self.assertTrue(data["jellyfinEnabled"])
+
+        portal.save_env_updates({"JELLYFIN_ENABLED": "false"})
+        status, body, _ = self.request("/api/manifest-info", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertFalse(data["jellyfinEnabled"])
 
     def test_dashboard_links_on_fresh_lan_install(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -966,6 +983,17 @@ class PortalTests(unittest.TestCase):
         }, auth=True)
         self.assertEqual(status, 400)
         self.assertIn(b"must be a valid port number", body)
+
+    def test_save_env_jellyfin_enabled_validation(self):
+        # Valid values
+        for val in ("true", "false", "1", "0", "TRUE", "False"):
+            status, _, _ = self.request("/api/save-env", "POST", {"JELLYFIN_ENABLED": val}, auth=True)
+            self.assertEqual(status, 200)
+
+        # Invalid value
+        status, body, _ = self.request("/api/save-env", "POST", {"JELLYFIN_ENABLED": "notabool"}, auth=True)
+        self.assertEqual(status, 400)
+        self.assertIn(b"JELLYFIN_ENABLED must be true or false", body)
 
     def test_aniskip_edge_cases(self):
         # Test duration=nan or inf does not crash

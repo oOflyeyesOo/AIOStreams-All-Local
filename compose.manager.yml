@@ -137,6 +137,7 @@ services:
     - ENABLE_DMM=${ENABLE_DMM:-true}
     - DISCORD_WEBHOOK_URL=
     - ENABLE_ANIME_SOURCES=
+    - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
     - AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}
     - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
     - PORT_PORTAL=${PORT_PORTAL:-8088}
@@ -207,6 +208,7 @@ services:
     - ALIASED_CONFIGURATIONS=${ALIASED_CONFIGURATIONS:-}
     - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
     - DEFAULT_AIO_ENCRYPTED_PASSWORD=${DEFAULT_AIO_ENCRYPTED_PASSWORD:-}
+    - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
     - COMET_URL=["http://comet:8000"]
     - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
     - BUILTIN_PROWLARR_URL=http://prowlarr:9696

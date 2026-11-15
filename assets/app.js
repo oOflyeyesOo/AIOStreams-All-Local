@@ -356,6 +356,21 @@ async function loadManifest() {
       installNuvio.href = `${location.protocol}//${location.hostname}:${nuvioPort}`;
       installNuvio.classList.remove('disabled');
     }
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+    const installAioWeb = document.getElementById('install-aiostreams-web');
+    if (installAioWeb) {
+      installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(aioBase + '/jellyfin')}`;
+    }
+    const aioPlayer = document.getElementById('aiostreams-player-action');
+    if (aioPlayer && (!aioPlayer.href || aioPlayer.href.endsWith('#'))) {
+      aioPlayer.href = `${aioBase}/jellyfin/web`;
+      aioPlayer.style.display = 'block';
+    }
+    const qcLink = document.getElementById('open-jellyfin-quickconnect');
+    if (qcLink && (!qcLink.href || qcLink.href.endsWith('#'))) {
+      qcLink.href = `${aioBase}/jellyfin/quickconnect`;
+    }
   }
   if (info.aiometadataProfileUuid) {
     const uuidSpan = document.getElementById('aiom-active-uuid');
@@ -507,6 +522,30 @@ async function refreshServices() {
       link.setAttribute('aria-label', `Open ${service.name} UI`);
       actions.append(link);
     }
+    if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
+      const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+      const aioOrigin = service.uiUrl ? new URL(service.uiUrl).origin : `http://${location.hostname}:${aioPort}`;
+      const playerLink = document.createElement('a');
+      playerLink.className = 'service-ui-link';
+      playerLink.href = `${aioOrigin}/jellyfin/web`;
+      playerLink.target = '_blank';
+      playerLink.rel = 'noopener noreferrer';
+      playerLink.textContent = 'Web Player ↗';
+      playerLink.setAttribute('aria-label', 'Open AIOStreams Web Player');
+      actions.append(playerLink);
+
+      const qcBtn = document.createElement('button');
+      qcBtn.type = 'button';
+      qcBtn.className = 'service-log-link';
+      qcBtn.textContent = 'Jellyfin URL ⧉';
+      qcBtn.title = 'Copy Jellyfin server URL for Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app';
+      qcBtn.setAttribute('aria-label', 'Copy Jellyfin server address');
+      qcBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(`${aioOrigin}/jellyfin`, 'Jellyfin server URL copied. Use in Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app.', qcBtn);
+      });
+      actions.append(qcBtn);
+    }
     const containerKey = (service.host || service.name).toLowerCase().replace(/[^a-z0-9_-]/g, '');
     const logBtn = document.createElement('button');
     logBtn.type = 'button';
@@ -529,8 +568,11 @@ async function refreshServices() {
 
   const stremioSvc = result.integrations.find(s => s.name === 'Stremio Web');
   const nuvioSvc = result.integrations.find(s => s.name === 'Nuvio');
+  const aioSvc = result.integrations.find(s => s.name === 'AIOStreams' || s.host === 'aiostreams');
   const stremioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.stremio_web) || (cachedEnv && cachedEnv.PORT_STREMIO_WEB) || 8082;
   const nuvioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.nuvio) || (cachedEnv && cachedEnv.PORT_NUVIO) || 8085;
+  const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+  const aioBase = (aioSvc?.uiUrl) ? new URL(aioSvc.uiUrl).origin : `http://${location.hostname}:${aioPort}`;
 
   const stremioAction = document.getElementById('player-link-action');
   if (stremioAction) {
@@ -543,6 +585,16 @@ async function refreshServices() {
     nuvioAction.href = nuvioSvc?.uiUrl || `http://${location.hostname}:${nuvioPort}`;
     nuvioAction.textContent = `Open Nuvio Web ↗`;
     nuvioAction.style.display = (nuvioSvc && nuvioSvc.enabled !== false) ? 'block' : 'none';
+  }
+  const aioAction = document.getElementById('aiostreams-player-action');
+  if (aioAction) {
+    aioAction.href = `${aioBase}/jellyfin/web`;
+    aioAction.textContent = `Open AIOStreams Web Player ↗`;
+    aioAction.style.display = (aioSvc && aioSvc.enabled !== false) ? 'block' : 'none';
+  }
+  const qcLink = document.getElementById('open-jellyfin-quickconnect');
+  if (qcLink) {
+    qcLink.href = `${aioBase}/jellyfin/quickconnect`;
   }
 
 }
@@ -740,6 +792,16 @@ if (copyAniskipBtn) {
   copyAniskipBtn.addEventListener('click', e => {
     const endpoint = `${location.protocol}//${location.host}/api/aniskip`;
     copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into Nuvio or outside player.', e.currentTarget);
+  });
+}
+
+const copyJellyfinBtn = document.getElementById('copy-jellyfin-server-url');
+if (copyJellyfinBtn) {
+  copyJellyfinBtn.addEventListener('click', e => {
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const baseUrlInput = document.getElementById('base-url');
+    const aioBase = baseUrlInput?.value ? baseUrlInput.value.replace(/\/+$/, '') : `${location.protocol}//${location.hostname}:${aioPort}`;
+    copyToClipboard(`${aioBase}/jellyfin`, 'Jellyfin Server URL copied (connect Infuse, Swiftfin, Findroid, Kodi, or AIOStreams app).', e.currentTarget);
   });
 }
 

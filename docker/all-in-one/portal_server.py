@@ -1638,6 +1638,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     "BASE_URL", "AIOMETADATA_HOST", "AIOMETADATA_TEMPLATE", "COMPOSE_PROFILES",
                     "ENABLE_ANIME_SOURCES", "STREAMING_MODE", "BACKUP_SCHEDULE",
                     "ENABLE_TORRENTIO", "TORRENTIO_URL", "ENABLE_DMM", "ENABLE_REMUXDB",
+                    "JELLYFIN_ENABLED",
                     "DISCORD_WEBHOOK_URL",
                     "TMDB_API_KEY", "TVDB_API_KEY", "FANART_API_KEY", "MDBLIST_API_KEY", "GEMINI_API_KEY", "RPDB_API_KEY",
                     "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY", "OFFCLOUD_API_KEY", "SEEDR_API_KEY",
@@ -1768,6 +1769,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
             "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
             "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
+            "JELLYFIN_ENABLED": env_vars.get("JELLYFIN_ENABLED", "true"),
             "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
             "BASE_URL": base_val,
             "AIOMETADATA_HOST": aiom_val,
@@ -1874,6 +1876,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         aiom_path = f"/stremio/{urllib.parse.quote(aiom_profile, safe='')}" if aiom_profile else ""
         aiom_manifest = f"{aiom_host}{aiom_path}/manifest.json" if aiom_path else None
 
+        jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
         resp = {
             "success": True,
             "uuid": uuid,
@@ -1883,6 +1886,11 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aliasManifest": alias_manifest,
             "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/stremio/configure",
             "aiostreamsDashboard": f"{base_url}/dashboard",
+            "jellyfinServer": f"{base_url}/jellyfin",
+            "jellyfinWebPlayer": f"{base_url}/jellyfin/web",
+            "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
+            "officialWebPlayer": "https://web.aiostreams.org",
+            "jellyfinEnabled": jellyfin_enabled_val,
             "aiometadataHost": aiom_host,
             "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
             "aiometadataManifest": aiom_manifest,
@@ -2075,7 +2083,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 raise ValueError('Invalid streaming mode; must be debrid, usenet, or hybrid')
             if keys_to_update.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                 raise ValueError('Anime sources must be enabled or disabled')
-            for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB'):
+            for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
             port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_STREMIO_WEB', 'PORT_NUVIO', 'PORT_SLICKSYNC', 'PORT_SUBSENSE', 'USENET_PORT')
