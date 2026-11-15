@@ -142,6 +142,7 @@ function renderFields(id, values) {
     const input = document.createElement('input');
     input.id = key; input.name = key; input.type = 'password';
     input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key'; input.autocomplete = 'off'; input.spellcheck = false;
+    input.setAttribute('aria-label', label);
     wrapper.append(title,input); target.append(wrapper);
   }
 }
@@ -370,22 +371,34 @@ async function loadManifest() {
 }
 
 
+let activeElementBeforeDialog = null;
+
 function closeLogDialog() {
   const dialog = document.getElementById('service-log-dialog');
   if (!dialog || !dialog.open || dialog.classList?.contains?.('closing')) return;
   dialog.classList?.add?.('closing');
+  const restoreFocus = () => {
+    if (typeof activeElementBeforeDialog !== 'undefined' && activeElementBeforeDialog && typeof activeElementBeforeDialog.focus === 'function') {
+      try { activeElementBeforeDialog.focus(); } catch (_) {}
+      activeElementBeforeDialog = null;
+    }
+  };
   const onAnimationEnd = () => {
     dialog.removeEventListener?.('animationend', onAnimationEnd);
     dialog.classList?.remove?.('closing');
     if (dialog.open) dialog.close();
+    restoreFocus();
   };
   dialog.addEventListener?.('animationend', onAnimationEnd, { once: true });
-  setTimeout(() => {
-    if (dialog.classList?.contains?.('closing')) {
-      dialog.classList?.remove?.('closing');
-      if (dialog.open) dialog.close();
-    }
-  }, 250);
+  if (typeof setTimeout === 'function') {
+    setTimeout(() => {
+      if (dialog.classList?.contains?.('closing')) {
+        dialog.classList?.remove?.('closing');
+        if (dialog.open) dialog.close();
+        restoreFocus();
+      }
+    }, 250);
+  }
 }
 window.closeLogDialog = closeLogDialog;
 
@@ -406,7 +419,19 @@ async function showContainerLogs(containerName) {
   if (dialog.classList?.contains?.('closing')) {
     dialog.classList.remove('closing');
   }
-  if (!dialog.open) dialog.showModal();
+  if (!dialog.open) {
+    if (typeof activeElementBeforeDialog !== 'undefined' && typeof document !== 'undefined') {
+      activeElementBeforeDialog = document.activeElement;
+    }
+    dialog.showModal();
+    if (typeof setTimeout === 'function') {
+      setTimeout(() => {
+        try { select.focus?.(); } catch (_) {}
+      }, 40);
+    } else {
+      try { select.focus?.(); } catch (_) {}
+    }
+  }
   const request = Symbol();
   showContainerLogs.pending = request;
   status.textContent = `Loading ${label} logs…`;
@@ -769,8 +794,12 @@ function setStreamingMode(mode) {
 
   const modePills = document.querySelectorAll ? document.querySelectorAll('.streaming-mode-section .mode-pill') : [];
   modePills.forEach(btn => {
+    const isActive = btn.getAttribute?.('data-mode') === mode;
     if (btn.classList && typeof btn.classList.toggle === 'function') {
-      btn.classList.toggle('active', btn.getAttribute?.('data-mode') === mode);
+      btn.classList.toggle('active', isActive);
+    }
+    if (typeof btn.setAttribute === 'function') {
+      btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
     }
   });
 
@@ -796,8 +825,12 @@ function setStreamingMode(mode) {
 function setAccessScope(scope) {
   const scopePills = document.querySelectorAll ? document.querySelectorAll('.access-scope-section .mode-pill') : [];
   scopePills.forEach(btn => {
+    const isActive = btn.getAttribute?.('data-scope') === scope;
     if (btn.classList && typeof btn.classList.toggle === 'function') {
-      btn.classList.toggle('active', btn.getAttribute?.('data-scope') === scope);
+      btn.classList.toggle('active', isActive);
+    }
+    if (typeof btn.setAttribute === 'function') {
+      btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
     }
   });
   const baseUrlInput = document.getElementById('base-url');

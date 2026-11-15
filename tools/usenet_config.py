@@ -13,22 +13,34 @@ EXTRA_SOURCES = {
 
 
 def extra_sources(values, field):
+    if not isinstance(values, dict):
+        return []
     encoded = values.get(field + '_B64', '')
     if not encoded:
         return []
     try:
+        if not isinstance(encoded, (str, bytes)):
+            raise ValueError
         rows = json.loads(base64.b64decode(encoded, validate=True))
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError
         return rows
-    except (ValueError, UnicodeError):
+    except (ValueError, TypeError, UnicodeError):
         raise ValueError('Invalid stored Usenet sources') from None
 
 
 def indexer_address(value):
+    if not isinstance(value, str):
+        raise ValueError('Use an HTTP(S) NZB indexer base address without credentials or a query')
     value = value.strip().rstrip('/')
+    if len(value) > 2000 or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError('Use an HTTP(S) NZB indexer base address without credentials or a query')
     url = urlsplit(value)
     if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password or url.query or url.fragment:
+        raise ValueError('Use an HTTP(S) NZB indexer base address without credentials or a query')
+    try:
+        url.port
+    except ValueError:
         raise ValueError('Use an HTTP(S) NZB indexer base address without credentials or a query')
     return value
 
@@ -39,29 +51,48 @@ def newznab_indexers(values):
         rows.insert(0, {'id': '', 'url': indexer_address(values['NZB_INDEXER_URL']), 'apiKey': values['NZB_INDEXER_API_KEY']})
     return rows
 
-def credential(values,name):
-    encoded=values.get(name+'_B64','')
-    try:return base64.b64decode(encoded,validate=True).decode('utf-8') if encoded else values.get(name,'')
-    except (ValueError,UnicodeError):raise ValueError('Invalid stored Usenet credential') from None
+def credential(values, name):
+    if not isinstance(values, dict):
+        return ''
+    encoded = values.get(name + '_B64', '')
+    try:
+        if encoded:
+            if not isinstance(encoded, (str, bytes)):
+                raise ValueError
+            return base64.b64decode(encoded, validate=True).decode('utf-8')
+        val = values.get(name, '')
+        return str(val) if val is not None else ''
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError('Invalid stored Usenet credential') from None
 
 def enabled(values):
-    complete=bool(values.get('USENET_HOST') and credential(values,'USENET_USER') and credential(values,'USENET_PASS'))
-    return values.get('USENET_ENABLED','true' if complete else 'false')=='true'
+    complete = bool(values.get('USENET_HOST') and credential(values, 'USENET_USER') and credential(values, 'USENET_PASS'))
+    return values.get('USENET_ENABLED', 'true' if complete else 'false') == 'true'
 
 def server_config(values, kind=1):
-    host=values.get('USENET_HOST','').strip()
-    try:ipaddress.ip_address(host.strip('[]'))
+    if not isinstance(values, dict):
+        raise ValueError('Invalid configuration values')
+    host = str(values.get('USENET_HOST') or '').strip()
+    try:
+        ipaddress.ip_address(host.strip('[]'))
     except ValueError:
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}',host):raise ValueError('Enter a Usenet server hostname or IP address')
-    user,password=credential(values,'USENET_USER'),credential(values,'USENET_PASS')
-    if not user or not password:raise ValueError('Usenet needs a server, username and password')
-    if any(ord(c)<32 or ord(c)==127 for c in user+password) or len(user)>400 or len(password)>400:
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', host):
+            raise ValueError('Enter a Usenet server hostname or IP address')
+    user, password = credential(values, 'USENET_USER'), credential(values, 'USENET_PASS')
+    if not user or not password:
+        raise ValueError('Usenet needs a server, username and password')
+    if any(ord(c) < 32 or ord(c) == 127 for c in user + password) or len(user) > 400 or len(password) > 400:
         raise ValueError('Usenet credentials must contain no control characters and be at most 400 characters')
-    try:port=int(values.get('USENET_PORT') or 563);connections=int(values.get('USENET_CONNECTIONS') or 10)
-    except ValueError:raise ValueError('Usenet port and connection count must be numbers') from None
-    if not 1<=port<=65535 or not 1<=connections<=1000:raise ValueError('Invalid Usenet port or connection count')
-    if values.get('USENET_SSL','true') not in ('true','false'):raise ValueError('Usenet TLS must be true or false')
-    return {'Type':kind,'Host':host.strip('[]'),'Port':port,'UseSsl':values.get('USENET_SSL','true')=='true','User':user,'Pass':password,'MaxConnections':connections}
+    try:
+        port = int(values.get('USENET_PORT') or 563)
+        connections = int(values.get('USENET_CONNECTIONS') or 10)
+    except (ValueError, TypeError):
+        raise ValueError('Usenet port and connection count must be numbers') from None
+    if not 1 <= port <= 65535 or not 1 <= connections <= 1000:
+        raise ValueError('Invalid Usenet port or connection count')
+    if values.get('USENET_SSL', 'true') not in ('true', 'false'):
+        raise ValueError('Usenet TLS must be true or false')
+    return {'Type': kind, 'Host': host.strip('[]'), 'Port': port, 'UseSsl': values.get('USENET_SSL', 'true') == 'true', 'User': user, 'Pass': password, 'MaxConnections': connections}
 
 
 def extra_server(row):
@@ -126,8 +157,10 @@ def update_sources(updates, existing, field, secret):
         saved.append({'id': row_id, **normalized})
     updates[encoded_field] = base64.b64encode(json.dumps(saved).encode()).decode()
 
-def form_updates(submitted,existing):
-    updates=dict(submitted)
+def form_updates(submitted, existing):
+    if not isinstance(submitted, dict) or not isinstance(existing, dict):
+        raise ValueError('Form updates require dictionaries')
+    updates = dict(submitted)
     for field, secret in EXTRA_SOURCES.items():
         update_sources(updates, existing, field, secret)
     for name in ('USENET_USER','USENET_PASS'):

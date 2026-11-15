@@ -58,3 +58,32 @@ class UsenetConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'appears more than once'):
             form_updates({'NZB_INDEXER_URL': 'https://index.fixture.invalid',
                           'USENET_EXTRA_INDEXERS': [{'url': 'https://index.fixture.invalid/', 'apiKey': 'fixture-key'}]}, {})
+
+    def test_input_boundaries_and_error_hardening(self):
+        # Non-dict inputs rejected gracefully
+        with self.assertRaisesRegex(ValueError, 'Form updates require dictionaries'):
+            form_updates("not a dict", {})
+        with self.assertRaisesRegex(ValueError, 'Form updates require dictionaries'):
+            form_updates({}, "not a dict")
+
+        # Corrupted base64 credentials handled safely
+        from tools.usenet_config import credential, extra_sources
+        self.assertEqual(credential({}, 'USENET_USER'), '')
+        self.assertEqual(credential("not a dict", 'USENET_USER'), '')
+        with self.assertRaisesRegex(ValueError, 'Invalid stored Usenet credential'):
+            credential({'USENET_USER_B64': '!!!invalid-base64'}, 'USENET_USER')
+
+        # Corrupted extra sources
+        self.assertEqual(extra_sources({}, 'USENET_EXTRA_SERVERS'), [])
+        self.assertEqual(extra_sources("not a dict", 'USENET_EXTRA_SERVERS'), [])
+        with self.assertRaisesRegex(ValueError, 'Invalid stored Usenet sources'):
+            extra_sources({'USENET_EXTRA_SERVERS_B64': 'invalid-b64-content'}, 'USENET_EXTRA_SERVERS')
+
+        # Indexer address boundary validation
+        from tools.usenet_config import indexer_address
+        with self.assertRaisesRegex(ValueError, 'indexer base address'):
+            indexer_address(12345)
+        with self.assertRaisesRegex(ValueError, 'indexer base address'):
+            indexer_address("http://indexer.test\x00/api")
+        with self.assertRaisesRegex(ValueError, 'indexer base address'):
+            indexer_address("http://indexer.test:999999/")

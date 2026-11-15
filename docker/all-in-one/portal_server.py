@@ -996,6 +996,12 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
         return False, str(e)
 
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
+    server_version = "AIO-Portal"
+    sys_version = ""
+
+    def version_string(self):
+        return "AIO-Portal"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_ROOT, **kwargs)
 
@@ -1004,8 +1010,35 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-ancestors 'none';")
+        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';")
         super().end_headers()
+
+    def read_json_body(self, max_size=65536):
+        """Safely read and parse JSON request body with strict boundary limits."""
+        raw_len = self.headers.get("Content-Length", "0")
+        try:
+            length = int(raw_len or 0)
+        except (ValueError, TypeError):
+            raise ValueError("Invalid Content-Length header")
+        if length < 0:
+            raise ValueError("Content-Length cannot be negative")
+        if length > max_size:
+            raise ValueError("Request body is too large")
+        if length == 0:
+            return {}
+        try:
+            body = self.rfile.read(length)
+        except (OSError, ConnectionError) as e:
+            raise ValueError("Failed to read request body") from e
+        if not body or not body.strip():
+            return {}
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise ValueError("Request body must be valid JSON") from e
+        if not isinstance(payload, dict):
+            raise ValueError("Request body must be a JSON object")
+        return payload
 
     def request_origin_is_local(self):
         origin = self.headers.get("Origin")
@@ -1051,12 +1084,14 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         recent.append(now)
         AUTH_FAILURES[client] = recent
         if self.command == "POST":
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length > 0:
-                try:
-                    self.rfile.read(min(length, 65536))
-                except Exception:
-                    pass
+            try:
+                length = int(self.headers.get("Content-Length", 0) or 0)
+                if 0 < length <= 65536:
+                    self.rfile.read(length)
+                elif length > 65536:
+                    self.rfile.read(65536)
+            except Exception:
+                pass
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="AIOStreams Portal"')
         self.end_headers()
@@ -1065,11 +1100,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def send_head(self):
         # SimpleHTTPRequestHandler otherwise exposes .env, databases and .git,
         # including through HEAD requests, encoded paths and symbolic links.
-        target = pathlib.Path(self.translate_path(self.path)).resolve()
-        root = pathlib.Path(WEB_ROOT).resolve()
         try:
+            clean_path = urllib.parse.unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+            if "\x00" in clean_path or any(ord(c) < 32 for c in clean_path):
+                self.send_error(404)
+                return None
+            target = pathlib.Path(self.translate_path(self.path)).resolve()
+            root = pathlib.Path(WEB_ROOT).resolve()
             relative = target.relative_to(root)
-        except ValueError:
+        except (ValueError, OSError):
             self.send_error(404)
             return None
         allowed = (relative.as_posix() in ("index.html", "dashboard.html")
@@ -1103,20 +1142,30 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if path in ("/api/aniskip", "/aniskip"):
             query = urllib.parse.parse_qs(url_parts.query)
             raw_id = (query.get("id") or [""])[0].strip()
+            if len(raw_id) > 100 or not re.fullmatch(r"[a-zA-Z0-9:_.-]*", raw_id):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"found": False, "reason": "No anime ID mapping"}).encode())
+                return
             try:
                 season = int((query.get("season") or ["1"])[0] or 1)
             except (ValueError, TypeError):
                 season = 1
+            season = max(1, min(season, 10000))
             try:
                 episode = int((query.get("episode") or ["1"])[0] or 1)
             except (ValueError, TypeError):
                 episode = 1
+            episode = max(1, min(episode, 100000))
             try:
                 duration = float((query.get("duration") or ["0"])[0] or 0)
                 if math.isnan(duration) or math.isinf(duration) or duration < 0:
-                    duration = 0
+                    duration = 0.0
             except (ValueError, TypeError):
-                duration = 0
+                duration = 0.0
+            duration = min(duration, 86400.0)
 
             if ":" in raw_id:
                 parts = raw_id.split(":")
@@ -1286,17 +1335,22 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                         pass
 
                 if not config_data:
-                    tmpl_name = env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json")
-                    tmpl_path = os.path.join(WEB_ROOT, "templates", "aiometadata-configs", tmpl_name)
-                    if not os.path.isfile(tmpl_path):
-                        tmpl_path = os.path.join(WEB_ROOT, "templates", "aiometadata-configs", "tamtaro-aiometadata-with-anime.json")
-                    if not os.path.isfile(tmpl_path):
-                        repo_candidate = Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs" / tmpl_name
-                        if not repo_candidate.is_file():
-                            repo_candidate = Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs" / "tamtaro-aiometadata-with-anime.json"
+                    raw_tmpl = env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json")
+                    tmpl_name = os.path.basename(raw_tmpl)
+                    if not tmpl_name or tmpl_name.startswith(".") or ".." in tmpl_name:
+                        tmpl_name = "tamtaro-aiometadata-with-anime.json"
+                    tmpl_dir = (Path(WEB_ROOT) / "templates" / "aiometadata-configs").resolve()
+                    tmpl_path = (tmpl_dir / tmpl_name).resolve()
+                    if not tmpl_path.is_file() or not tmpl_path.is_relative_to(tmpl_dir):
+                        tmpl_path = (tmpl_dir / "tamtaro-aiometadata-with-anime.json").resolve()
+                    if not tmpl_path.is_file():
+                        repo_dir = (Path(__file__).resolve().parents[2] / "templates" / "aiometadata-configs").resolve()
+                        repo_candidate = (repo_dir / tmpl_name).resolve()
+                        if not repo_candidate.is_file() or not repo_candidate.is_relative_to(repo_dir):
+                            repo_candidate = (repo_dir / "tamtaro-aiometadata-with-anime.json").resolve()
                         if repo_candidate.is_file():
-                            tmpl_path = str(repo_candidate)
-                    if os.path.isfile(tmpl_path):
+                            tmpl_path = repo_candidate
+                    if tmpl_path.is_file():
                         with open(tmpl_path, "r", encoding="utf-8") as f:
                             raw = json.load(f)
                             config_data = raw.get("config", raw)
@@ -1310,8 +1364,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Disposition", 'attachment; filename="aio-local-aiometadata-profile.json"')
                 self.end_headers()
                 self.wfile.write(body)
-            except Exception as e:
-                self.json_response({"error": f"AIOMetadata configuration export failed: {e}"}, 503)
+            except Exception:
+                self.json_response({"error": "AIOMetadata configuration export failed."}, 503)
             return
         if path == "/api/profile-recommendation":
             try:
@@ -1421,27 +1475,27 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if not self.request_origin_is_local():
             try:
                 cl = int(self.headers.get("Content-Length", 0) or 0)
-                if cl > 0:
+                if 0 < cl <= 65536:
                     self.rfile.read(cl)
+                elif cl > 65536:
+                    self.rfile.read(65536)
             except Exception:
                 pass
             self.send_error(403, "Cross-origin configuration changes are not allowed")
             return
         if path == "/api/webhook-test":
             try:
-                body = self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0)
-                payload = json.loads(body.decode("utf-8")) if body else {}
-                if not isinstance(payload, dict):
-                    self.json_response({"success": False, "error": "Request body must be a JSON object."}, 400)
-                    return
+                payload = self.read_json_body()
                 url = payload.get("url") or read_saved_env().get("DISCORD_WEBHOOK_URL", "")
                 if not url:
                     self.json_response({"success": False, "error": "No webhook URL provided"}, 400)
                     return
                 success, msg = dispatch_webhook_notification(url, "Simulcast Alert Test", "Your AIO Local Simulcast Airing Alert webhook is active and verified! 🎉")
                 self.json_response({"success": success, "message": msg}, 200 if success else 400)
-            except Exception as e:
-                self.json_response({"success": False, "error": str(e)}, 500)
+            except ValueError as e:
+                self.json_response({"success": False, "error": str(e)}, 400)
+            except Exception:
+                self.json_response({"success": False, "error": "Internal server error occurred while sending webhook notification."}, 500)
             return
         if path == "/api/setup":
             try:
@@ -1454,41 +1508,38 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/api/validate-provider":
             try:
-                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
-                if not isinstance(payload, dict):
-                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
-                    return
+                payload = self.read_json_body()
                 self.json_response(validate_provider(payload.get("provider"), payload.get("key")))
-            except (json.JSONDecodeError, TypeError):
-                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            except ValueError as e:
+                self.json_response({"status": "invalid", "detail": str(e)}, 400)
+            except Exception:
+                self.json_response({"status": "invalid", "detail": "Internal server error during provider validation."}, 500)
             return
         if path == "/api/smoke-test":
             try:
-                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
-                if not isinstance(payload, dict):
-                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
-                    return
+                payload = self.read_json_body()
                 self.json_response(run_smoke_test(payload.get("kind"), payload.get("id")))
-            except (json.JSONDecodeError, TypeError):
-                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            except ValueError as e:
+                self.json_response({"status": "invalid", "detail": str(e)}, 400)
+            except Exception:
+                self.json_response({"status": "invalid", "detail": "Internal server error during smoke test."}, 500)
             return
         if path == "/api/test-playback":
             try:
-                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
-                if not isinstance(payload, dict):
-                    self.json_response({"status": "invalid", "detail": "Request body must be a JSON object."}, 400)
-                    return
+                payload = self.read_json_body()
                 readiness = playback_readiness()
                 if not readiness["ready"]:
                     self.json_response({"status": "not_ready", "message": readiness["message"], "readiness": readiness}, 409)
                     return
                 self.json_response(run_playback_test(payload.get("mode"), payload.get("content_id"), payload.get("kind")))
-            except (json.JSONDecodeError, TypeError):
-                self.json_response({"status": "invalid", "detail": "Request body must be JSON."}, 400)
+            except ValueError as e:
+                self.json_response({"status": "invalid", "detail": str(e)}, 400)
+            except Exception:
+                self.json_response({"status": "invalid", "detail": "Internal server error during playback test."}, 500)
             return
         if path == "/api/config-import":
             try:
-                payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")) or 0) or b"{}")
+                payload = self.read_json_body()
                 if payload.get("format") != "aio-local-config-v1" or not isinstance(payload.get("values"), dict):
                     self.json_response({"error": "Use an aio-local-config-v1 export and provide values."}, 400)
                     return
@@ -1662,7 +1713,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         try:
             save_env_updates({key: value})
         except Exception as e:
-            print(f"[Portal] Note updating env key {key}: {e}", flush=True)
+            log_key = "[REDACTED]" if re.search(r"KEY|PASS|TOKEN|SECRET", key) else key
+            print(f"[Portal] Note updating env key {log_key}: {type(e).__name__}", flush=True)
 
     def handle_api_manifest_info(self):
         install_info = {}
@@ -1765,7 +1817,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "stremthru", "aiometadata", "slicksync", "setup"
         }
 
-        if container and container in safe_containers:
+        if container:
+            if container not in safe_containers:
+                self.json_response({"error": "Unknown or unsupported container name."}, 400)
+                return
             if container == "setup":
                 snap = setup_snapshot()
                 logs_text = "\n".join(snap.get("logs", [])) or "No setup logs recorded yet."
@@ -1828,8 +1883,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     with open(path, "r", encoding="utf-8", errors="ignore") as f:
                         lines = f.readlines()
                         logs[name] = "".join(lines[-100:])
-                except Exception as e:
-                    logs[name] = f"Error reading log: {e}"
+                except Exception:
+                    logs[name] = "Error reading log."
             else:
                 logs[name] = "Log file not found."
 
@@ -1854,12 +1909,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     "url": flaresolverr_url,
                     "message": f"Antibot Proxy ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
                 })
-        except Exception as e:
+        except Exception:
             self.json_response({
                 "status": "offline",
                 "reachable": False,
                 "url": flaresolverr_url,
-                "message": f"Antibot proxy is not responding at {flaresolverr_url}: {e}"
+                "message": f"Antibot proxy is not responding at {flaresolverr_url}."
             }, 503)
 
     def handle_api_benchmark(self):
@@ -1903,15 +1958,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
 
     def handle_api_save_env(self):
         try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length < 0 or content_length > 65536:
-                self.send_error(413, "Configuration body is too large")
-                return
-            body = self.rfile.read(content_length).decode("utf-8")
-            data = json.loads(body) if body else {}
-            if not isinstance(data, dict):
-                raise ValueError("Configuration must be a JSON object")
-            data=form_updates(data,read_saved_env())
+            data = self.read_json_body()
+            data = form_updates(data, read_saved_env())
             for key, value in data.items():
                 if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
                     raise ValueError("Invalid environment variable name")
@@ -1942,7 +1990,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     raise ValueError('Enter a valid HTTP(S) URL for Torrentio endpoint')
             if keys_to_update.get('AIOMETADATA_TEMPLATE'):
                 tmpl = keys_to_update['AIOMETADATA_TEMPLATE']
-                if not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):
+                if not tmpl or tmpl.startswith(".") or ".." in tmpl or not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):
                     raise ValueError('Invalid AIOMetadata template name')
             if "BASE_URL" in keys_to_update:
                 keys_to_update["BASE_URL"] = normalize_base_url(keys_to_update["BASE_URL"])
@@ -1972,12 +2020,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 "message": "Configuration saved. Choose Connect my stack to apply it."
             }).encode("utf-8"))
         except (ValueError, UnicodeError) as e:
-            self.send_error(400, str(e))
-        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
+        except Exception:
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
+            self.wfile.write(json.dumps({"success": False, "error": "Internal server error occurred while saving configuration."}).encode("utf-8"))
 
     def handle_api_restart(self):
         try:
@@ -1993,26 +2041,30 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"success": True, "message": "Stack restart initiated."}).encode("utf-8"))
-        except Exception as e:
+        except Exception:
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
+            self.wfile.write(json.dumps({"success": False, "error": "Internal server error occurred while restarting stack."}).encode("utf-8"))
 
     def handle_api_templates(self):
-        templates_dir = os.path.join(WEB_ROOT, "templates")
-        result = []
-        if os.path.isdir(templates_dir):
-            for root, _, files in os.walk(templates_dir):
-                for file in files:
-                    if file.endswith(".json"):
-                        rel_path = os.path.relpath(os.path.join(root, file), WEB_ROOT).replace("\\", "/")
-                        result.append({"name": file, "path": rel_path})
+        try:
+            templates_dir = os.path.join(WEB_ROOT, "templates")
+            result = []
+            if os.path.isdir(templates_dir):
+                for root, dirs, files in os.walk(templates_dir):
+                    dirs[:] = [d for d in dirs if not d.startswith(".")]
+                    for file in files:
+                        if file.endswith(".json") and not file.startswith("."):
+                            rel_path = os.path.relpath(os.path.join(root, file), WEB_ROOT).replace("\\", "/")
+                            result.append({"name": file, "path": rel_path})
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"templates": result}).encode("utf-8"))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"templates": result}).encode("utf-8"))
+        except Exception:
+            self.json_response({"templates": []})
 
     def handle_api_backup(self):
         try:
@@ -2021,18 +2073,19 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             sys.path.insert(0, str(WEB_ROOT))
             import tools.backup as stack_backup
             archive = stack_backup.create_backup(backup_dir, Path(WEB_ROOT), keep_last=5)
+            if not archive.resolve().is_relative_to(backup_dir.resolve()):
+                raise ValueError("Unsafe backup path")
 
             size = archive.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/gzip")
             self.send_header("Content-Disposition", f'attachment; filename="{archive.name}"')
             self.send_header("Content-Length", str(size))
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             with open(archive, "rb") as f:
                 shutil.copyfileobj(f, self.wfile)
-        except Exception as e:
-            self.send_error(500, f"Backup creation failed: {e}")
+        except Exception:
+            self.send_error(500, "Backup creation failed")
 
     def handle_api_health_stats(self):
         try:
@@ -2066,8 +2119,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 "services": services_probed
             }
             self.json_response(payload)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while retrieving health statistics."}, 500)
 
     def handle_api_watchdog(self, run_probe=False):
         try:
@@ -2079,8 +2132,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 telemetry = stack_watchdog.get_watchdog_telemetry()
                 self.json_response(telemetry)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while querying watchdog."}, 500)
 
     def handle_api_zilean_stats(self):
         try:
@@ -2088,8 +2141,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             import tools.watchdog as stack_watchdog
             stats = stack_watchdog.get_zilean_stats()
             self.json_response({"success": True, "stats": stats})
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while retrieving Zilean statistics."}, 500)
 
     def handle_api_backups_list(self):
         try:
@@ -2097,21 +2150,18 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             import tools.backup as stack_backup
             telemetry = stack_backup.get_backup_telemetry(Path(WEB_ROOT) / "backups", Path(WEB_ROOT))
             self.json_response(telemetry)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while retrieving backups list."}, 500)
 
     def handle_api_backups_prune(self):
         try:
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            body = self.rfile.read(length) if length > 0 else b"{}"
-            payload = json.loads(body.decode("utf-8")) if body else {}
-            if not isinstance(payload, dict):
-                self.json_response({"success": False, "error": "Request body must be a JSON object."}, 400)
-                return
+            payload = self.read_json_body()
             try:
                 keep_last = int(payload.get("keep_last", 5))
                 if keep_last < 1:
                     keep_last = 1
+                elif keep_last > 100:
+                    keep_last = 100
             except (ValueError, TypeError):
                 self.json_response({"success": False, "error": "keep_last must be a positive integer."}, 400)
                 return
@@ -2119,8 +2169,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             import tools.backup as stack_backup
             res = stack_backup.prune_backups(Path(WEB_ROOT) / "backups", keep_last=keep_last, root=Path(WEB_ROOT))
             self.json_response(res)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except ValueError as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while pruning backups."}, 500)
 
     def handle_api_resources(self):
         try:
@@ -2128,8 +2180,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             import tools.resources as stack_res
             stats = stack_res.get_stack_resources(filter_aio=True)
             self.json_response(stats)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while retrieving resources."}, 500)
 
     def handle_api_clean_cache(self):
         try:
@@ -2137,8 +2189,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             import tools.clean_cache as stack_cleaner
             res = stack_cleaner.clean_stack_cache(Path(WEB_ROOT))
             self.json_response(res)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while cleaning cache."}, 500)
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True

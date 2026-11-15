@@ -197,7 +197,10 @@ class PortalTests(unittest.TestCase):
         request_headers = dict(headers or {})
         if auth:
             request_headers["Authorization"] = "Basic " + base64.b64encode(b"admin:test-password").decode()
-        body = json.dumps(data) if data is not None else None
+        if isinstance(data, (bytes, str)):
+            body = data.encode("utf-8") if isinstance(data, str) else data
+        else:
+            body = json.dumps(data) if data is not None else None
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
         connection.request(method, path, body, request_headers)
         try:
@@ -975,6 +978,243 @@ class PortalTests(unittest.TestCase):
             headers={"Origin": "https://attacker.example.org", "X-Forwarded-Host": "portal.example.com"}
         )
         self.assertEqual(status, 403)
+
+    def test_security_headers_on_all_responses(self):
+        endpoints = [
+            ("/healthz", "GET", None, False, 200),
+            ("/dashboard", "GET", None, True, 200),
+            ("/nonexistent_path_404", "GET", None, False, 404),
+            ("/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, False, 401),
+            ("/api/status", "GET", None, True, 200),
+        ]
+        for path, method, data, auth, expected_status in endpoints:
+            status, _, headers = self.request(path, method=method, data=data, auth=auth)
+            self.assertEqual(status, expected_status, f"Expected {expected_status} for {method} {path}")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff", f"Missing nosniff on {path}")
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY", f"Missing X-Frame-Options on {path}")
+            self.assertEqual(headers.get("Referrer-Policy"), "no-referrer", f"Missing Referrer-Policy on {path}")
+            csp = headers.get("Content-Security-Policy", "")
+            self.assertIn("frame-ancestors 'none'", csp, f"Missing frame-ancestors in CSP on {path}")
+            self.assertIn("object-src 'none'", csp, f"Missing object-src in CSP on {path}")
+            self.assertEqual(headers.get("Server"), "AIO-Portal", f"Server header must not leak Python details on {path}")
+
+    def test_safe_error_masking_on_500_and_503(self):
+        leak_indicator = "C:\\sensitive\\system\\path\\to\\aio\\secret_token.txt"
+
+        # 1. /api/save-env with unexpected OSError leaking sensitive path
+        with patch.object(portal, "save_env_updates", side_effect=OSError(f"Disk error at {leak_indicator}")):
+            status, body, _ = self.request("/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+            self.assertEqual(data.get("error"), "Internal server error occurred while saving configuration.")
+
+        # 2. /api/restart
+        with patch.object(portal.subprocess, "Popen", side_effect=RuntimeError(f"Subprocess crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/restart", "POST", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+            self.assertEqual(data.get("error"), "Internal server error occurred while restarting stack.")
+
+        # 3. /api/health-stats
+        with patch("tools.resources.get_stack_resources", side_effect=Exception(f"Resource query failed: {leak_indicator}")):
+            status, body, _ = self.request("/api/health-stats", "GET", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+        # 4. /api/watchdog
+        with patch("tools.watchdog.get_watchdog_telemetry", side_effect=Exception(f"Watchdog failed: {leak_indicator}")):
+            status, body, _ = self.request("/api/watchdog", "GET", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+        # 5. /api/backups/prune
+        with patch("tools.backup.prune_backups", side_effect=Exception(f"Backup prune error: {leak_indicator}")):
+            status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": 3}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+        # 6. /api/export-aiometadata 503 error
+        with patch("builtins.open", side_effect=OSError(f"Failed opening template: {leak_indicator}")):
+            status, body, _ = self.request("/api/export-aiometadata", "GET", auth=True)
+            self.assertEqual(status, 503)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertEqual(data.get("error"), "AIOMetadata configuration export failed.")
+
+        # 7. /api/backup error
+        with patch("tools.backup.create_backup", side_effect=Exception(f"Backup crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/backup", "GET", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+
+    def test_path_traversal_and_boundary_validation(self):
+        traversal_attempts = [
+            "/assets/..%2f.env",
+            "/assets/%2e%2e/.env",
+            "/templates/..%2f..%2f.env",
+            "/templates/aiometadata-configs/../../../.env",
+            "/assets/%00.js",
+            "/assets/bad<name>.js",
+            "/assets/../package.json",
+        ]
+        for bad_path in traversal_attempts:
+            status, _, _ = self.request(bad_path, "GET")
+            self.assertEqual(status, 404, f"Path traversal attempt {bad_path} did not return 404")
+
+        # Container parameter boundary validation
+        status, body, _ = self.request("/api/logs?container=../../../etc/passwd", "GET", auth=True)
+        self.assertEqual(status, 400)
+        data = json.loads(body)
+        self.assertIn("error", data)
+
+        status, body, _ = self.request("/api/logs?container=unsupported_custom_service", "GET", auth=True)
+        self.assertEqual(status, 400)
+
+        # AIOMetadata template traversal rejection
+        status, _, _ = self.request("/api/save-env", "POST", {"AIOMETADATA_TEMPLATE": "../malicious.json"}, auth=True)
+        self.assertEqual(status, 400)
+        status, _, _ = self.request("/api/save-env", "POST", {"AIOMETADATA_TEMPLATE": ".hidden.json"}, auth=True)
+        self.assertEqual(status, 400)
+
+        # Aniskip parameter boundary validation
+        status, body, _ = self.request("/api/aniskip?id=invalid;cmd|injection&season=99999999&episode=-5", "GET")
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertFalse(data.get("found"))
+
+    def test_safe_json_decoding_on_malformed_and_empty_payloads(self):
+        endpoints = [
+            "/api/save-env",
+            "/api/webhook-test",
+            "/api/validate-provider",
+            "/api/smoke-test",
+            "/api/test-playback",
+            "/api/config-import",
+            "/api/backups/prune",
+        ]
+        # Malformed JSON syntax must return 400, never 500
+        for ep in endpoints:
+            status, body, _ = self.request(
+                ep, "POST", b"{\"broken_json", auth=True,
+                headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 400, f"Endpoint {ep} should return 400 for malformed JSON")
+            data = json.loads(body)
+            self.assertTrue("error" in data or "detail" in data, f"Endpoint {ep} missing error/detail in response")
+
+        # Empty body with Content-Length: 0
+        for ep in ["/api/save-env", "/api/validate-provider", "/api/smoke-test"]:
+            status, body, _ = self.request(
+                ep, "POST", b"", auth=True,
+                headers={"Content-Type": "application/json", "Content-Length": "0"}
+            )
+            # Empty JSON payload is either a 400 (validation error) or 200 (default/noop), but NEVER 500!
+            self.assertIn(status, (200, 400), f"Endpoint {ep} crashed on empty payload with status {status}")
+
+        # Non-numeric Content-Length header handled gracefully
+        status, body, _ = self.request(
+            "/api/save-env", "POST", b"{}", auth=True,
+            headers={"Content-Type": "application/json", "Content-Length": "invalid_length"}
+        )
+        self.assertEqual(status, 400)
+
+        # Negative Content-Length handled gracefully
+        status, body, _ = self.request(
+            "/api/save-env", "POST", b"{}", auth=True,
+            headers={"Content-Type": "application/json", "Content-Length": "-10"}
+        )
+        self.assertEqual(status, 400)
+
+        # Oversized body rejected
+        oversized = b"a" * 70000
+        status, body, _ = self.request(
+            "/api/save-env", "POST", oversized, auth=True,
+            headers={"Content-Type": "application/json", "Content-Length": str(len(oversized))}
+        )
+        self.assertEqual(status, 400)
+
+    def test_endpoint_fuzzing_and_non_dict_payloads(self):
+        endpoints = [
+            "/api/save-env",
+            "/api/webhook-test",
+            "/api/validate-provider",
+            "/api/smoke-test",
+            "/api/test-playback",
+            "/api/config-import",
+            "/api/backups/prune",
+        ]
+        non_dict_payloads = [
+            b"[1, 2, 3]",
+            b'"just a string"',
+            b"12345",
+            b"true",
+            b"null",
+        ]
+        for ep in endpoints:
+            for payload in non_dict_payloads:
+                status, body, _ = self.request(
+                    ep, "POST", payload, auth=True,
+                    headers={"Content-Type": "application/json"}
+                )
+                self.assertEqual(status, 400, f"Expected 400 for {ep} with non-dict payload {payload}, got {status}: {body}")
+                data = json.loads(body)
+                self.assertTrue("error" in data or "detail" in data)
+
+        # Invalid non-UTF8 encodings
+        bad_bytes = b"\xff\xfe\xfd\x80\x81"
+        for ep in endpoints:
+            status, body, _ = self.request(
+                ep, "POST", bad_bytes, auth=True,
+                headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 400, f"Expected 400 for {ep} with invalid UTF-8 bytes, got {status}: {body}")
+
+    def test_endpoint_extreme_parameters(self):
+        # 1. Aniskip extreme parameters
+        aniskip_cases = [
+            ("id=kitsu:&season=1&episode=1", 200),
+            ("id=::::&season=-1&episode=-1", 200),
+            ("id=malicious%00path&season=1&episode=1", 200),
+            ("id=tt9335498&duration=1e999", 200),
+            ("id=tt9335498&duration=-1e999", 200),
+            ("id=tt9335498&season=999999999999999999999&episode=999999999999999999999", 200),
+            ("id=tt9335498&season=-999999&episode=-999999", 200),
+        ]
+        for qs, expected in aniskip_cases:
+            status, body, _ = self.request(f"/api/aniskip?{qs}")
+            self.assertEqual(status, expected)
+            data = json.loads(body)
+            self.assertIn("found", data)
+
+        # 2. Proxy-config parameters
+        status, body, _ = self.request("/api/proxy-config?format=invalid_proxy&base_url=http://example.com", auth=True)
+        self.assertEqual(status, 400)
+        status, body, _ = self.request("/api/proxy-config?format=caddy&base_url=ftp://example.com", auth=True)
+        self.assertEqual(status, 400)
+        for fmt in ("caddy", "nginx", "traefik", "cloudflare"):
+            status, body, _ = self.request(f"/api/proxy-config?format={fmt}", auth=True)
+            self.assertEqual(status, 200)
+
+        # 3. Backups prune parameters
+        with patch("tools.backup.prune_backups", return_value={"pruned": 0, "kept": 1}):
+            # Negative or zero clamped safely
+            status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": -5}, auth=True)
+            self.assertEqual(status, 200)
+            status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": 0}, auth=True)
+            self.assertEqual(status, 200)
+            # Non-integer rejected with 400
+            status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": "abc"}, auth=True)
+            self.assertEqual(status, 400)
 
 
 if __name__ == "__main__":
