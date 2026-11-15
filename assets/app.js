@@ -370,6 +370,25 @@ async function loadManifest() {
 }
 
 
+function closeLogDialog() {
+  const dialog = document.getElementById('service-log-dialog');
+  if (!dialog || !dialog.open || dialog.classList?.contains?.('closing')) return;
+  dialog.classList?.add?.('closing');
+  const onAnimationEnd = () => {
+    dialog.removeEventListener?.('animationend', onAnimationEnd);
+    dialog.classList?.remove?.('closing');
+    if (dialog.open) dialog.close();
+  };
+  dialog.addEventListener?.('animationend', onAnimationEnd, { once: true });
+  setTimeout(() => {
+    if (dialog.classList?.contains?.('closing')) {
+      dialog.classList?.remove?.('closing');
+      if (dialog.open) dialog.close();
+    }
+  }, 250);
+}
+window.closeLogDialog = closeLogDialog;
+
 async function showContainerLogs(containerName) {
   const dialog = document.getElementById('service-log-dialog');
   const select = document.getElementById('logs-container-select');
@@ -384,6 +403,9 @@ async function showContainerLogs(containerName) {
   }
   const target = select.value || 'aiostreams';
   const label = select.selectedOptions?.[0]?.textContent || target;
+  if (dialog.classList?.contains?.('closing')) {
+    dialog.classList.remove('closing');
+  }
   if (!dialog.open) dialog.showModal();
   const request = Symbol();
   showContainerLogs.pending = request;
@@ -1213,6 +1235,46 @@ async function runOperations() {
 
   document.getElementById('btn-inspect-container-logs')?.addEventListener('click', () => {
     showContainerLogs();
+  });
+
+  const logDialog = document.getElementById('service-log-dialog');
+  let logDialogPointerDownBackdrop = false;
+  if (logDialog) {
+    logDialog.addEventListener('pointerdown', (e) => {
+      const rect = logDialog.getBoundingClientRect();
+      logDialogPointerDownBackdrop = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+    });
+    logDialog.addEventListener('click', (e) => {
+      const rect = logDialog.getBoundingClientRect();
+      const isOutside = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+      if (isOutside && logDialogPointerDownBackdrop) {
+        closeLogDialog();
+      }
+      logDialogPointerDownBackdrop = false;
+    });
+    logDialog.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      closeLogDialog();
+    });
+    logDialog?.querySelector?.('form[method="dialog"]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      closeLogDialog();
+    });
+  }
+
+  document.getElementById('close-log-dialog')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeLogDialog();
   });
 
   document.getElementById('btn-toggle-setup-logs')?.addEventListener('click', () => {

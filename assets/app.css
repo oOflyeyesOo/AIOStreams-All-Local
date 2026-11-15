@@ -65,19 +65,28 @@ input, select, button { font-size:16px; }
 button:disabled { cursor:not-allowed; opacity:.6; }
 summary { min-height:44px; align-content:center; cursor:pointer; font-weight:600; }
 .more-options summary { padding:12px; background:#263136; border:1px solid #65777d; border-radius:8px; color:#edf4f5; }
-.startup-readiness { margin:0 0 24px; padding:24px; border:2px solid #e6b65a; border-left-width:8px; border-radius:12px; background:#292318; color:#fef3c7; }
+.startup-readiness { margin:28px 0 24px; padding:24px 28px; border:2px solid #4a5c66; border-left-width:8px; border-radius:12px; background:#172024; color:#e2edf0; transition:background-color .35s ease,border-color .35s ease,color .35s ease,box-shadow .35s ease; }
+.startup-readiness h1 { margin:0; font-size:clamp(24px,3.8vw,38px); letter-spacing:-.04em; font-weight:700; line-height:1.2; }
 .startup-readiness h2 { font-size:24px; line-height:1.3; margin-bottom:10px; }
-.startup-readiness p { margin:10px 0; }
+.startup-readiness p { margin:8px 0 0; line-height:1.55; }
 .startup-readiness a { text-decoration:underline; font-weight:600; }
-.startup-readiness.ready { background:#142b23; border-color:#6ee7b7; color:#d1fae5; }
-.startup-readiness.failed { background:#2e1d21; border-color:#e09898; color:#ffdddd; }
-.startup-readiness { margin-top:28px; }
-.startup-readiness h1 { margin:0; font-size:clamp(27px,4vw,42px); letter-spacing:-.045em; }
-.stack-status > p { max-width:62ch; line-height:1.55; }
-.stack-actions { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
-.stack-actions > .primary-button, .stack-actions > .light-button { width:auto; gap:12px; margin:0; }
-.stack-actions > .text-button { color:inherit; }
-.startup-checklist pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.startup-readiness.waiting { background:#172126; border-color:#48616c; color:#e2edf0; box-shadow:0 4px 20px rgba(0,0,0,.25); }
+.startup-readiness.setup { background:#251e15; border-color:#d99a41; color:#fef3c7; box-shadow:0 4px 20px rgba(217,154,65,.08); }
+.startup-readiness.ready { background:#122b20; border-color:#34d399; color:#d1fae5; box-shadow:0 4px 24px rgba(16,185,129,.12); }
+.startup-readiness.failed { background:#2e1a1e; border-color:#f87171; color:#fee2e2; box-shadow:0 4px 24px rgba(239,68,68,.12); }
+.stack-status > p { max-width:64ch; line-height:1.55; opacity:.92; font-size:16px; }
+.stack-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.stack-actions > .primary-button, .stack-actions > .light-button { width:auto; gap:12px; margin:0; padding:11px 20px; border-radius:6px; font-weight:700; box-shadow:0 2px 8px rgba(0,0,0,.2); transition:transform .15s ease,background-color .15s ease,box-shadow .15s ease; }
+.stack-actions > .primary-button:hover:not(:disabled), .stack-actions > .light-button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.3); }
+.stack-actions > .primary-button:active:not(:disabled), .stack-actions > .light-button:active:not(:disabled) { transform:translateY(0); }
+.stack-actions > .text-button { color:inherit; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:6px; padding:9px 16px; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:6px; transition:background .15s ease,border-color .15s ease; }
+.stack-actions > .text-button:hover { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.3); }
+#ready-actions:not([hidden]) { display:block; animation:readyFadeIn .3s cubic-bezier(.16,1,.3,1) forwards; }
+@keyframes readyFadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.startup-checklist { margin-top:16px; border-top:1px solid rgba(255,255,255,.12); padding-top:10px; }
+.startup-checklist summary { font-size:14px; font-weight:600; cursor:pointer; user-select:none; opacity:.88; display:inline-flex; align-items:center; min-height:32px; transition:opacity .15s ease; }
+.startup-checklist summary:hover { opacity:1; }
+.startup-checklist pre { margin-top:8px; padding:12px 14px; background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08); border-radius:6px; font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:inherit; white-space:pre-wrap; overflow-wrap:anywhere; max-height:220px; overflow-y:auto; }
 #startup-readiness .progress-panel { margin-top:12px; padding:12px; }
 #progress-panel[hidden] { display:none; }
 #progress-panel.setup-complete > div { display:none; }
@@ -94,12 +103,29 @@ summary { min-height:44px; align-content:center; cursor:pointer; font-weight:600
 .tool-group > summary { padding:0 4px; font-weight:600; }
 .tool-group .operations-section { margin:0 0 14px; }
 .service-toolbar, .log-dialog-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
-.service-log-dialog { width:min(920px, calc(100% - 24px)); max-height:90vh; margin:auto; padding:20px; color:var(--white); background:#191f22; border:1px solid #526164; border-radius:12px; }
-.service-log-dialog::backdrop { background:#080b0ed9; }
-.log-dialog-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
-.log-dialog-toolbar > select { width:auto; max-width:100%; min-width:10rem; flex:1; }
-#service-log-status { min-height:1.5em; margin:12px 0 6px; color:#b8c5c9; overflow-wrap:anywhere; }
-#service-log-dialog pre { height:clamp(180px, 48vh, 520px); margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:#111719; border:1px solid var(--line); border-radius:6px; padding:12px; font-size:14px; }
+.service-log-dialog { width:min(920px, calc(100% - 24px)); max-height:90vh; margin:auto; padding:24px; color:var(--white); background:#171d1f; border:1px solid #455558; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06); }
+.service-log-dialog[open] { animation:dialogFadeIn .22s cubic-bezier(.16,1,.3,1) forwards; }
+.service-log-dialog[open]::backdrop { background:rgba(8,11,14,.85); backdrop-filter:blur(4px); animation:dialogBackdropFadeIn .22s ease-out forwards; }
+.service-log-dialog.closing { animation:dialogFadeOut .18s cubic-bezier(.7,0,.84,0) forwards; pointer-events:none; }
+.service-log-dialog.closing::backdrop { animation:dialogBackdropFadeOut .18s ease-in forwards; }
+@keyframes dialogFadeIn { from{opacity:0;transform:scale(.96) translateY(-8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes dialogFadeOut { from{opacity:1;transform:scale(1) translateY(0)} to{opacity:0;transform:scale(.97) translateY(-6px)} }
+@keyframes dialogBackdropFadeIn { from{opacity:0} to{opacity:1} }
+@keyframes dialogBackdropFadeOut { from{opacity:1} to{opacity:0} }
+@media (prefers-reduced-motion: reduce) {
+  .service-log-dialog[open], .service-log-dialog.closing, .service-log-dialog[open]::backdrop, .service-log-dialog.closing::backdrop, #ready-actions:not([hidden]) { animation-duration:.01ms!important; transform:none!important; }
+  .startup-readiness { transition:none!important; }
+}
+.log-dialog-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+.log-dialog-header h2 { font-size:20px; font-weight:700; margin:0; letter-spacing:-.02em; }
+.log-dialog-close-btn { padding:6px 14px; font-size:13px; font-weight:600; border-radius:6px; background:#232c2f; border:1px solid #3d4a4d; color:#cbd5d1; cursor:pointer; transition:all .15s ease; }
+.log-dialog-close-btn:hover { background:#2d383c; color:var(--white); border-color:#55676b; }
+.log-dialog-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.log-dialog-toolbar > label { font-size:14px; font-weight:600; color:#929b9f; }
+.log-dialog-toolbar > select { width:auto; max-width:100%; min-width:11rem; flex:1; padding:8px 12px; background:#111719; border:1px solid #364448; border-radius:6px; font-size:14px; }
+.log-dialog-toolbar .text-button { min-height:38px; padding:7px 14px; font-size:14px; font-weight:600; border-radius:6px; display:inline-flex; align-items:center; gap:6px; }
+#service-log-status { min-height:1.5em; margin:10px 0 6px; font-size:13px; color:#8da1a8; overflow-wrap:anywhere; }
+#service-log-dialog pre { height:clamp(200px, 50vh, 520px); margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:#0d1214; border:1px solid #283437; border-radius:8px; padding:14px 16px; font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; color:#d1d9dc; }
 #startup-checks { font:14px/1.8 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 #playback-readiness-hint { font-size:16px; color:#fde68a; margin-top:14px; }
 .steps, .player-list, .field-label, .template-header { flex-wrap:wrap; }
@@ -114,3 +140,20 @@ summary { min-height:44px; align-content:center; cursor:pointer; font-weight:600
 
 :focus-visible { outline:3px solid #93c5fd; outline-offset:3px; }
 @media(max-width:900px) { .workspace-grid { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:650px) {
+  main { padding:0 16px; }
+  .topbar { height:auto; padding:16px 0; flex-wrap:wrap; gap:12px; }
+  .startup-readiness { padding:20px 16px; margin:18px 0 20px; border-left-width:6px; }
+  .startup-readiness h1 { font-size:clamp(22px,6vw,28px); }
+  .stack-actions { flex-direction:column; align-items:stretch; gap:10px; }
+  .stack-actions > .primary-button, .stack-actions > .light-button, .stack-actions > .text-button { width:100%; text-align:center; justify-content:center; }
+  .service-log-dialog { width:calc(100% - 16px); max-height:94vh; padding:16px 14px; margin:auto 8px; }
+  .log-dialog-toolbar { flex-direction:column; align-items:stretch; }
+  .log-dialog-toolbar > select { width:100%; min-width:0; }
+  .log-dialog-toolbar .text-button { width:100%; justify-content:center; }
+  #service-log-dialog pre { height:clamp(160px,45vh,420px); padding:10px 12px; font-size:12px; }
+  .service-grid { grid-template-columns:1fr; }
+  .integrations-heading { flex-direction:column; align-items:flex-start; gap:12px; }
+  .service-toolbar { width:100%; }
+  .service-toolbar .text-button { flex:1; text-align:center; justify-content:center; }
+}
