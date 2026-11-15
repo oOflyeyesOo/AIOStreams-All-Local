@@ -24,7 +24,9 @@ import tempfile
 import copy
 from pathlib import Path
 
-for parent in Path(__file__).resolve().parents:
+# Source Compose mounts the checkout at /app and the entry script at /init.
+# The packaged bootstrap places the shared module beside the entry script.
+for parent in (*Path(__file__).resolve().parents, Path('/app')):
     if (parent / 'tools' / 'usenet_config.py').is_file():
         sys.path.insert(0, str(parent))
         break
