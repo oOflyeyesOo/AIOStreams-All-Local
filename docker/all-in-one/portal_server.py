@@ -44,7 +44,7 @@ repo_root_cand = str(Path(__file__).resolve().parents[2])
 WEB_ROOT = os.environ.get("WEB_ROOT") or (repo_root_cand if os.path.isfile(os.path.join(repo_root_cand, "docker-compose.yml")) else "/app")
 ENV_PATH = os.path.realpath(os.path.join(WEB_ROOT, ".env"))
 ENV_EXAMPLE_PATH = os.path.join(WEB_ROOT, ".env.example")
-APP_VERSION = os.environ.get("APP_VERSION", "1.4.0")
+APP_VERSION = os.environ.get("APP_VERSION", "1.5.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
@@ -121,13 +121,13 @@ def launch_setup():
 HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "comet": 8000, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
-    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "slicksync": 8086
+    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/stremio/configure", "aiometadata": "/configure",
     "comet": "/configure", "prowlarr": "/", "infinidysk": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
-    "anime-kitsu": "/", "slicksync": "/",
+    "anime-kitsu": "/",
 }
 
 INTERNAL_SERVICE_TARGETS = {
@@ -136,7 +136,6 @@ INTERNAL_SERVICE_TARGETS = {
     "prowlarr": ("prowlarr", 9696, 9696),
     "zilean": ("zilean", 8181, 8181),
     "comet": ("comet", 8000, 8000),
-    "slicksync": ("slicksync", 3000, 8086),
     "stremio-web": ("stremio-web", 8080, 8082),
     "nuvio": ("nuvio-web", 3000, 8085),
     "flaresolverr": ("flaresolverr", 8191, 8191),
@@ -2462,9 +2461,8 @@ button:hover {{ background: #0369a1; }}
             "portal": safe_port(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL"), 8088),
             "aiostreams": safe_port(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001),
             "aiometadata": safe_port(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005),
-            "slicksync": safe_port(env_vars.get("PORT_SLICKSYNC") or os.environ.get("PORT_SLICKSYNC"), 8086),
         }
-        for port_key in ("PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA", "PORT_SLICKSYNC"):
+        for port_key in ("PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA"):
             val = env_vars.get(port_key) or os.environ.get(port_key)
             if val:
                 resp_env[port_key] = val
@@ -2600,7 +2598,7 @@ button:hover {{ background: #0369a1; }}
             "aiostreams", "portal", "controller", "flaresolverr", "comet",
             "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
             "postersplus", "anime-kitsu", "subsense",
-            "stremthru", "aiometadata", "slicksync", "setup"
+            "stremthru", "aiometadata", "lumiere-db", "setup"
         }
 
         if container:
@@ -2769,7 +2767,7 @@ button:hover {{ background: #0369a1; }}
             for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
-            port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_SLICKSYNC', 'PORT_SUBSENSE', 'USENET_PORT')
+            port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_SUBSENSE', 'USENET_PORT')
             for pkey in port_keys:
                 if pkey in keys_to_update and keys_to_update[pkey]:
                     try:

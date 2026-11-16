@@ -193,7 +193,6 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("comet/comet.db", False),
             ("prowlarr/config.xml", False),
             ("prowlarr/prowlarr.db", False),
-            ("slicksync", True),
             ("infinidysk", True),
             ("stremio-web/localStorage.json", False),
             ("stremio-web/aiostreams_install.json", False),

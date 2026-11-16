@@ -104,7 +104,6 @@ services:
     - aiostreams-data:/app/data/aiostreams
     - comet-data:/app/data/comet
     - prowlarr-data:/app/data/prowlarr
-    - slicksync-data:/app/data/slicksync
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
     - postersplus-data:/app/data/postersplus
@@ -153,7 +152,6 @@ services:
     - PORT_AIOMETADATA=${PORT_AIOMETADATA:-4005}
     - PORT_POSTERSPLUS=${PORT_POSTERSPLUS:-9039}
     - PORT_SUBSENSE=${PORT_SUBSENSE:-3100}
-    - PORT_SLICKSYNC=${PORT_SLICKSYNC:-8086}
     healthcheck:
       test:
       - CMD-SHELL
@@ -351,19 +349,18 @@ services:
         max-file: '3'
     volumes:
     - prowlarr-data:/prowlarr
-    - slicksync-data:/slicksync
     - aiometadata-data:/aiometadata
     - infinidysk-data:/infinidysk
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
     - lumiere-db-data:/lumiere-db
-    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;\n \
-      \ if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
+    command: "sh -c \"\n  mkdir -p /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;\n  if grep -q\
+      \ '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
       \ fi;\n  if [ ! -f /prowlarr/config.xml ]; then\n    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
       \ > /prowlarr/config.xml;\n  else\n    sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey>|g'\
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
-      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams\
+      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /aiometadata /infinidysk /postersplus /aiostreams\
       \ /lumiere-db 2>/dev/null || true;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null\
       \ || true; fi;\n\"\n"
   prowlarr:
@@ -768,45 +765,6 @@ services:
     - stremio-net
     depends_on:
     - shared-redis
-  slicksync:
-    image: ghcr.io/slicknsliding/slicksync:private
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-    mem_limit: ${SLICKSYNC_MEM_LIMIT:-384m}
-    ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_SLICKSYNC:-8086}:3000
-    environment:
-    - JWT_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-    - ENCRYPTION_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-    - SLICKSYNC_PRIVATE_USERNAME=admin
-    - SLICKSYNC_PRIVATE_PASSWORD=${ADDON_PASSWORD:-admin}
-    - REDIS_URL=redis://shared-redis:6379/2
-    - AIOSTREAMS_URL=http://aiostreams:3000
-    - AIOSTREAMS_AUTH_USERNAME=admin
-    - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
-    - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
-    - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
-    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
-    - STREMIO_URL=http://aiostreams:3000
-    - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
-    - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
-    - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
-    - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
-    volumes:
-    - slicksync-data:/app/data
-    networks:
-    - stremio-net
-    depends_on:
-      shared-redis:
-        condition: service_started
-      aiostreams:
-        condition: service_started
-      init-configs:
-        condition: service_completed_successfully
   shared-redis:
     image: redis:alpine
     restart: unless-stopped
@@ -885,7 +843,6 @@ volumes:
   aiostreams-data: {}
   comet-data: {}
   prowlarr-data: {}
-  slicksync-data: {}
   aiometadata-data: {}
   infinidysk-data: {}
   postersplus-data: {}

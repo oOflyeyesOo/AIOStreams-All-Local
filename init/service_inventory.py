@@ -12,7 +12,6 @@ INTEGRATIONS = (
     ("SubSense", "subsense", 3100, "Subtitles"),
     ("InfiniDysk", "infinidysk", 3000, "Usenet"),
     ("StremThru", "stremthru", 8080, "Proxies"),
-    ("SlickSync", "slicksync", 3000, "Sync"),
 )
 
 TCP_PORTS = {host: port for _, host, port, _ in INTEGRATIONS}

@@ -323,7 +323,6 @@ services:
     logging: *default-logging
     volumes:
       - ./data/prowlarr:/prowlarr
-      - ./data/slicksync:/slicksync
       - ./data/aiometadata:/aiometadata
       - ./data/infinidysk:/infinidysk
       - ./data/postersplus:/postersplus
@@ -331,7 +330,7 @@ services:
       - ./data/lumiere-db:/lumiere-db
     command: >
       sh -c "
-        mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;
+        mkdir -p /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;
         if grep -q '\"uuid\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json; fi;
         if [ ! -f /prowlarr/config.xml ]; then
           echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>' > /prowlarr/config.xml;
@@ -342,7 +341,7 @@ services:
             sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g' /prowlarr/config.xml;
           fi;
         fi;
-        chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db 2>/dev/null || true;
+        chmod -R 777 /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db 2>/dev/null || true;
         if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;
       "
 
@@ -735,47 +734,6 @@ services:
       - stremio-net
     depends_on:
       - shared-redis
-
-  # ============================================================================
-  # 7. STREMIO & NUVIO SYNC HUB (SLICKSYNC)
-  # ============================================================================
-  slicksync:
-    image: ghcr.io/slicknsliding/slicksync:private
-    container_name: slicksync
-    profiles: ["scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${SLICKSYNC_MEM_LIMIT:-384m}
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8086:3000"   # SlickSync Web UI & Management Dashboard
-    environment:
-      - JWT_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - ENCRYPTION_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - SLICKSYNC_PRIVATE_USERNAME=admin
-      - SLICKSYNC_PRIVATE_PASSWORD=${ADDON_PASSWORD:-admin}
-      - REDIS_URL=redis://shared-redis:6379/2
-      - AIOSTREAMS_URL=http://aiostreams:3000
-      - AIOSTREAMS_AUTH_USERNAME=admin
-      - AIOSTREAMS_AUTH_PASSWORD=${ADDON_PASSWORD:-admin}
-      - SIMKL_CLIENT_SECRET=${SIMKL_CLIENT_SECRET:-}
-      - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
-      - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
-      - STREMIO_URL=http://aiostreams:3000
-      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=256
-      - SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID:-}
-      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
-      - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
-    volumes:
-      - ./data/slicksync:/app/data
-    networks:
-      - stremio-net
-    depends_on:
-      shared-redis:
-        condition: service_started
-      aiostreams:
-        condition: service_started
-      init-configs:
-        condition: service_completed_successfully
 
   # ============================================================================
   # 9. SUPPORTING SHARED DATABASES

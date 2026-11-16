@@ -27,7 +27,6 @@ ensure_directories() {
              data/subsense \
              data/redis \
              data/postgres \
-             data/slicksync \
              data/aiometadata \
              data/postersplus \
              data/infinidysk \
@@ -161,7 +160,6 @@ show_links() {
     echo -e "  • Appliance Hub (Landing Page): http://localhost:8088"
     echo -e "  • AIOStreams Portal:     http://localhost:3001"
     echo -e "  • AIOStreams Web Player: http://localhost:3001/jellyfin/web/"
-    echo -e "  • SlickSync Hub:         http://localhost:8086"
     echo -e "  • Debrid Cloud Search:   http://localhost:3011"
     echo -e "  • AIOMetadata:           http://localhost:4005"
     echo -e "  • SubSense Subtitles:    http://localhost:3100"

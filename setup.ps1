@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     AIOStreams Self-Hosted Stack Management Script & Web Bridge Server
 .DESCRIPTION
@@ -60,7 +60,6 @@ function Ensure-Directories {
         "data/subsense",
         "data/redis",
         "data/postgres",
-        "data/slicksync",
         "data/aiometadata",
         "data/postersplus",
         "data/infinidysk",
@@ -119,7 +118,6 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" },
         @{ Port = 4005; Service = "AIOMetadata" },
         @{ Port = 3100; Service = "SubSense Subtitles" },
-        @{ Port = 8086; Service = "SlickSync (Nuvio & Stremio Hub)" },
         @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
         @{ Port = 3011; Service = "Stremio Debrid Search (Personal Cloud)" },
     )
@@ -379,7 +377,6 @@ function Show-StremioLinks {
     Write-Host "  • Appliance Hub (Landing Page): http://localhost:8088"
     Write-Host "  • AIOStreams Portal:     http://localhost:3001"
     Write-Host "  • AIOStreams Web Player: http://localhost:3001/jellyfin/web/"
-    Write-Host "  • SlickSync Hub:         http://localhost:8086"
     Write-Host "  • Debrid Cloud Search:   http://localhost:3011"
     Write-Host "  • AIOMetadata:           http://localhost:4005"
     Write-Host "  • SubSense Subtitles:    http://localhost:3100"

@@ -21,7 +21,7 @@ HTTP_CHECKS = {
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
     host: TCP_PORTS[host] for host in (
         "stremthru", "flaresolverr", "subsense",
-        "postersplus", "slicksync", "zilean",
+        "postersplus", "zilean",
     )
 }}
 

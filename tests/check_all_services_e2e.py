@@ -244,12 +244,12 @@ def test_stremthru():
 
 
 
-def test_slicksync():
+def test_lumiere_db():
     try:
-        with urllib.request.urlopen("http://slicksync:3000/", timeout=5) as resp:
-            record("18. SlickSync Trakt & Sync Hub", True, "Dashboard 200 OK")
+        with urllib.request.urlopen("http://lumiere-db:8000/health", timeout=5) as resp:
+            record("18. LumiereDB IMDb Search Index", True, "Healthcheck 200 OK")
     except Exception as e:
-        record("18. SlickSync Trakt & Sync Hub", False, str(e))
+        record("18. LumiereDB IMDb Search Index", False, str(e))
 
 
 
@@ -349,7 +349,7 @@ def main():
     test_infinidysk()
     test_anime_kitsu()
     test_stremthru()
-    test_slicksync()
+    test_lumiere_db()
     test_aiostreams_and_playback()
     test_portal()
 

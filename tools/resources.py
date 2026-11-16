@@ -25,7 +25,7 @@ AIO_CONTAINERS = {
     "aiostreams", "comet", "zilean", "prowlarr",
     "flaresolverr", "stremthru", "infinidysk", "cloudflared",
     "aio-tunnel", "anime-kitsu", "aiometadata", "postersplus", "stremio-subsense",
-    "slicksync", "shared-redis", "shared-postgres",
+    "shared-redis", "shared-postgres",
     "aio-portal", "stack-bootstrap", "init-configs", "init-postgres", "aio-stack"
 }
 
