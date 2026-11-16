@@ -13,6 +13,12 @@ spec.loader.exec_module(bootstrap)
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_comet_provisioning_allows_scraping_and_debrid_to_finish(self):
+        with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "fixture-key"):
+            config = bootstrap.build_default_config(probe_services=False)
+        comet = next(p for p in config["presets"] if p["type"] == "comet")
+        self.assertGreaterEqual(comet["options"]["timeout"], 20000)
+
     def setUp(self):
         # Unit tests model availability explicitly; DNS/network delays belong in E2E checks.
         probe = patch.object(bootstrap, "is_url_reachable", return_value=True)

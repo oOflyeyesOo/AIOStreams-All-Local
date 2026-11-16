@@ -901,7 +901,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "options": {
                 "name": "Comet (Local)",
                 "url": "http://comet:8000",
-                "timeout": 8000,
+                "timeout": 20000,
                 "resources": ["stream"],
                 "includeP2P": False,
                 "removeTrash": True,
@@ -1130,9 +1130,9 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         elif ptype == "comet":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
-            curr_timeout = int(opts.get("timeout") or 10000)
-            if curr_timeout > 8000 or curr_timeout < 5000:
-                opts["timeout"] = 8000
+            # Allow the 10s scrape and 8s debrid phases to finish, plus response overhead.
+            # Keep longer template timeouts instead of resetting them during provisioning.
+            opts["timeout"] = max(int(opts.get("timeout") or 20000), 20000)
             manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
             if reachable(manifest_url, timeout=1.0):
                 p["enabled"] = True
