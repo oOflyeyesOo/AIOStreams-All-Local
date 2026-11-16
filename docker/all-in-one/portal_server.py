@@ -1474,7 +1474,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
 
         normalized_subpath = "/" + subpath.lstrip("/") if subpath else "/"
         query_str = f"?{query}" if query else ""
-        rel_url = f"{normalized_subpath}{query_str}"
+        # Prowlarr is configured with urlBase=/service-proxy/prowlarr, so it
+        # expects the full prefixed path in every request (not just the subpath).
+        if service == "prowlarr" and not normalized_subpath.startswith("/service-proxy/prowlarr"):
+            rel_url = f"/service-proxy/prowlarr{normalized_subpath}{query_str}"
+        else:
+            rel_url = f"{normalized_subpath}{query_str}"
 
         if service == "postersplus" and "access_key" not in query and normalized_subpath in ("/", "/admin", "/admin/"):
             p_key = env_vars.get("POSTERSPLUS_ACCESS_KEY") or env_vars.get("ADDON_PASSWORD", "admin")
@@ -1593,6 +1598,9 @@ button:hover {{ background: #0369a1; }}
                         new_loc = loc_path
                     else:
                         new_loc = "/jellyfin" + ("/" + loc_path.lstrip("/") if loc_path else "/")
+                elif service == "prowlarr" and loc_path.startswith("/service-proxy/prowlarr"):
+                    # Prowlarr already includes its urlBase in Location headers; pass through as-is.
+                    new_loc = loc_path
                 else:
                     new_loc = f"/service-proxy/{service}" + ("/" + loc_path.lstrip("/") if loc_path else "/")
                 if parsed_loc.query:
@@ -1612,11 +1620,9 @@ button:hover {{ background: #0369a1; }}
                 else:
                     base_href = f"/service-proxy/{service}/"
 
-                if service == "prowlarr":
-                    html_text = re.sub(r"(urlBase:\s*['\"])(['\"])", r"\1/service-proxy/prowlarr\2", html_text)
-                    html_text = re.sub(r'((?:href|src)=["\'])/(Content/|index-[^"\']+)', r'\1/service-proxy/prowlarr/\2', html_text)
-
-                if "<base" not in html_text.lower():
+                # Prowlarr now uses urlBase natively; no HTML rewriting needed.
+                # Other services still get a <base> tag injected if missing.
+                if "<base" not in html_text.lower() and service != "prowlarr":
                     base_tag = f'<base href="{base_href}">'
                     if "<head" in html_text.lower():
                         html_text = re.sub(r"(<head[^>]*>)", r"\1" + base_tag, html_text, count=1, flags=re.I)
@@ -1628,15 +1634,7 @@ button:hover {{ background: #0369a1; }}
             except Exception:
                 pass
 
-        if response_data and service == "prowlarr" and (normalized_subpath == "/initialize.json" or normalized_subpath.startswith("/initialize.json")):
-            try:
-                init_data = json.loads(response_data.decode("utf-8"))
-                if isinstance(init_data, dict):
-                    init_data["urlBase"] = "/service-proxy/prowlarr"
-                    init_data["apiRoot"] = "/service-proxy/prowlarr/api/v1"
-                    response_data = json.dumps(init_data).encode("utf-8")
-            except Exception:
-                pass
+        # initialize.json: Prowlarr returns correct urlBase/apiRoot now that urlBase is set in config.xml
 
         self._is_proxy_response = True
         try:
