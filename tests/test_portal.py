@@ -1473,6 +1473,24 @@ class PortalTests(unittest.TestCase):
             forward_cookie = captured_requests[0].headers.get("Cookie", "")
             self.assertIn("__session=test-jwt-session-token", forward_cookie)
 
+    def test_service_proxy_infinidysk_recovers_from_login_redirect(self):
+        # When backend redirects to /login (e.g. stale cookie), proxy intercepts, gets fresh session and attaches Set-Cookie
+        mock_redirect = MagicMock()
+        mock_redirect.status = 302
+        mock_redirect.headers = {"Location": "/login", "Content-Type": "text/plain"}
+        mock_redirect.read.return_value = b""
+        mock_redirect.__enter__.return_value = mock_redirect
+
+        def mock_get_session(force_refresh=False):
+            return "__session=refreshed-jwt-session-token"
+
+        with patch.object(portal, "get_infinidysk_session_cookie", side_effect=mock_get_session), \
+             patch.object(portal._PROXY_OPENER, "open", return_value=mock_redirect):
+            status, body, headers = self.request("/service-proxy/infinidysk/", auth=True)
+            self.assertEqual(status, 302)
+            set_cookie = headers.get("Set-Cookie", "")
+            self.assertIn("__session=refreshed-jwt-session-token", set_cookie)
+
     def test_service_proxy_prowlarr_rewrites_urlbase_and_injects_apikey(self):
         # 1. HTML rewrite
         mock_html_resp = MagicMock()

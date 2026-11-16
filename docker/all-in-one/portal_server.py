@@ -1285,37 +1285,45 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
 _STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
 _INFINIDYSK_SESSION = None
 
-def get_infinidysk_session_cookie():
+def get_infinidysk_session_cookie(force_refresh=False):
     global _INFINIDYSK_SESSION
+    if _INFINIDYSK_SESSION and not force_refresh:
+        return _INFINIDYSK_SESSION
     env = read_saved_env()
-    addon_pw = env.get("ADDON_PASSWORD", "admin")
-    infinidysk_url = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
-    login_url = f"{infinidysk_url}/login"
-    login_payload = urllib.parse.urlencode({"username": "admin", "password": addon_pw}).encode("utf-8")
-    req = urllib.request.Request(
-        login_url,
-        data=login_payload,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
-    try:
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
-        opener = urllib.request.build_opener(NoRedirect)
-        try:
-            resp = opener.open(req, timeout=3)
-            headers = resp.headers
-        except urllib.error.HTTPError as e:
-            headers = e.headers
+    addon_pw = env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
+    configured_url = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
+    candidates = [configured_url, "http://127.0.0.1:3005", "http://localhost:3005"]
+    seen = set()
+    unique_candidates = [c for c in candidates if not (c in seen or seen.add(c))]
 
-        cookie_header = headers.get("Set-Cookie")
-        if cookie_header:
-            match = re.search(r"(__session=[^;]+)", cookie_header)
-            if match:
-                _INFINIDYSK_SESSION = match.group(1)
-                return _INFINIDYSK_SESSION
-    except Exception:
-        pass
+    login_payload = urllib.parse.urlencode({"username": "admin", "password": addon_pw}).encode("utf-8")
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    opener = urllib.request.build_opener(NoRedirect)
+
+    for base in unique_candidates:
+        login_url = f"{base}/login"
+        req = urllib.request.Request(
+            login_url,
+            data=login_payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        try:
+            try:
+                resp = opener.open(req, timeout=3)
+                headers = resp.headers
+            except urllib.error.HTTPError as e:
+                headers = e.headers
+
+            cookie_header = headers.get("Set-Cookie")
+            if cookie_header:
+                match = re.search(r"(__session=[^;]+)", cookie_header)
+                if match:
+                    _INFINIDYSK_SESSION = match.group(1)
+                    return _INFINIDYSK_SESSION
+        except Exception:
+            continue
     return _INFINIDYSK_SESSION
 
 
@@ -1648,6 +1656,14 @@ button:hover {{ background: #0369a1; }}
                     self.send_header("Location", location)
                     continue
                 self.send_header(k, v)
+
+            if service == "infinidysk":
+                # Intercept redirects back to login (indicating stale/expired session)
+                if status_code in (302, 303, 307) and location and "/login" in location:
+                    _INFINIDYSK_SESSION = None
+                    fresh_cookie = get_infinidysk_session_cookie(force_refresh=True)
+                    if fresh_cookie:
+                        infinidysk_auto_cookie = fresh_cookie
 
             if service == "infinidysk" and infinidysk_auto_cookie:
                 self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/service-proxy/infinidysk/; SameSite=Lax")

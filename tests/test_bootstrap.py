@@ -511,3 +511,77 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(any("onboarding" in u for u in called_urls))
             self.assertTrue(any("setup-wizard-state" in u for u in called_urls))
             self.assertTrue(any("setup-wizard/skip" in u for u in called_urls))
+
+    def test_ensure_infinidysk_admin_skips_when_already_authenticated(self):
+        called_urls = []
+        def mock_urlopen(req, timeout=None):
+            url = req.full_url if hasattr(req, 'full_url') else str(req)
+            called_urls.append(url)
+            from unittest.mock import MagicMock
+            mock_resp = MagicMock()
+            if "api/authenticate" in url:
+                mock_resp.read.return_value = b'{"authenticated": true, "status": true}'
+            elif "setup-wizard-state" in url:
+                mock_resp.read.return_value = b'{"setupRequired": false, "status": true}'
+            else:
+                mock_resp.read.return_value = b'{"status": true}'
+            mock_resp.__enter__.return_value = mock_resp
+            return mock_resp
+
+        with patch.object(bootstrap, 'is_url_reachable', return_value=True), \
+             patch('urllib.request.urlopen', side_effect=mock_urlopen):
+            res = bootstrap.ensure_infinidysk_admin(addon_password="admin")
+            self.assertTrue(res)
+            self.assertTrue(any("api/authenticate" in u for u in called_urls))
+            self.assertFalse(any("onboarding" in u for u in called_urls))
+
+    def test_ensure_infinidysk_admin_reconciles_stale_account(self):
+        import tempfile, sqlite3
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_file = os.path.join(tmp_dir, "db.sqlite")
+            conn = sqlite3.connect(db_file)
+            conn.execute("CREATE TABLE Accounts (Type INTEGER, Username TEXT, PasswordHash TEXT, RandomSalt TEXT)")
+            conn.execute("CREATE TABLE SetupWizardStates (Id INTEGER PRIMARY KEY, Disposition INTEGER)")
+            conn.execute("INSERT INTO Accounts VALUES (1, 'admin', 'stale_hash', 'salt')")
+            conn.commit()
+            conn.close()
+
+            called_urls = []
+            onboarding_calls = 0
+            def mock_urlopen(req, timeout=None):
+                nonlocal onboarding_calls
+                url = req.full_url if hasattr(req, 'full_url') else str(req)
+                called_urls.append(url)
+                from unittest.mock import MagicMock
+                mock_resp = MagicMock()
+                if "api/authenticate" in url:
+                    mock_resp.read.return_value = b'{"authenticated": false, "status": true}'
+                elif "is-onboarding" in url:
+                    onboarding_calls += 1
+                    # First check is not onboarding (stale account exists), subsequent check after clear is onboarding
+                    is_onb = "true" if onboarding_calls > 1 else "false"
+                    mock_resp.read.return_value = f'{{"isOnboarding": {is_onb}, "status": true}}'.encode('utf-8')
+                elif "setup-wizard-state" in url:
+                    mock_resp.read.return_value = b'{"setupRequired": false, "status": true}'
+                else:
+                    mock_resp.read.return_value = b'{"status": true}'
+                mock_resp.__enter__.return_value = mock_resp
+                return mock_resp
+
+            try:
+                with patch.object(bootstrap, 'is_url_reachable', return_value=True), \
+                     patch.object(bootstrap, 'resolve_path', return_value=db_file), \
+                     patch('shutil.which', return_value=None), \
+                     patch('urllib.request.urlopen', side_effect=mock_urlopen):
+                    res = bootstrap.ensure_infinidysk_admin(addon_password="admin")
+                    self.assertTrue(res)
+                    # Verify Accounts table was cleared for re-onboarding
+                    check_conn = sqlite3.connect(db_file)
+                    try:
+                        cur = check_conn.cursor()
+                        cur.execute("SELECT COUNT(*) FROM Accounts")
+                        self.assertEqual(cur.fetchone()[0], 0)
+                    finally:
+                        check_conn.close()
+            finally:
+                pass

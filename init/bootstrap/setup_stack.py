@@ -535,54 +535,152 @@ def wait_for_comet(max_attempts=15, interval=2):
 def ensure_infinidysk_admin(addon_password=ADDON_PASSWORD):
     """
     Ensures InfiniDysk has an administrator account provisioned with ADDON_PASSWORD.
-    If InfiniDysk is in onboarding state or has no admin account, creates admin with addon_password
-    and marks the setup wizard as skipped so the dashboard is immediately accessible.
+    1. Resolves candidate reachable endpoints (internal docker hostname & host port mappings).
+    2. Tests if the existing admin account authenticates with addon_password via /api/authenticate.
+    3. If authentication fails, checks /api/is-onboarding or reconciles stale database accounts
+       so that admin is reliably configured with addon_password across fresh installs and upgrades.
+    4. Automatically completes/skips the initial setup wizard.
     """
-    if not is_url_reachable(INFINIDYSK_URL, timeout=1.0):
+    candidates = [
+        INFINIDYSK_URL,
+        "http://127.0.0.1:3005",
+        "http://localhost:3005",
+    ]
+    seen = set()
+    unique_candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+
+    infinidysk_url = None
+    for cand in unique_candidates:
+        if is_url_reachable(cand, timeout=1.0):
+            infinidysk_url = cand
+            break
+
+    if not infinidysk_url:
         return False
+
+    def check_auth(url):
+        try:
+            auth_data = urllib.parse.urlencode({
+                "username": "admin",
+                "password": addon_password,
+                "type": "admin"
+            }).encode("utf-8")
+            auth_req = urllib.request.Request(
+                f"{url}/api/authenticate",
+                data=auth_data,
+                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(auth_req, timeout=3) as a_resp:
+                auth_res = json.loads(a_resp.read().decode("utf-8", errors="ignore"))
+                return isinstance(auth_res, dict) and auth_res.get("authenticated") is True
+        except Exception:
+            return False
+
+    def skip_wizard(url):
+        try:
+            state_req = urllib.request.Request(
+                f"{url}/api/setup-wizard-state",
+                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(state_req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                if isinstance(data, dict) and data.get("setupRequired"):
+                    skip_req = urllib.request.Request(
+                        f"{url}/api/setup-wizard/skip",
+                        data=b"",
+                        headers={"x-api-key": SECRET_KEY, "Content-Type": "application/json"},
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(skip_req, timeout=3) as s_resp:
+                        pass
+                    print("[InfiniDysk Setup] ✓ Setup wizard completed and skipped.", flush=True)
+        except Exception:
+            pass
+
+    # 1. If admin already authenticates with addon_password, just ensure wizard is skipped
+    if check_auth(infinidysk_url):
+        skip_wizard(infinidysk_url)
+        return True
+
+    # 2. Check if InfiniDysk is in fresh onboarding state
+    is_onboarding = False
     try:
         req = urllib.request.Request(
-            f"{INFINIDYSK_URL}/api/is-onboarding",
+            f"{infinidysk_url}/api/is-onboarding",
             headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="ignore"))
             if isinstance(data, dict) and data.get("isOnboarding"):
-                create_data = urllib.parse.urlencode({
-                    "username": "admin",
-                    "password": addon_password,
-                    "confirmPassword": addon_password
-                }).encode("utf-8")
-                create_req = urllib.request.Request(
-                    f"{INFINIDYSK_URL}/onboarding",
-                    data=create_data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"}
-                )
-                with urllib.request.urlopen(create_req, timeout=5) as c_resp:
-                    pass
-                print("[InfiniDysk Setup] ✓ Provisioned admin account with master password.", flush=True)
+                is_onboarding = True
     except Exception:
         pass
 
-    try:
-        state_req = urllib.request.Request(
-            f"{INFINIDYSK_URL}/api/setup-wizard-state",
-            headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
-        )
-        with urllib.request.urlopen(state_req, timeout=3) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            if isinstance(data, dict) and data.get("setupRequired"):
-                skip_req = urllib.request.Request(
-                    f"{INFINIDYSK_URL}/api/setup-wizard/skip",
-                    data=b"",
-                    headers={"x-api-key": SECRET_KEY, "Content-Type": "application/json"},
-                    method="POST"
-                )
-                with urllib.request.urlopen(skip_req, timeout=3) as s_resp:
+    # 3. If authentication failed and not in onboarding, an admin account exists with a
+    # stale/mismatched password. Clear Accounts table in db.sqlite to force reconciliation.
+    if not is_onboarding:
+        db_candidates = [
+            resolve_path("data/infinidysk/db.sqlite", "data/infinidysk/db.sqlite"),
+            "/data/infinidysk/db.sqlite",
+            "/config/db.sqlite",
+        ]
+        db_cleared = False
+        for db_file in db_candidates:
+            if os.path.isfile(db_file):
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(db_file, timeout=5)
+                    conn.execute("DELETE FROM Accounts")
+                    conn.execute("DELETE FROM SetupWizardStates")
+                    conn.commit()
+                    conn.close()
+                    db_cleared = True
+                    break
+                except Exception:
                     pass
-                print("[InfiniDysk Setup] ✓ Setup wizard completed and skipped.", flush=True)
-    except Exception:
-        pass
+
+        if db_cleared:
+            import shutil, subprocess
+            if shutil.which("docker"):
+                try:
+                    subprocess.run(["docker", "restart", "infinidysk"], capture_output=True, timeout=15)
+                    for _ in range(15):
+                        time.sleep(1)
+                        try:
+                            req = urllib.request.Request(
+                                f"{infinidysk_url}/api/is-onboarding",
+                                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
+                            )
+                            with urllib.request.urlopen(req, timeout=2) as resp:
+                                d = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                                if isinstance(d, dict) and d.get("isOnboarding"):
+                                    is_onboarding = True
+                                    break
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+    # 4. Provision admin account with master password
+    if is_onboarding:
+        try:
+            create_data = urllib.parse.urlencode({
+                "username": "admin",
+                "password": addon_password,
+                "confirmPassword": addon_password
+            }).encode("utf-8")
+            create_req = urllib.request.Request(
+                f"{infinidysk_url}/onboarding",
+                data=create_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            with urllib.request.urlopen(create_req, timeout=5) as c_resp:
+                pass
+            print("[InfiniDysk Setup] ✓ Provisioned admin account with master password.", flush=True)
+        except Exception:
+            pass
+
+    skip_wizard(infinidysk_url)
     return True
 
 
