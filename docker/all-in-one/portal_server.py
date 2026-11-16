@@ -29,6 +29,7 @@ import sqlite3
 import http.client
 import platform
 import math
+import html
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
@@ -128,6 +129,29 @@ SERVICE_UI_PATHS = {
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
     "anime-kitsu": "/", "slicksync": "/",
 }
+
+INTERNAL_SERVICE_TARGETS = {
+    "aiostreams": ("aiostreams", 3000, 3001),
+    "aiometadata": ("aiometadata", 4005, 4005),
+    "prowlarr": ("prowlarr", 9696, 9696),
+    "zilean": ("zilean", 8181, 8181),
+    "comet": ("comet", 8000, 8000),
+    "slicksync": ("slicksync", 3000, 8086),
+    "stremio-web": ("stremio-web", 8080, 8082),
+    "nuvio": ("nuvio-web", 3000, 8085),
+    "flaresolverr": ("flaresolverr", 8191, 8191),
+    "postersplus": ("postersplus", 8000, 9039),
+    "subsense": ("stremio-subsense", 3100, 3100),
+    "stremthru": ("stremthru", 8080, 8080),
+    "anime-kitsu": ("anime-kitsu", 7000, 7005),
+    "infinidysk": ("infinidysk", 3000, 3005),
+}
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+_PROXY_OPENER = urllib.request.build_opener(NoRedirectHandler)
 
 def probe_integration(item):
     import socket
@@ -1027,10 +1051,13 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=WEB_ROOT, **kwargs)
 
     def end_headers(self):
+        if getattr(self, "_is_proxy_response", False):
+            super().end_headers()
+            return
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Referrer-Policy", "same-origin")
         self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http: https:; frame-src 'self' http: https: data: blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';")
         super().end_headers()
 
@@ -1143,9 +1170,222 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return None
         return super().send_head()
 
+    def proxy_to_service(self, service, subpath, query="", is_alias=False):
+        if service not in INTERNAL_SERVICE_TARGETS:
+            self.send_error(404, f"Service '{service}' not found")
+            return
+
+        container, internal_port, default_host_port = INTERNAL_SERVICE_TARGETS[service]
+        env_vars = read_saved_env()
+        custom_port_var = f"PORT_{service.upper().replace('-', '_')}"
+        host_port = int(env_vars.get(custom_port_var) or os.environ.get(custom_port_var) or default_host_port)
+
+        candidates = []
+        for c in (f"http://{container}:{internal_port}", f"http://127.0.0.1:{host_port}"):
+            if c not in candidates:
+                candidates.append(c)
+
+        normalized_subpath = "/" + subpath.lstrip("/") if subpath else "/"
+        query_str = f"?{query}" if query else ""
+        rel_url = f"{normalized_subpath}{query_str}"
+
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except (ValueError, TypeError):
+            content_length = 0
+        body = self.rfile.read(content_length) if content_length > 0 else None
+
+        hop_by_hop = {
+            "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+            "te", "trailers", "transfer-encoding", "upgrade", "host"
+        }
+        forward_headers = {k: v for k, v in self.headers.items() if k.lower() not in hop_by_hop}
+        forward_headers["X-Forwarded-For"] = self.client_address[0]
+        forward_headers["X-Forwarded-Proto"] = "http"
+        forward_headers["X-Forwarded-Host"] = self.headers.get("Host", "localhost")
+        forward_headers["Accept-Encoding"] = "identity"
+
+        status_code = None
+        resp_headers = None
+        response_data = None
+        last_error = None
+
+        for base in candidates:
+            target_url = f"{base}{rel_url}"
+            try:
+                req = urllib.request.Request(
+                    target_url,
+                    data=body,
+                    headers=forward_headers,
+                    method=self.command
+                )
+                try:
+                    with _PROXY_OPENER.open(req, timeout=10) as resp:
+                        status_code = resp.status
+                        resp_headers = resp.headers
+                        response_data = resp.read()
+                        break
+                except urllib.error.HTTPError as e:
+                    status_code = e.code
+                    resp_headers = e.headers
+                    response_data = e.read()
+                    break
+            except Exception as e:
+                last_error = e
+                continue
+
+        if status_code is None:
+            self._is_proxy_response = True
+            try:
+                self.send_response(502)
+                self.send_header("X-Frame-Options", "SAMEORIGIN")
+                accept = self.headers.get("Accept", "")
+                if "application/json" in accept and "text/html" not in accept:
+                    self.send_header("Content-Type", "application/json")
+                    err_bytes = json.dumps({
+                        "error": "Bad Gateway",
+                        "service": service,
+                        "detail": f"Could not connect to {service} internally: {type(last_error).__name__}"
+                    }).encode()
+                    self.send_header("Content-Length", str(len(err_bytes)))
+                    self.end_headers()
+                    self.wfile.write(err_bytes)
+                else:
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    html_msg = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{html.escape(service)} Initializing</title>
+<style>
+body {{ background: #0b0f19; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+.card {{ background: #131b2e; border: 1px solid #1e293b; border-radius: 12px; padding: 32px; max-width: 440px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
+h2 {{ margin-top: 0; color: #38bdf8; font-size: 1.25rem; font-weight: 700; }}
+p {{ color: #94a3b8; font-size: 0.9rem; line-height: 1.5; }}
+.spinner {{ width: 32px; height: 32px; border: 3px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }}
+@keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+button {{ background: #0284c7; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 14px; }}
+button:hover {{ background: #0369a1; }}
+</style></head>
+<body><div class="card"><div class="spinner"></div><h2>Connecting to {html.escape(service)}</h2><p>The container is currently initializing on the internal Docker network. Please wait a moment and retry.</p><button onclick="location.reload()">Retry Connection</button></div></body></html>"""
+                    err_bytes = html_msg.encode("utf-8")
+                    self.send_header("Content-Length", str(len(err_bytes)))
+                    self.end_headers()
+                    self.wfile.write(err_bytes)
+            finally:
+                self._is_proxy_response = False
+            return
+
+        location = resp_headers.get("Location")
+        if location and status_code in (301, 302, 303, 307, 308):
+            parsed_loc = urllib.parse.urlsplit(location)
+            if not parsed_loc.netloc or parsed_loc.netloc in (f"{container}:{internal_port}", f"127.0.0.1:{host_port}", f"localhost:{host_port}"):
+                loc_path = parsed_loc.path or "/"
+                if is_alias:
+                    if loc_path.startswith("/jellyfin"):
+                        new_loc = loc_path
+                    else:
+                        new_loc = "/jellyfin" + ("/" + loc_path.lstrip("/") if loc_path else "/")
+                else:
+                    new_loc = f"/service-proxy/{service}" + ("/" + loc_path.lstrip("/") if loc_path else "/")
+                if parsed_loc.query:
+                    new_loc += f"?{parsed_loc.query}"
+                location = new_loc
+
+        content_type = resp_headers.get("Content-Type", "")
+        if response_data and "text/html" in content_type.lower():
+            try:
+                encoding = "utf-8"
+                match = re.search(r"charset=([a-zA-Z0-9_-]+)", content_type, re.I)
+                if match:
+                    encoding = match.group(1)
+                html_text = response_data.decode(encoding, errors="replace")
+                if is_alias:
+                    base_href = "/jellyfin/web/" if "/web" in normalized_subpath else "/jellyfin/"
+                else:
+                    base_href = f"/service-proxy/{service}/"
+
+                if "<base" not in html_text.lower():
+                    base_tag = f'<base href="{base_href}">'
+                    if "<head" in html_text.lower():
+                        html_text = re.sub(r"(<head[^>]*>)", r"\1" + base_tag, html_text, count=1, flags=re.I)
+                    elif "<html" in html_text.lower():
+                        html_text = re.sub(r"(<html[^>]*>)", r"\1<head>" + base_tag + "</head>", html_text, count=1, flags=re.I)
+                    else:
+                        html_text = base_tag + html_text
+                    response_data = html_text.encode(encoding)
+            except Exception:
+                pass
+
+        self._is_proxy_response = True
+        try:
+            self.send_response(status_code)
+            for k, v in resp_headers.items():
+                k_lower = k.lower()
+                if k_lower in ("transfer-encoding", "content-length", "connection", "accept-ranges"):
+                    continue
+                if k_lower == "x-frame-options":
+                    self.send_header("X-Frame-Options", "SAMEORIGIN")
+                    continue
+                if k_lower == "content-security-policy":
+                    v = re.sub(r"frame-ancestors\s+[^;]+;?", "frame-ancestors 'self';", v, flags=re.I)
+                    self.send_header(k, v)
+                    continue
+                if k_lower == "location" and location:
+                    self.send_header("Location", location)
+                    continue
+                self.send_header(k, v)
+
+            if "x-frame-options" not in [k.lower() for k in resp_headers.keys()]:
+                self.send_header("X-Frame-Options", "SAMEORIGIN")
+
+            if response_data is not None:
+                self.send_header("Content-Length", str(len(response_data)))
+            self.end_headers()
+
+            if self.command != "HEAD" and response_data:
+                self.wfile.write(response_data)
+        finally:
+            self._is_proxy_response = False
+
+    def handle_proxy_route(self, path, query=""):
+        if path in ("/service-proxy", "/service-proxy/"):
+            self.send_error(404, "Specify a service: /service-proxy/<service>/")
+            return
+        if path.startswith("/service-proxy/"):
+            rest = path[len("/service-proxy/"):]
+            service, sep, subpath = rest.partition("/")
+            if not sep:
+                qs = f"?{query}" if query else ""
+                self.send_response(302)
+                self.send_header("Location", f"/service-proxy/{service}/{qs}")
+                self.end_headers()
+                return
+            self.proxy_to_service(service, "/" + subpath, query, is_alias=False)
+            return
+        if path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.proxy_to_service("aiostreams", path, query, is_alias=True)
+            return
+
+    def check_proxy_referer_fallback(self, path, query=""):
+        referer = self.headers.get("Referer", "")
+        if not referer:
+            return False
+        match = re.search(r"/service-proxy/([a-zA-Z0-9_-]+)(?:/|$)", referer)
+        if match:
+            service = match.group(1)
+            if service in INTERNAL_SERVICE_TARGETS:
+                self.proxy_to_service(service, path, query, is_alias=False)
+                return True
+        elif "/jellyfin" in referer and "aiostreams" in INTERNAL_SERVICE_TARGETS:
+            self.proxy_to_service("aiostreams", path, query, is_alias=True)
+            return True
+        return False
+
     def do_OPTIONS(self):
         url_parts = urllib.parse.urlsplit(self.path)
         path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
         if path in ("/api/aniskip", "/aniskip"):
             self.send_response(200)
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -1162,6 +1402,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         url_parts = urllib.parse.urlparse(self.path)
         path = url_parts.path
+
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
 
         if path in ("/api/aniskip", "/aniskip"):
             query = urllib.parse.parse_qs(url_parts.query)
@@ -1294,6 +1538,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                     ui_url = service_ui_url(service, self.headers.get("Host", "localhost"), env)
                     if ui_url:
                         item["uiUrl"] = ui_url
+                    proxy_path = SERVICE_UI_PATHS.get(service, "/")
+                    item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
             self.json_response({"integrations": integrations})
             return
         if path == "/api/maintenance":
@@ -1486,14 +1732,20 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
 
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+
         return super().do_GET()
 
     def do_POST(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
         if os.environ.get("AIO_STARTUP_ONLY") == "true":
             self.json_response({"error": "Appliance is still starting. Wait for the setup portal before saving settings."}, 503)
             return
-        url_parts = urllib.parse.urlparse(self.path)
-        path = url_parts.path
         if not self.authorize():
             return
         if not self.request_origin_is_local():
@@ -1694,10 +1946,53 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_api_backups_prune()
             return
 
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+
         self.send_response(404)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode("utf-8"))
+
+    def do_HEAD(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+        return super().do_HEAD()
+
+    def do_PUT(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+        self.send_error(405, "Method Not Allowed")
+
+    def do_DELETE(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+        self.send_error(405, "Method Not Allowed")
+
+    def do_PATCH(self):
+        url_parts = urllib.parse.urlsplit(self.path)
+        path = url_parts.path
+        if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            self.handle_proxy_route(path, url_parts.query)
+            return
+        if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+        self.send_error(405, "Method Not Allowed")
 
     def json_response(self, data, status=200):
         try:
@@ -1885,6 +2180,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
         jellyfin_server = f"{base_url}/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else f"{base_url}/jellyfin"
         jellyfin_web_player = f"{base_url}/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else f"{base_url}/jellyfin/web"
+        jellyfin_web_player_proxy = f"/service-proxy/aiostreams/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else "/service-proxy/aiostreams/jellyfin/web/"
+        jellyfin_server_proxy = f"/service-proxy/aiostreams/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else "/service-proxy/aiostreams/jellyfin"
         resp = {
             "success": True,
             "uuid": uuid,
@@ -1896,6 +2193,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             "aiostreamsDashboard": f"{base_url}/dashboard",
             "jellyfinServer": jellyfin_server,
             "jellyfinWebPlayer": jellyfin_web_player,
+            "jellyfinWebPlayerProxy": jellyfin_web_player_proxy,
+            "jellyfinServerProxy": jellyfin_server_proxy,
             "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
             "officialWebPlayer": "https://web.aiostreams.org",
             "jellyfinEnabled": jellyfin_enabled_val,

@@ -1094,7 +1094,7 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(status, expected_status, f"Expected {expected_status} for {method} {path}")
             self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff", f"Missing nosniff on {path}")
             self.assertEqual(headers.get("X-Frame-Options"), "DENY", f"Missing X-Frame-Options on {path}")
-            self.assertEqual(headers.get("Referrer-Policy"), "no-referrer", f"Missing Referrer-Policy on {path}")
+            self.assertEqual(headers.get("Referrer-Policy"), "same-origin", f"Missing Referrer-Policy on {path}")
             csp = headers.get("Content-Security-Policy", "")
             self.assertIn("frame-ancestors 'none'", csp, f"Missing frame-ancestors in CSP on {path}")
             self.assertIn("object-src 'none'", csp, f"Missing object-src in CSP on {path}")
@@ -1317,6 +1317,66 @@ class PortalTests(unittest.TestCase):
             # Non-integer rejected with 400
             status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": "abc"}, auth=True)
             self.assertEqual(status, 400)
+
+    def test_service_proxy_routing(self):
+        # 1. Unknown service returns 404
+        status, _, _ = self.request("/service-proxy/nonexistent_service/", auth=True)
+        self.assertEqual(status, 404)
+
+        # 2. Path without trailing slash redirects with 302
+        status, _, headers = self.request("/service-proxy/prowlarr", auth=True)
+        self.assertEqual(status, 302)
+        self.assertEqual(headers.get("Location"), "/service-proxy/prowlarr/")
+
+        # 3. /service-proxy alone returns 404
+        status, _, _ = self.request("/service-proxy", auth=True)
+        self.assertEqual(status, 404)
+
+        # 4. Mock upstream response with HTML, redirect, and CSP/XFO modifications
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {
+            "Content-Type": "text/html; charset=utf-8",
+            "X-Frame-Options": "DENY",
+            "Content-Security-Policy": "frame-ancestors 'none'; default-src 'self'",
+        }
+        mock_resp.read.return_value = b"<html><head><title>Prowlarr</title></head><body>Hello</body></html>"
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch.object(portal._PROXY_OPENER, "open", return_value=mock_resp):
+            status, body, headers = self.request("/service-proxy/prowlarr/", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn(b'<base href="/service-proxy/prowlarr/">', body)
+            self.assertEqual(headers.get("X-Frame-Options"), "SAMEORIGIN")
+            self.assertIn("frame-ancestors 'self';", headers.get("Content-Security-Policy", ""))
+
+        # 5. Direct alias /jellyfin routes to aiostreams
+        mock_jelly = MagicMock()
+        mock_jelly.status = 200
+        mock_jelly.headers = {"Content-Type": "text/html; charset=utf-8"}
+        mock_jelly.read.return_value = b"<html><head></head><body>Jellyfin</body></html>"
+        mock_jelly.__enter__.return_value = mock_jelly
+        with patch.object(portal._PROXY_OPENER, "open", return_value=mock_jelly):
+            status, body, _ = self.request("/jellyfin/web/index.html", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn(b'<base href="/jellyfin/web/">', body)
+
+        # 6. Referer fallback for unhandled subresources
+        with patch.object(portal._PROXY_OPENER, "open", return_value=mock_resp):
+            status, _, _ = self.request("/Content/prowlarr.css", auth=True, headers={"Referer": "http://localhost:8088/service-proxy/prowlarr/"})
+            self.assertEqual(status, 200)
+
+        # 7. Unreachable service returns 502 Bad Gateway
+        with patch.object(portal._PROXY_OPENER, "open", side_effect=OSError("Connection refused")):
+            status, body, _ = self.request("/service-proxy/prowlarr/", auth=True, headers={"Accept": "application/json"})
+            self.assertEqual(status, 502)
+            data = json.loads(body)
+            self.assertEqual(data.get("error"), "Bad Gateway")
+
+            # HTML response for browser requests without Accept: application/json
+            status_html, body_html, _ = self.request("/service-proxy/prowlarr/", auth=True)
+            self.assertEqual(status_html, 502)
+            self.assertIn(b"Connecting to prowlarr", body_html)
 
 
 if __name__ == "__main__":

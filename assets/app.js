@@ -379,6 +379,23 @@ async function loadManifest() {
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+    const serverUrl = info.jellyfinServer || `${aioBase}/jellyfin`;
+    const installAioWeb = document.getElementById('install-aiostreams-web');
+    if (installAioWeb) {
+      installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
+    }
+    const playerUrl = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
+    const aioPlayer = document.getElementById('aiostreams-player-action');
+    if (aioPlayer) {
+      aioPlayer.href = playerUrl;
+      aioPlayer.style.display = 'block';
+    }
+    const qcLink = document.getElementById('open-jellyfin-quickconnect');
+    if (qcLink && (!qcLink.href || qcLink.href.endsWith('#'))) {
+      qcLink.href = `${aioBase}/jellyfin/quickconnect`;
+    }
   }
   if (info.aiometadataProfileUuid) {
     const uuidSpan = document.getElementById('aiom-active-uuid');
@@ -447,9 +464,10 @@ function closeServiceViewer() {
 window.closeServiceViewer = closeServiceViewer;
 
 function canEmbedService(value) {
+  if (!value) return false;
   try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || (url.protocol === 'http:' && location.protocol === 'http:');
+    const url = new URL(value, location.origin);
+    return url.origin === location.origin || url.protocol === 'https:' || (url.protocol === 'http:' && location.protocol === 'http:');
   } catch (_) {
     return false;
   }
@@ -580,7 +598,14 @@ async function refreshServices() {
     content.append(name, group);
     const actions = document.createElement('div');
     actions.className = 'service-card-actions';
-    if (service.uiUrl) {
+    const embedUrl = service.proxyUrl || service.uiUrl;
+    if (embedUrl) {
+      card.classList?.add?.('service-card-interactive');
+      card.addEventListener?.('click', (e) => {
+        if (!e.target?.closest?.('a') && !e.target?.closest?.('button')) {
+          openServiceViewer(service.name, embedUrl);
+        }
+      });
       const embedBtn = document.createElement('button');
       embedBtn.type = 'button';
       embedBtn.className = 'service-embed-btn';
@@ -589,21 +614,24 @@ async function refreshServices() {
       embedBtn.setAttribute('aria-label', `View ${service.name} in embedded viewer`);
       embedBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openServiceViewer(service.name, service.uiUrl);
+        openServiceViewer(service.name, embedUrl);
       });
-      if (canEmbedService(service.uiUrl)) actions.append(embedBtn);
+      if (canEmbedService(embedUrl)) actions.append(embedBtn);
 
       const link = document.createElement('a');
       link.className = 'service-ui-link';
-      link.href = service.uiUrl;
+      link.href = service.uiUrl || embedUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.textContent = 'Open UI ↗';
       link.setAttribute('aria-label', `Open ${service.name} UI`);
       actions.append(link);
     }
-    if ((service.host === 'aiostreams' || service.name === 'AIOStreams') && cachedManifestInfo?.jellyfinEnabled === true) {
-      const playerUrl = cachedManifestInfo.jellyfinWebPlayer;
+    if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
+      const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+      const aioOrigin = service.uiUrl ? new URL(service.uiUrl, location.origin).origin : `http://${location.hostname}:${aioPort}`;
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web`;
+      const playerEmbedUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || '/service-proxy/aiostreams/jellyfin/web/' || playerUrl;
 
       const playerEmbedBtn = document.createElement('button');
       playerEmbedBtn.type = 'button';
@@ -613,9 +641,9 @@ async function refreshServices() {
       playerEmbedBtn.setAttribute('aria-label', 'Open AIOStreams Web Player in embedded viewer');
       playerEmbedBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openServiceViewer('AIOStreams Web Player', playerUrl);
+        openServiceViewer('AIOStreams Web Player', playerEmbedUrl);
       });
-      if (canEmbedService(playerUrl)) actions.append(playerEmbedBtn);
+      if (canEmbedService(playerEmbedUrl)) actions.append(playerEmbedBtn);
 
       const playerLink = document.createElement('a');
       playerLink.className = 'service-ui-link';
@@ -664,7 +692,10 @@ async function refreshServices() {
   const aioAction = document.getElementById('aiostreams-player-action');
   if (aioAction) {
     aioAction.style.display = enabled ? 'block' : 'none';
-    if (enabled) aioAction.href = info.jellyfinWebPlayer;
+    if (enabled) {
+      aioAction.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
+      aioAction.textContent = 'Open AIOStreams Web Player ↗';
+    }
   }
   const toolbar = document.getElementById('quickconnect-toolbar');
   if (toolbar) toolbar.hidden = !enabled;
@@ -1167,16 +1198,6 @@ function renderPlaybackReadiness() {
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
   if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';
   if (ready && currentManifest) {
-  }
-  const step1 = document.getElementById('guide-step-1');
-  const step2 = document.getElementById('guide-step-2');
-  const step3 = document.getElementById('guide-step-3');
-  if (step1 && step2 && step3) {
-    step1.classList?.toggle?.('active', !running && !ready);
-    step1.classList?.toggle?.('completed', Boolean(ready || running));
-    step2.classList?.toggle?.('active', Boolean(running || setupFormDirty));
-    step2.classList?.toggle?.('completed', Boolean(ready));
-    step3.classList?.toggle?.('active', Boolean(ready));
   }
 }
 
