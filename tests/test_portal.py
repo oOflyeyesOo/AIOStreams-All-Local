@@ -1473,6 +1473,63 @@ class PortalTests(unittest.TestCase):
             forward_cookie = captured_requests[0].headers.get("Cookie", "")
             self.assertIn("__session=test-jwt-session-token", forward_cookie)
 
+    def test_service_proxy_prowlarr_rewrites_urlbase_and_injects_apikey(self):
+        # 1. HTML rewrite
+        mock_html_resp = MagicMock()
+        mock_html_resp.status = 200
+        mock_html_resp.headers = {"Content-Type": "text/html; charset=utf-8"}
+        mock_html_resp.read.return_value = b'<!doctype html><html><head><script>window.Prowlarr = {\n  urlBase: ""\n};</script><link href="/Content/styles.css" rel="stylesheet"><script src="/index-123.js"></script></head><body></body></html>'
+        mock_html_resp.__enter__.return_value = mock_html_resp
+
+        with patch.object(portal._PROXY_OPENER, "open", return_value=mock_html_resp):
+            status, body, _ = self.request("/service-proxy/prowlarr/", auth=True)
+            self.assertEqual(status, 200)
+            body_str = body.decode("utf-8")
+            self.assertIn('urlBase: "/service-proxy/prowlarr"', body_str)
+            self.assertIn('/service-proxy/prowlarr/Content/styles.css', body_str)
+            self.assertIn('/service-proxy/prowlarr/index-123.js', body_str)
+
+        # 2. initialize.json rewrite
+        mock_init_resp = MagicMock()
+        mock_init_resp.status = 200
+        mock_init_resp.headers = {"Content-Type": "application/json"}
+        mock_init_resp.read.return_value = b'{"apiRoot": "/api/v1", "urlBase": "", "apiKey": "test-key"}'
+        mock_init_resp.__enter__.return_value = mock_init_resp
+
+        with patch.object(portal._PROXY_OPENER, "open", return_value=mock_init_resp):
+            status, body, _ = self.request("/service-proxy/prowlarr/initialize.json", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertEqual(data["urlBase"], "/service-proxy/prowlarr")
+            self.assertEqual(data["apiRoot"], "/service-proxy/prowlarr/api/v1")
+
+        # 3. API Key injection
+        captured = []
+        mock_api_resp = MagicMock()
+        mock_api_resp.status = 200
+        mock_api_resp.headers = {"Content-Type": "application/json"}
+        mock_api_resp.read.return_value = b'{"indexers": []}'
+        mock_api_resp.__enter__.return_value = mock_api_resp
+
+        def capture_open(req, *args, **kwargs):
+            captured.append(req)
+            return mock_api_resp
+
+        with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open), \
+             patch.dict(os.environ, {"PROWLARR_API_KEY": "prowlarr-secret-key"}), \
+             patch.object(portal, "read_saved_env", return_value={"PROWLARR_API_KEY": "prowlarr-secret-key"}):
+            status, body, _ = self.request("/service-proxy/prowlarr/api/v1/indexerstats", auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(len(captured) > 0)
+            self.assertEqual(captured[0].headers.get("X-api-key"), "prowlarr-secret-key")
+
+        # 4. Referer fallback for /api/v1/... routes without /service-proxy/ prefix
+        captured.clear()
+        with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
+            status, body, _ = self.request("/api/v1/indexerstats", auth=False, headers={"Referer": "http://localhost:8088/service-proxy/prowlarr/"})
+            self.assertEqual(status, 200)
+            self.assertTrue(len(captured) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

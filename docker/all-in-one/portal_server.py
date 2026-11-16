@@ -1503,6 +1503,11 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                 if infinidysk_auto_cookie:
                     forward_headers["Cookie"] = f"{existing_cookie}; {infinidysk_auto_cookie}".strip("; ") if existing_cookie else infinidysk_auto_cookie
 
+        if service == "prowlarr":
+            if "x-api-key" not in [k.lower() for k in forward_headers]:
+                prowlarr_key = env_vars.get("PROWLARR_API_KEY") or os.environ.get("PROWLARR_API_KEY") or "prowlarr_internal_secret_key_99"
+                forward_headers["X-Api-Key"] = prowlarr_key
+
         status_code = None
         resp_headers = None
         response_data = None
@@ -1599,6 +1604,10 @@ button:hover {{ background: #0369a1; }}
                 else:
                     base_href = f"/service-proxy/{service}/"
 
+                if service == "prowlarr":
+                    html_text = re.sub(r"(urlBase:\s*['\"])(['\"])", r"\1/service-proxy/prowlarr\2", html_text)
+                    html_text = re.sub(r'((?:href|src)=["\'])/(Content/|index-[^"\']+)', r'\1/service-proxy/prowlarr/\2', html_text)
+
                 if "<base" not in html_text.lower():
                     base_tag = f'<base href="{base_href}">'
                     if "<head" in html_text.lower():
@@ -1608,6 +1617,16 @@ button:hover {{ background: #0369a1; }}
                     else:
                         html_text = base_tag + html_text
                     response_data = html_text.encode(encoding)
+            except Exception:
+                pass
+
+        if response_data and service == "prowlarr" and (normalized_subpath == "/initialize.json" or normalized_subpath.startswith("/initialize.json")):
+            try:
+                init_data = json.loads(response_data.decode("utf-8"))
+                if isinstance(init_data, dict):
+                    init_data["urlBase"] = "/service-proxy/prowlarr"
+                    init_data["apiRoot"] = "/service-proxy/prowlarr/api/v1"
+                    response_data = json.dumps(init_data).encode("utf-8")
             except Exception:
                 pass
 
@@ -1799,6 +1818,8 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"status": "ready", "manifest": manifest.get("id")})
             except (OSError, ValueError, TypeError, json.JSONDecodeError, urllib.error.URLError):
                 self.json_response({"status": "starting", "manifest": "unavailable"}, 503)
+            return
+        if path.startswith("/api/v1/") and self.check_proxy_referer_fallback(path, url_parts.query):
             return
         if (path.startswith("/api/") or path in ("/", "/index.html", "/dashboard", "/dashboard.html")) and not self.authorize():
             return
@@ -2053,6 +2074,8 @@ button:hover {{ background: #0369a1; }}
         path = url_parts.path
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
             self.handle_proxy_route(path, url_parts.query)
+            return
+        if path.startswith("/api/v1/") and self.check_proxy_referer_fallback(path, url_parts.query):
             return
         if os.environ.get("AIO_STARTUP_ONLY") == "true":
             self.json_response({"error": "Appliance is still starting. Wait for the setup portal before saving settings."}, 503)
