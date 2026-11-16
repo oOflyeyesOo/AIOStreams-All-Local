@@ -1247,6 +1247,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     "usenet": False
                 }
             })
+        if not any(p.get("type") == "zilean" for p in presets):
+            presets.append({
+                "type": "zilean",
+                "instanceId": "zilean-local",
+                "enabled": os.environ.get("ENABLE_DMM", "true").lower() != "false",
+                "options": {
+                    "name": "Zilean DMM (Local)",
+                    "url": "http://zilean:8181",
+                    "timeout": 5000,
+                    "resources": ["stream"],
+                    "mediaTypes": [],
+                    "useMultipleInstances": False
+                }
+            })
 
     subtitle_config = {"languages": ["eng"]}
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
@@ -1341,6 +1355,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['useMultipleInstances']=False
             curr_timeout = int(opts.get("timeout") or 15000)
             opts["timeout"] = 8000
+            validated_presets.append(p)
+        elif ptype == "zilean":
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                continue
+            opts["url"] = "http://zilean:8181"
+            opts["timeout"] = int(opts.get("timeout") or 5000)
+            dmm_enabled = os.environ.get("ENABLE_DMM", "true").lower() != "false"
+            if dmm_enabled and (not probe_services or reachable("http://zilean:8181/dmm/filtered?query=ping", timeout=1.0)):
+                p["enabled"] = True
+                print("[AIOStreams Setup] ✓ Zilean DMM (Local) is online and active.", flush=True)
+            else:
+                p["enabled"] = False
+                print("[AIOStreams Setup] ℹ️ Zilean is unreachable or DMM disabled; preset disabled.", flush=True)
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.

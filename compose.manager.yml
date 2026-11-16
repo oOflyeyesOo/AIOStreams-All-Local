@@ -108,6 +108,7 @@ services:
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
     - postersplus-data:/app/data/postersplus
+    - lumiere-db-data:/app/data/lumiere-db
     - stremthru-data:/app/data/stremthru
     - subsense-data:/app/data/subsense
     - redis-data:/app/data/redis
@@ -207,6 +208,8 @@ services:
     - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
     - COMET_URL=["http://comet:8000"]
     - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
+    - BUILTIN_ZILEAN_URL=${BUILTIN_ZILEAN_URL:-http://zilean:8181}
+    - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
     - BUILTIN_PROWLARR_URL=http://prowlarr:9696
     - BUILTIN_PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
     - BUILTIN_STREMTHRU_URL=http://stremthru:8080
@@ -353,15 +356,16 @@ services:
     - infinidysk-data:/infinidysk
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
-    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams;\n  if grep -q '\\\
-      \"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
+    - lumiere-db-data:/lumiere-db
+    command: "sh -c \"\n  mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;\n \
+      \ if grep -q '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
       \ fi;\n  if [ ! -f /prowlarr/config.xml ]; then\n    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
       \ > /prowlarr/config.xml;\n  else\n    sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey>|g'\
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
       \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams\
-      \ 2>/dev/null || true;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true;\
-      \ fi;\n\"\n"
+      \ /lumiere-db 2>/dev/null || true;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null\
+      \ || true; fi;\n\"\n"
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     restart: unless-stopped
@@ -659,6 +663,7 @@ services:
     - ADMIN_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
     - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
     - IMAGE_PROXY_SIGNING_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+    - LUMIERE_API_BASE=${LUMIERE_API_BASE:-http://lumiere-db:8000}
     - CACHE_WARMUP_ON_STARTUP=true
     - NODE_ENV=production
     - NODE_OPTIONS=--max-old-space-size=384
@@ -681,6 +686,30 @@ services:
         condition: service_started
       init-postgres:
         condition: service_completed_successfully
+      init-configs:
+        condition: service_completed_successfully
+  lumiere-db:
+    image: ghcr.io/0xconstant1/lumiere-db:latest
+    restart: unless-stopped
+    stop_grace_period: 75s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    mem_limit: ${LUMIERE_MEM_LIMIT:-512m}
+    environment:
+    - PORT=8000
+    - ETL_POLL_INTERVAL=1h
+    - ETL_REBUILD_WINDOW=
+    - TZ=UTC
+    - CACHE_MAX_BYTES=256MB
+    - SUGGEST_ENABLED=false
+    volumes:
+    - lumiere-db-data:/data
+    networks:
+    - stremio-net
+    depends_on:
       init-configs:
         condition: service_completed_successfully
   postersplus:
@@ -860,6 +889,7 @@ volumes:
   aiometadata-data: {}
   infinidysk-data: {}
   postersplus-data: {}
+  lumiere-db-data: {}
   stremthru-data: {}
   subsense-data: {}
   redis-data: {}

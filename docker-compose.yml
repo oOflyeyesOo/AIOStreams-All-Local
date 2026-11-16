@@ -169,6 +169,8 @@ services:
       # --- Internal Local Scraper Endpoints ---
       - COMET_URL=["http://comet:8000"]
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
+      - BUILTIN_ZILEAN_URL=${BUILTIN_ZILEAN_URL:-http://zilean:8181}
+      - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
 
       # --- Internal Tracker Integrations ---
       - BUILTIN_PROWLARR_URL=http://prowlarr:9696
@@ -326,9 +328,10 @@ services:
       - ./data/infinidysk:/infinidysk
       - ./data/postersplus:/postersplus
       - ./data/aiostreams:/aiostreams
+      - ./data/lumiere-db:/lumiere-db
     command: >
       sh -c "
-        mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams;
+        mkdir -p /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;
         if grep -q '\"uuid\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json; fi;
         if [ ! -f /prowlarr/config.xml ]; then
           echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>' > /prowlarr/config.xml;
@@ -339,7 +342,7 @@ services:
             sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g' /prowlarr/config.xml;
           fi;
         fi;
-        chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams 2>/dev/null || true;
+        chmod -R 777 /prowlarr /slicksync /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db 2>/dev/null || true;
         if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;
       "
 
@@ -629,6 +632,7 @@ services:
       - ADMIN_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
       - IMAGE_PROXY_SIGNING_SECRET=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
+      - LUMIERE_API_BASE=${LUMIERE_API_BASE:-http://lumiere-db:8000}
       - CACHE_WARMUP_ON_STARTUP=true
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=384
@@ -649,6 +653,30 @@ services:
         condition: service_started
       init-postgres:
         condition: service_completed_successfully
+      init-configs:
+        condition: service_completed_successfully
+
+  # LumiereDB (High-performance local SQLite FTS5 IMDb title search index for AIOMetadata)
+  lumiere-db:
+    image: ghcr.io/0xconstant1/lumiere-db:latest
+    container_name: lumiere-db
+    profiles: ["scrapers", "all"]
+    restart: unless-stopped
+    stop_grace_period: 75s
+    logging: *default-logging
+    mem_limit: ${LUMIERE_MEM_LIMIT:-512m}
+    environment:
+      - PORT=8000
+      - ETL_POLL_INTERVAL=1h
+      - ETL_REBUILD_WINDOW=
+      - TZ=UTC
+      - CACHE_MAX_BYTES=256MB
+      - SUGGEST_ENABLED=false
+    volumes:
+      - ./data/lumiere-db:/data
+    networks:
+      - stremio-net
+    depends_on:
       init-configs:
         condition: service_completed_successfully
 
