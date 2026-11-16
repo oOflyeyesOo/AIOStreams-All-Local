@@ -59,6 +59,49 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
+
+  /* Canonical Design Tokens (Roadmap §7) */
+  --color-bg: var(--bg);
+  --color-surface: var(--panel);
+  --color-surface-raised: var(--panel-elevated);
+  --color-surface-sunken: var(--panel-sunken);
+  --color-border: var(--panel-border);
+  --color-border-hover: var(--panel-border-hover);
+  --color-accent: var(--accent-cyan);
+  --color-accent-hover: var(--accent-cyan-hover);
+  --color-accent-muted: var(--accent-cyan-bg);
+  --color-text-primary: var(--text-main);
+  --color-text-secondary: var(--text-sub);
+  --color-text-disabled: var(--text-muted);
+  --color-text-on-accent: #04131f;
+
+  /* Semantic Status Tokens */
+  --color-status-ok: var(--green);
+  --color-status-warn: var(--amber);
+  --color-status-error: var(--red);
+  --color-status-info: var(--accent-cyan);
+  --color-status-neutral: var(--text-muted);
+
+  /* Typography Scale Tokens */
+  --text-heading-lg: 1.35rem;
+  --text-heading-md: 1.12rem;
+  --text-heading-sm: 0.95rem;
+  --text-body: 0.9rem;
+  --text-label: 0.78rem;
+  --text-caption: 0.72rem;
+  --text-code: 0.82rem;
+
+  /* Focus & Motion Tokens */
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* Base Reset & Global Styles */
@@ -146,13 +189,58 @@ main {
 
 /* Topbar Header */
 .topbar {
-  height: 76px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
   border-bottom: 1px solid var(--line);
-  position: relative;
-  z-index: 20;
+  position: sticky;
+  top: 0;
+  background: rgba(9, 13, 18, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 100;
+  margin: 0 -40px 24px -40px;
+  padding: 0 40px;
+}
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast) var(--easing-default);
+}
+
+.topbar-nav-link:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-action-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-default);
 }
 
 .brand {
@@ -2473,4 +2561,173 @@ main { max-width: 1600px; }
   #startup-readiness, .primary-manifest { grid-template-columns: minmax(0, 1fr); }
   #startup-readiness #stack-next-actions { justify-content: flex-start; }
   .playback-actions { flex-wrap: wrap; }
+}
+
+/* Modern Button Tiers (Roadmap §7) */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, #0284c7 100%);
+  color: #04131f !important;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-default);
+  box-shadow: 0 2px 8px var(--accent-cyan-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-cyan-hover) 0%, #0369a1 100%);
+  box-shadow: 0 4px 14px var(--accent-cyan-glow);
+  transform: translateY(-1px);
+}
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main) !important;
+  font-weight: 500;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-default);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--panel-border-hover);
+}
+.btn-destructive {
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--color-status-error) !important;
+  font-weight: 500;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-default);
+}
+.btn-destructive:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: var(--color-status-error);
+}
+
+/* Service frame header back button (Roadmap §8.10) */
+.service-frame-back-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--accent-cyan) !important;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-default);
+}
+.service-frame-back-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--accent-cyan);
+}
+
+/* Floating Sticky Save Bar (Roadmap §2 & §9) */
+.sticky-save-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 23, 32, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 24px var(--accent-cyan-bg);
+  border-radius: var(--radius-md);
+  padding: 10px 22px;
+  z-index: 999;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sticky-save-bar[hidden] {
+  display: none !important;
+}
+.sticky-save-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.sticky-save-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--text-main);
+  font-size: 14px;
+}
+.save-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  box-shadow: 0 0 10px var(--accent-gold);
+  animation: pulseDot 2s infinite;
+}
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.sticky-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Toast Container & Notification Stack (Roadmap §9) */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10000;
+  pointer-events: none;
+}
+.toast-card {
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 420px;
+  background: rgba(17, 23, 32, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-elevated);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-main);
+  font-size: 13.5px;
+  animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
+}
+.toast-card.toast-success {
+  border-left: 4px solid var(--green);
+}
+.toast-card.toast-error {
+  border-left: 4px solid var(--red);
+  background: rgba(35, 14, 18, 0.95);
+}
+.toast-card.toast-info {
+  border-left: 4px solid var(--accent-cyan);
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
 }

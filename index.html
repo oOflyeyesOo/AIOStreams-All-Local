@@ -7,7 +7,21 @@
 </head>
 <body>
 <main>
-<header class="topbar" role="banner"><a class="brand" href="/" aria-label="AIO Local home"><span class="brand-icon">a<span>i</span>o</span><span>AIO<span class="muted"> / LOCAL</span></span></a><span class="host-badge"><span class="status-dot"></span> LOCAL INSTANCE</span></header>
+<header class="topbar" role="banner">
+  <a class="brand" href="/" aria-label="AIO Local home"><span class="brand-icon">a<span>i</span>o</span><span>AIO<span class="muted"> / LOCAL</span></span></a>
+  <nav class="topbar-nav" aria-label="Main Navigation">
+    <a href="#setup" class="topbar-nav-link">Setup</a>
+    <a href="#integrations" class="topbar-nav-link">Services</a>
+    <a href="#telemetry" class="topbar-nav-link">Health</a>
+    <a href="#operations" class="topbar-nav-link">Diagnostics</a>
+    <a href="#maintenance" class="topbar-nav-link">Tools</a>
+  </nav>
+  <div class="topbar-actions">
+    <a id="topbar-open-player" class="btn-primary topbar-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Player ↗</a>
+    <button type="button" id="topbar-copy-manifest" class="btn-secondary topbar-action-btn" style="display:none;" title="Copy primary manifest URL">Copy Manifest ⧉</button>
+    <span class="host-badge"><span class="status-dot"></span> LOCAL</span>
+  </div>
+</header>
 <section id="startup-readiness" class="startup-readiness waiting" aria-labelledby="startup-title">
   <div class="stack-status" role="status">
     <h1 id="startup-title">Checking your stack</h1>
@@ -598,6 +612,7 @@
 </dialog>
 <dialog id="service-frame-modal" class="service-frame-dialog" aria-labelledby="service-frame-title" aria-modal="true">
   <div class="service-frame-header">
+    <button type="button" id="service-frame-back" class="service-frame-back-btn" aria-label="Back to Portal">← Back to Portal</button>
     <div class="service-frame-title-group">
       <span class="service-frame-badge">ADMIN VIEW</span>
       <h2 id="service-frame-title">Service Viewer</h2>
@@ -614,5 +629,18 @@
   </div>
 </dialog>
 </main>
+<div id="sticky-save-bar" class="sticky-save-bar" hidden>
+  <div class="sticky-save-content">
+    <div class="sticky-save-text">
+      <span class="save-status-dot"></span>
+      <span id="save-status-label">Unsaved changes detected</span>
+    </div>
+    <div class="sticky-save-actions">
+      <button type="button" id="btn-discard-changes" class="btn-secondary">Discard</button>
+      <button type="button" id="btn-save-apply" class="btn-primary">Save &amp; Apply</button>
+    </div>
+  </div>
+</div>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
 <div id="toast" role="status" hidden></div>
 </body></html>

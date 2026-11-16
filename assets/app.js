@@ -192,20 +192,44 @@ async function api(path, options, attempt=0) {
 }
 function notify(message, isError = false) {
   const toast = document.getElementById('toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.hidden = false;
-  if (isError) {
-    toast.style.borderColor = 'rgba(244, 63, 94, 0.4)';
-    toast.style.background = '#2a1215';
-    toast.style.color = '#fecdd3';
-  } else {
-    toast.style.borderColor = '';
-    toast.style.background = '';
-    toast.style.color = '';
+  if (toast) {
+    toast.textContent = message;
+    toast.hidden = false;
+    if (isError) {
+      toast.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+      toast.style.background = '#2a1215';
+      toast.style.color = '#fecdd3';
+    } else {
+      toast.style.borderColor = '';
+      toast.style.background = '';
+      toast.style.color = '';
+    }
+    clearTimeout(notify.timer);
+    notify.timer = setTimeout(() => { toast.hidden = true; }, 5000);
   }
-  clearTimeout(notify.timer);
-  notify.timer = setTimeout(() => { toast.hidden = true; }, 5000);
+
+  // Modern Toast Stack (Roadmap §9)
+  const container = document.getElementById('toast-container');
+  if (container) {
+    const card = document.createElement('div');
+    card.className = `toast-card ${isError ? 'toast-error' : 'toast-success'}`;
+    const icon = document.createElement('span');
+    icon.textContent = isError ? '⚠️' : '✓';
+    const text = document.createElement('span');
+    text.textContent = message;
+    card.append(icon, text);
+    container.appendChild(card);
+
+    while (container.children.length > 3) {
+      container.removeChild(container.firstChild);
+    }
+
+    setTimeout(() => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(20px)';
+      setTimeout(() => { card.remove(); }, 200);
+    }, 3800);
+  }
 }
 function flashStatus(message, isError = false) {
   notify(message, isError);
@@ -391,6 +415,15 @@ async function loadManifest() {
     if (aioPlayer) {
       aioPlayer.href = playerUrl;
       aioPlayer.style.display = 'block';
+    }
+    const topbarPlayer = document.getElementById('topbar-open-player');
+    if (topbarPlayer) {
+      topbarPlayer.href = playerUrl;
+      topbarPlayer.style.display = 'inline-flex';
+    }
+    const topbarCopy = document.getElementById('topbar-copy-manifest');
+    if (topbarCopy) {
+      topbarCopy.style.display = currentManifest ? 'inline-flex' : 'none';
     }
     const qcLink = document.getElementById('open-jellyfin-quickconnect');
     if (qcLink && (!qcLink.href || qcLink.href.endsWith('#'))) {
@@ -672,11 +705,18 @@ async function refreshServices() {
   const info = cachedManifestInfo;
   const enabled = info?.jellyfinEnabled === true && info.uuid && aioSvc && aioSvc.enabled !== false;
   const aioAction = document.getElementById('aiostreams-player-action');
+  const topbarPlayer = document.getElementById('topbar-open-player');
   if (aioAction) {
     aioAction.style.display = enabled ? 'block' : 'none';
     if (enabled) {
       aioAction.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
       aioAction.textContent = 'Open AIOStreams Web Player ↗';
+    }
+  }
+  if (topbarPlayer) {
+    topbarPlayer.style.display = enabled ? 'inline-flex' : 'none';
+    if (enabled) {
+      topbarPlayer.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
     }
   }
   const toolbar = document.getElementById('quickconnect-toolbar');
@@ -1036,6 +1076,10 @@ function setFormDirty(dirty) {
   renderPlaybackReadiness();
   const syncText = document.getElementById('setup-sync-text');
   const syncDot = document.getElementById('setup-sync-dot');
+  const stickyBar = document.getElementById('sticky-save-bar');
+  if (stickyBar) {
+    stickyBar.hidden = !dirty;
+  }
   if (!syncText) return;
   if (dirty) {
     syncText.textContent = 'Unsaved changes — click "Connect my stack" to apply and sync.';
@@ -1607,9 +1651,36 @@ async function runOperations() {
     });
   }
 
+  document.getElementById('service-frame-back')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeServiceViewer();
+  });
+
   document.getElementById('service-frame-close')?.addEventListener('click', (e) => {
     e.preventDefault();
     closeServiceViewer();
+  });
+
+  document.getElementById('topbar-copy-manifest')?.addEventListener('click', (e) => {
+    if (currentManifest) {
+      copyToClipboard(currentManifest, 'AIOStreams manifest URL copied to clipboard.', e.currentTarget);
+    } else {
+      notify('Manifest URL not ready yet', true);
+    }
+  });
+
+  document.getElementById('btn-save-apply')?.addEventListener('click', () => {
+    const setupBtn = document.getElementById('setup-button');
+    if (setupBtn && !setupBtn.disabled) {
+      setupBtn.click();
+    }
+  });
+
+  document.getElementById('btn-discard-changes')?.addEventListener('click', () => {
+    loadSettings().then(() => {
+      setFormDirty(false);
+      notify('Unsaved changes discarded');
+    });
   });
 
   document.getElementById('service-frame-reload')?.addEventListener('click', () => {
@@ -1740,12 +1811,23 @@ async function runOperations() {
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key.toLowerCase() === 's')) {
         const setupForm = document.getElementById('setup-form');
         const setupBtn = document.getElementById('setup-button');
         if (setupForm && setupBtn && !setupBtn.disabled) {
           e.preventDefault();
           setupBtn.click();
+        }
+      } else if (e.key === 'Escape') {
+        const frameDialog = document.getElementById('service-frame-modal');
+        if (frameDialog && frameDialog.open) {
+          e.preventDefault();
+          closeServiceViewer();
+        }
+        const logDialog = document.getElementById('service-log-dialog');
+        if (logDialog && logDialog.open) {
+          e.preventDefault();
+          closeLogDialog();
         }
       }
     });
