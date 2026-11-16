@@ -1683,6 +1683,41 @@ async function runOperations() {
     });
   });
 
+  function revealAndScroll(hash) {
+    if (!hash || hash === '#' || !hash.startsWith('#')) return;
+    try {
+      if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+      const target = document.querySelector(hash);
+      if (target) {
+        let parent = target.parentElement;
+        while (parent) {
+          if (parent.tagName === 'DETAILS' && !parent.open) {
+            parent.open = true;
+          }
+          parent = parent.parentElement;
+        }
+        if (typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('click', (e) => {
+      const link = e.target?.closest?.('a[href^="#"]');
+      if (!link) return;
+      const hash = link.getAttribute?.('href');
+      if (hash && hash !== '#') {
+        revealAndScroll(hash);
+      }
+    });
+  }
+
+  if (typeof window !== 'undefined' && window.location && window.location.hash) {
+    setTimeout(() => revealAndScroll(window.location.hash), 150);
+  }
+
   document.getElementById('service-frame-reload')?.addEventListener('click', () => {
     const iframe = document.getElementById('service-frame-iframe');
     if (iframe && iframe.src && iframe.src !== 'about:blank') {
