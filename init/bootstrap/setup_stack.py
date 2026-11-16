@@ -132,6 +132,7 @@ PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/"
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
 COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
+COMET_AIOSTREAMS_TIMEOUT = int(os.environ.get("COMET_AIOSTREAMS_TIMEOUT") or os.environ.get("AIOSTREAMS_COMET_TIMEOUT") or 20000)
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
@@ -531,6 +532,60 @@ def wait_for_comet(max_attempts=15, interval=2):
     return False
 
 
+def ensure_infinidysk_admin(addon_password=ADDON_PASSWORD):
+    """
+    Ensures InfiniDysk has an administrator account provisioned with ADDON_PASSWORD.
+    If InfiniDysk is in onboarding state or has no admin account, creates admin with addon_password
+    and marks the setup wizard as skipped so the dashboard is immediately accessible.
+    """
+    if not is_url_reachable(INFINIDYSK_URL, timeout=1.0):
+        return False
+    try:
+        req = urllib.request.Request(
+            f"{INFINIDYSK_URL}/api/is-onboarding",
+            headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            if isinstance(data, dict) and data.get("isOnboarding"):
+                create_data = urllib.parse.urlencode({
+                    "username": "admin",
+                    "password": addon_password,
+                    "confirmPassword": addon_password
+                }).encode("utf-8")
+                create_req = urllib.request.Request(
+                    f"{INFINIDYSK_URL}/onboarding",
+                    data=create_data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
+                with urllib.request.urlopen(create_req, timeout=5) as c_resp:
+                    pass
+                print("[InfiniDysk Setup] ✓ Provisioned admin account with master password.", flush=True)
+    except Exception:
+        pass
+
+    try:
+        state_req = urllib.request.Request(
+            f"{INFINIDYSK_URL}/api/setup-wizard-state",
+            headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(state_req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            if isinstance(data, dict) and data.get("setupRequired"):
+                skip_req = urllib.request.Request(
+                    f"{INFINIDYSK_URL}/api/setup-wizard/skip",
+                    data=b"",
+                    headers={"x-api-key": SECRET_KEY, "Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(skip_req, timeout=3) as s_resp:
+                    pass
+                print("[InfiniDysk Setup] ✓ Setup wizard completed and skipped.", flush=True)
+    except Exception:
+        pass
+    return True
+
+
 def wait_for_postersplus(max_attempts=20, interval=2):
     print(f"[Posters+ Setup] Waiting for Posters+ at {POSTERSPLUS_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
@@ -780,28 +835,31 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams. Provisioning is blocked; check the container and Docker network before retrying.", flush=True)
     return False
 
-def build_default_config(aiometadata_manifest=None, *, probe_services=True):
+def build_default_config(aiometadata_manifest=None, *, probe_services=True, base_config=None):
     """Builds our comprehensive Tamtaro All-Local Self-Hosted configuration dictionary."""
     reachable = is_url_reachable if probe_services else lambda *args, **kwargs: True
-    template_data = {}
-    chosen_template_path = TEMPLATE_PATH
     usenet_active = (os.environ.get('USENET_ENABLED', 'true') != 'false' and os.environ.get('USENET_HOST')
                      and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
                      and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
-    has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
-    streaming_mode = os.environ.get("STREAMING_MODE", "").lower()
-    if streaming_mode == "usenet" or os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
-        u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
-        if os.path.exists(u_cand):
-            chosen_template_path = u_cand
-    if os.path.exists(chosen_template_path):
-        try:
-            with open(chosen_template_path, "r", encoding="utf-8") as f:
-                template_data = json.load(f)
-        except Exception as e:
-            print(f"[AIOStreams Setup] Note loading template file: {e}", flush=True)
+    if base_config is None:
+        template_data = {}
+        chosen_template_path = TEMPLATE_PATH
+        has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
+        streaming_mode = os.environ.get("STREAMING_MODE", "").lower()
+        if streaming_mode == "usenet" or os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
+            u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
+            if os.path.exists(u_cand):
+                chosen_template_path = u_cand
+        if os.path.exists(chosen_template_path):
+            try:
+                with open(chosen_template_path, "r", encoding="utf-8") as f:
+                    template_data = json.load(f)
+            except Exception as e:
+                print(f"[AIOStreams Setup] Note loading template file: {e}", flush=True)
 
-    base_config = template_data.get("config", {})
+        base_config = template_data.get("config", {})
+    else:
+        base_config = copy.deepcopy(base_config)
 
     # Ensure services are populated with InfiniDysk nzbdav and any provided Debrid keys
     nzbdav_key = SECRET_KEY if SECRET_KEY else "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09"
@@ -901,7 +959,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
             "options": {
                 "name": "Comet (Local)",
                 "url": "http://comet:8000",
-                "timeout": 20000,
+                "timeout": COMET_AIOSTREAMS_TIMEOUT,
                 "resources": ["stream"],
                 "includeP2P": False,
                 "removeTrash": True,
@@ -1130,9 +1188,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True):
         elif ptype == "comet":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
-            # Allow the 10s scrape and 8s debrid phases to finish, plus response overhead.
-            # Keep longer template timeouts instead of resetting them during provisioning.
-            opts["timeout"] = max(int(opts.get("timeout") or 20000), 20000)
+            curr_timeout = int(opts.get("timeout") or COMET_AIOSTREAMS_TIMEOUT)
+            # Comet scraping (10s) + debrid resolution (8s) requires at least 20s in AIOStreams.
+            # Never overwrite configured timeouts down to 8s; ensure at least 20000ms.
+            opts["timeout"] = max(curr_timeout, COMET_AIOSTREAMS_TIMEOUT, 20000)
             manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
             if reachable(manifest_url, timeout=1.0):
                 p["enabled"] = True
@@ -1668,6 +1727,7 @@ def main():
     # 2. Comet & InfiniDysk
     try:
         wait_for_comet()
+        ensure_infinidysk_admin()
     except Exception as e:
         print(f"[Scraper Checks] Note: {e}", flush=True)
 

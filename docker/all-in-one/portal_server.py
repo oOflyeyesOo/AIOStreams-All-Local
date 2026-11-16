@@ -561,7 +561,7 @@ def run_playback_test(mode=None, content_id=None, kind=None):
             target = f"{aio_url}/stremio/{install_info['uuid']}/{pw}/stream/{sample_kind}/{sample_id}.json"
             try:
                 req = urllib.request.Request(target, headers={"User-Agent": "AIO-Playback-Test/1.0"})
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.urlopen(req, timeout=25) as resp:
                     data = json.load(resp)
                     streams = data.get("streams", [])
             except Exception:
@@ -570,7 +570,7 @@ def run_playback_test(mode=None, content_id=None, kind=None):
         if not streams:
             try:
                 req = urllib.request.Request(f"{aio_url}/stremio/u/local/stream/{sample_kind}/{sample_id}.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
-                with urllib.request.urlopen(req, timeout=8) as resp:
+                with urllib.request.urlopen(req, timeout=25) as resp:
                     data = json.load(resp)
                     streams = data.get("streams", [])
             except Exception:
@@ -677,13 +677,258 @@ def run_smoke_test(kind, content_id):
     base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
     url = f"{base}/stremio/u/local/stream/{kind}/{urllib.parse.quote(content_id, safe='')}.json"
     try:
-        with urllib.request.urlopen(url, timeout=12) as response:
+        with urllib.request.urlopen(url, timeout=25) as response:
             payload = json.load(response)
         streams = payload.get("streams", []) if isinstance(payload, dict) else []
         playable = [item for item in streams if isinstance(item, dict) and (item.get("url") or item.get("infoHash")) and "error" not in str(item.get("title", "")).lower()]
         return {"status": "pass" if playable else "attention", "kind": kind, "contentId": content_id, "streamCount": len(streams), "playableCount": len(playable)}
     except (OSError, ValueError, TypeError, json.JSONDecodeError, urllib.error.URLError):
         return {"status": "unavailable", "kind": kind, "contentId": content_id, "streamCount": 0, "playableCount": 0}
+
+
+def probe_comet_scraper_pipeline(sample_id="tt1375666", kind="movie"):
+    """
+    Executes a timed Comet scrape request and isolated probes to Comet's dependencies:
+    Prowlarr, Zilean, and Debrid (e.g. Premiumize).
+    Performs delay attribution to determine if Prowlarr, Zilean, or Premiumize/Debrid
+    is bottlenecking or failing Comet's scraper pipeline.
+    """
+    env = read_saved_env()
+    sample_id = (sample_id or "tt1375666").strip()
+    kind = (kind or "movie").strip().lower()
+
+    # 1. Prowlarr Probe
+    prowlarr_url = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+    prowlarr_api_key = os.environ.get("PROWLARR_API_KEY") or env.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
+    prowlarr_res = {"latency_ms": None, "status": "pending", "result_count": 0, "error": None}
+
+    t0_prow = time.monotonic()
+    try:
+        search_query = urllib.parse.quote("Inception" if sample_id == "tt1375666" else sample_id)
+        prow_req = urllib.request.Request(
+            f"{prowlarr_url}/api/v1/search?query={search_query}&type=search",
+            headers={"X-Api-Key": prowlarr_api_key, "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(prow_req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            prowlarr_ms = round((time.monotonic() - t0_prow) * 1000, 1)
+            count = len(data) if isinstance(data, list) else 0
+            prowlarr_res.update({
+                "latency_ms": prowlarr_ms,
+                "status": "ok" if prowlarr_ms < 5000 else "slow",
+                "result_count": count
+            })
+    except Exception as e:
+        try:
+            t0_ping = time.monotonic()
+            ping_req = urllib.request.Request(
+                f"{prowlarr_url}/api/v1/system/status",
+                headers={"X-Api-Key": prowlarr_api_key, "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(ping_req, timeout=3) as resp:
+                prowlarr_ms = round((time.monotonic() - t0_ping) * 1000, 1)
+                prowlarr_res.update({
+                    "latency_ms": prowlarr_ms,
+                    "status": "ok" if prowlarr_ms < 5000 else "slow",
+                    "result_count": 0,
+                    "error": f"Search unavailable ({type(e).__name__}); status OK"
+                })
+        except Exception as e2:
+            elapsed = round((time.monotonic() - t0_prow) * 1000, 1)
+            prowlarr_res.update({
+                "latency_ms": elapsed,
+                "status": "unreachable",
+                "error": str(e)
+            })
+
+    # 2. Zilean Probe
+    zilean_url = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
+    zilean_res = {"latency_ms": None, "status": "pending", "hash_count": 0, "error": None}
+
+    t0_zil = time.monotonic()
+    try:
+        zil_query = urllib.parse.quote("Inception" if sample_id == "tt1375666" else sample_id)
+        zil_req = urllib.request.Request(
+            f"{zilean_url}/dmm/filtered?query={zil_query}",
+            headers={"Accept": "application/json"}
+        )
+        with urllib.request.urlopen(zil_req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            zilean_ms = round((time.monotonic() - t0_zil) * 1000, 1)
+            count = len(data) if isinstance(data, list) else 0
+            zilean_res.update({
+                "latency_ms": zilean_ms,
+                "status": "ok" if zilean_ms < 3000 else "slow",
+                "hash_count": count
+            })
+    except Exception as e:
+        elapsed = round((time.monotonic() - t0_zil) * 1000, 1)
+        zilean_res.update({
+            "latency_ms": elapsed,
+            "status": "unreachable",
+            "error": str(e)
+        })
+
+    # 3. Debrid Probe (Premiumize prioritized, or configured debrid)
+    debrid_prov = "premiumize" if env.get("PREMIUMIZE_API_KEY") else None
+    if not debrid_prov:
+        for prov in ("realdebrid", "torbox", "alldebrid", "debridlink", "easydebrid"):
+            key_name = PROVIDER_VALIDATORS.get(prov, (None,))[0]
+            if key_name and env.get(key_name):
+                debrid_prov = prov
+                break
+
+    debrid_res = {"provider": debrid_prov or "none", "latency_ms": None, "status": "not_configured", "error": None}
+    if debrid_prov:
+        key_name = PROVIDER_VALIDATORS[debrid_prov][0]
+        api_key = env.get(key_name, "")
+        t0_deb = time.monotonic()
+        try:
+            if debrid_prov == "premiumize":
+                deb_req = urllib.request.Request(
+                    f"https://www.premiumize.me/api/account/info?apikey={urllib.parse.quote(api_key)}",
+                    headers={"User-Agent": "AIO-CometProbe/1.0"}
+                )
+            else:
+                tmpl = PROVIDER_VALIDATORS[debrid_prov][1]
+                deb_req = urllib.request.Request(
+                    tmpl.format(key=urllib.parse.quote(api_key)),
+                    headers={"User-Agent": "AIO-CometProbe/1.0"}
+                )
+            with urllib.request.urlopen(deb_req, timeout=8) as resp:
+                resp.read(512)
+                debrid_ms = round((time.monotonic() - t0_deb) * 1000, 1)
+                debrid_res.update({
+                    "latency_ms": debrid_ms,
+                    "status": "ok" if debrid_ms < 4000 else "slow"
+                })
+        except Exception as e:
+            elapsed = round((time.monotonic() - t0_deb) * 1000, 1)
+            debrid_res.update({
+                "latency_ms": elapsed,
+                "status": "unreachable",
+                "error": str(e)
+            })
+
+    # 4. Comet End-to-End Direct Scrape Probe
+    comet_url = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
+    comet_res = {"latency_ms": None, "status": "pending", "stream_count": 0, "error": None}
+
+    debrid_services = []
+    if debrid_prov and env.get(PROVIDER_VALIDATORS[debrid_prov][0]):
+        debrid_services.append({
+            "service": debrid_prov,
+            "apiKey": env.get(PROVIDER_VALIDATORS[debrid_prov][0])
+        })
+
+    cfg = {
+        "maxResultsPerResolution": 0, "maxSize": 0, "cachedOnly": False, "removeTrash": True,
+        "resultFormat": ["all"],
+        "debridServices": debrid_services,
+        "enableTorrent": False, "scrapeDebridAccountTorrents": False, "debridStreamProxyPassword": "",
+        "languages": {"required": [], "exclude": [], "preferred": []}, "resolutions": {},
+        "options": {"remove_ranks_under": -10000000000, "allow_english_in_languages": False, "remove_unknown_languages": False}
+    }
+    b64_cfg = base64.b64encode(json.dumps(cfg).encode()).decode()
+    target_comet_url = f"{comet_url}/{b64_cfg}/stream/{kind}/{sample_id}.json"
+
+    t0_comet = time.monotonic()
+    streams_found = []
+    try:
+        req = urllib.request.Request(target_comet_url, headers={"User-Agent": "AIO-CometProbe/1.0", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            comet_ms = round((time.monotonic() - t0_comet) * 1000, 1)
+            if isinstance(data, dict):
+                streams_found = data.get("streams", [])
+            comet_res.update({
+                "latency_ms": comet_ms,
+                "status": "ok" if comet_ms < 20000 else "slow",
+                "stream_count": len(streams_found)
+            })
+    except Exception as e:
+        elapsed = round((time.monotonic() - t0_comet) * 1000, 1)
+        comet_res.update({
+            "latency_ms": elapsed,
+            "status": "timeout" if isinstance(e, (socket.timeout, TimeoutError)) or "timed out" in str(e).lower() else "unreachable",
+            "error": str(e)
+        })
+
+    # 5. Delay Attribution Analysis
+    culprit = "none"
+    reasons = []
+
+    prow_lat = prowlarr_res.get("latency_ms") or 0
+    zil_lat = zilean_res.get("latency_ms") or 0
+    deb_lat = debrid_res.get("latency_ms") or 0
+    com_lat = comet_res.get("latency_ms") or 0
+
+    is_healthy = True
+
+    if comet_res["status"] in ("timeout", "unreachable"):
+        is_healthy = False
+        if prowlarr_res["status"] == "unreachable":
+            culprit = "prowlarr"
+            reasons.append(f"Prowlarr is unreachable ({prowlarr_res.get('error')})")
+        elif zilean_res["status"] == "unreachable":
+            culprit = "zilean"
+            reasons.append(f"Zilean hash cache is unreachable ({zilean_res.get('error')})")
+        elif debrid_res["status"] == "unreachable":
+            culprit = debrid_prov or "debrid"
+            reasons.append(f"{debrid_prov.capitalize() if debrid_prov else 'Debrid'} API is unreachable ({debrid_res.get('error')})")
+        elif com_lat >= 20000:
+            max_lat = max(prow_lat, zil_lat, deb_lat)
+            if max_lat == prow_lat and prow_lat > 4000:
+                culprit = "prowlarr"
+                reasons.append(f"Prowlarr took {prow_lat}ms, bottlenecking Comet indexer searches")
+            elif max_lat == deb_lat and deb_lat > 3000:
+                culprit = debrid_prov or "debrid"
+                reasons.append(f"{debrid_prov.capitalize() if debrid_prov else 'Debrid'} API took {deb_lat}ms for cache checks")
+            elif max_lat == zil_lat and zil_lat > 2500:
+                culprit = "zilean"
+                reasons.append(f"Zilean took {zil_lat}ms for DMM hash lookup")
+            else:
+                culprit = "comet"
+                reasons.append(f"Comet direct scrape timed out after {com_lat}ms")
+        else:
+            culprit = "comet"
+            reasons.append(f"Comet returned error: {comet_res.get('error')}")
+    else:
+        if com_lat > 8000:
+            if prow_lat > 4000:
+                culprit = "prowlarr"
+                reasons.append(f"Prowlarr search delay ({prow_lat}ms)")
+            elif deb_lat > 3000:
+                culprit = debrid_prov or "debrid"
+                reasons.append(f"{debrid_prov.capitalize() if debrid_prov else 'Debrid'} API response delay ({deb_lat}ms)")
+            elif zil_lat > 2500:
+                culprit = "zilean"
+                reasons.append(f"Zilean hash cache delay ({zil_lat}ms)")
+            else:
+                culprit = "comet"
+                reasons.append(f"Comet internal aggregation delay ({com_lat}ms)")
+        else:
+            attribution = f"Comet scraper pipeline is healthy and responsive ({com_lat}ms). Prowlarr ({prow_lat}ms), Zilean ({zil_lat}ms), and {debrid_prov or 'Debrid'} ({deb_lat}ms) all within normal thresholds."
+
+    if culprit != "none":
+        attribution = f"Delay / issue attributed to {culprit.upper()}: " + "; ".join(reasons)
+        if comet_res["stream_count"] > 0:
+            attribution += f" ({comet_res['stream_count']} streams resolved in {com_lat}ms)"
+    elif not is_healthy:
+        attribution = "Comet pipeline check failed: " + "; ".join(reasons)
+    elif "attribution" not in locals():
+        attribution = f"Comet scraper pipeline is healthy ({com_lat}ms)."
+
+    return {
+        "healthy": is_healthy and (comet_res["status"] == "ok"),
+        "primary_bottleneck": culprit,
+        "attribution": attribution,
+        "comet": comet_res,
+        "prowlarr": prowlarr_res,
+        "zilean": zilean_res,
+        "debrid": debrid_res,
+        "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 
 def config_export():
@@ -1038,6 +1283,40 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
         return False, str(e)
 
 _STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
+_INFINIDYSK_SESSION = None
+
+def get_infinidysk_session_cookie():
+    global _INFINIDYSK_SESSION
+    env = read_saved_env()
+    addon_pw = env.get("ADDON_PASSWORD", "admin")
+    infinidysk_url = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
+    login_url = f"{infinidysk_url}/login"
+    login_payload = urllib.parse.urlencode({"username": "admin", "password": addon_pw}).encode("utf-8")
+    req = urllib.request.Request(
+        login_url,
+        data=login_payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    try:
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            resp = opener.open(req, timeout=3)
+            headers = resp.headers
+        except urllib.error.HTTPError as e:
+            headers = e.headers
+
+        cookie_header = headers.get("Set-Cookie")
+        if cookie_header:
+            match = re.search(r"(__session=[^;]+)", cookie_header)
+            if match:
+                _INFINIDYSK_SESSION = match.group(1)
+                return _INFINIDYSK_SESSION
+    except Exception:
+        pass
+    return _INFINIDYSK_SESSION
 
 
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
@@ -1189,6 +1468,17 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         query_str = f"?{query}" if query else ""
         rel_url = f"{normalized_subpath}{query_str}"
 
+        if service == "postersplus" and "access_key" not in query and normalized_subpath in ("/", "/admin", "/admin/"):
+            p_key = env_vars.get("POSTERSPLUS_ACCESS_KEY") or env_vars.get("ADDON_PASSWORD", "admin")
+            if p_key:
+                qs = f"access_key={urllib.parse.quote(p_key)}"
+                if query:
+                    qs = f"{query}&{qs}"
+                self.send_response(302)
+                self.send_header("Location", f"/service-proxy/postersplus/admin?{qs}")
+                self.end_headers()
+                return
+
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except (ValueError, TypeError):
@@ -1204,6 +1494,14 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         forward_headers["X-Forwarded-Proto"] = "http"
         forward_headers["X-Forwarded-Host"] = self.headers.get("Host", "localhost")
         forward_headers["Accept-Encoding"] = "identity"
+
+        infinidysk_auto_cookie = None
+        if service == "infinidysk":
+            existing_cookie = self.headers.get("Cookie", "")
+            if "__session" not in existing_cookie:
+                infinidysk_auto_cookie = get_infinidysk_session_cookie()
+                if infinidysk_auto_cookie:
+                    forward_headers["Cookie"] = f"{existing_cookie}; {infinidysk_auto_cookie}".strip("; ") if existing_cookie else infinidysk_auto_cookie
 
         status_code = None
         resp_headers = None
@@ -1331,6 +1629,9 @@ button:hover {{ background: #0369a1; }}
                     self.send_header("Location", location)
                     continue
                 self.send_header(k, v)
+
+            if service == "infinidysk" and infinidysk_auto_cookie:
+                self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/service-proxy/infinidysk/; SameSite=Lax")
 
             if "x-frame-options" not in [k.lower() for k in resp_headers.keys()]:
                 self.send_header("X-Frame-Options", "SAMEORIGIN")
@@ -1539,8 +1840,18 @@ button:hover {{ background: #0369a1; }}
                     if ui_url:
                         item["uiUrl"] = ui_url
                     proxy_path = SERVICE_UI_PATHS.get(service, "/")
+                    if service == "postersplus":
+                        p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
+                        if p_key:
+                            proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
                     item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
             self.json_response({"integrations": integrations})
+            return
+        if path == "/api/comet-check":
+            query = urllib.parse.parse_qs(url_parts.query)
+            sample_id = query.get("id", ["tt1375666"])[0]
+            kind = query.get("kind", ["movie"])[0]
+            self.json_response(probe_comet_scraper_pipeline(sample_id=sample_id, kind=kind))
             return
         if path == "/api/maintenance":
             self.json_response(maintenance_snapshot())
@@ -1874,6 +2185,15 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"status": "invalid", "detail": str(e)}, 400)
             except Exception:
                 self.json_response({"status": "invalid", "detail": "Internal server error during smoke test."}, 500)
+            return
+        if path == "/api/comet-check":
+            try:
+                payload = self.read_json_body()
+            except Exception:
+                payload = {}
+            sample_id = payload.get("id") or "tt1375666"
+            kind = payload.get("kind") or "movie"
+            self.json_response(probe_comet_scraper_pipeline(sample_id=sample_id, kind=kind))
             return
         if path == "/api/test-playback":
             try:
@@ -2340,6 +2660,8 @@ button:hover {{ background: #0369a1; }}
             ("aiostreams", os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/") + "/manifest.json"),
             ("aiometadata", os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/") + "/manifest.json"),
             ("flaresolverr", os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/") + "/"),
+            ("comet", os.environ.get("COMET_URL", "http://comet:8000").rstrip("/") + "/manifest.json"),
+            ("zilean", os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/") + "/dmm/filtered?query=Inception"),
             ("prowlarr", "http://prowlarr:9696/ping")
         ]
         for name, url in targets:
