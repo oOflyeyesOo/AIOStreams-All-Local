@@ -1620,9 +1620,11 @@ button:hover {{ background: #0369a1; }}
                 else:
                     base_href = f"/service-proxy/{service}/"
 
-                # Prowlarr now uses urlBase natively; no HTML rewriting needed.
-                # Other services still get a <base> tag injected if missing.
-                if "<base" not in html_text.lower() and service != "prowlarr":
+                if service == "prowlarr":
+                    html_text = re.sub(r"(urlBase:\s*['\"])(['\"])", r"\1/service-proxy/prowlarr\2", html_text)
+                    html_text = re.sub(r'((?:href|src)=["\'])/(Content/|index-[^"\']+)', r'\1/service-proxy/prowlarr/\2', html_text)
+
+                if "<base" not in html_text.lower():
                     base_tag = f'<base href="{base_href}">'
                     if "<head" in html_text.lower():
                         html_text = re.sub(r"(<head[^>]*>)", r"\1" + base_tag, html_text, count=1, flags=re.I)
@@ -1634,7 +1636,17 @@ button:hover {{ background: #0369a1; }}
             except Exception:
                 pass
 
-        # initialize.json: Prowlarr returns correct urlBase/apiRoot now that urlBase is set in config.xml
+        if response_data and service == "prowlarr" and (normalized_subpath == "/initialize.json" or normalized_subpath.startswith("/initialize.json")):
+            try:
+                init_data = json.loads(response_data.decode("utf-8"))
+                if isinstance(init_data, dict):
+                    if not init_data.get("urlBase"):
+                        init_data["urlBase"] = "/service-proxy/prowlarr"
+                    if not init_data.get("apiRoot", "").startswith("/service-proxy/prowlarr"):
+                        init_data["apiRoot"] = "/service-proxy/prowlarr/api/v1"
+                    response_data = json.dumps(init_data).encode("utf-8")
+            except Exception:
+                pass
 
         self._is_proxy_response = True
         try:
