@@ -26,6 +26,11 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"   # Prowlarr Indexer Manager
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8080:8080"   # StremThru Debrid Proxy
     environment:
+      # Empty overrides preserve the appliance's saved settings and inner defaults.
+      - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-}
+      - COMET_LIVE_SCRAPE_TIMEOUT=${COMET_LIVE_SCRAPE_TIMEOUT:-}
+      - COMET_INDEXER_WAIT_TIMEOUT=${COMET_INDEXER_WAIT_TIMEOUT:-}
+      - COMET_INDEXER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-}
       - SUBSENSE_WARP_ENABLED=${SUBSENSE_WARP_ENABLED:-false}
       # The outer port mappings above control host access to the nested services.
       - INTERNAL_BIND_IP=0.0.0.0

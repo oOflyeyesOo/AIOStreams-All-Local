@@ -1189,7 +1189,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
             curr_timeout = int(opts.get("timeout") or COMET_AIOSTREAMS_TIMEOUT)
-            # Comet scraping (10s) + debrid resolution (8s) requires at least 20s in AIOStreams.
+            # Allow the live scrape deadline plus metadata/debrid response overhead.
             # Never overwrite configured timeouts down to 8s; ensure at least 20000ms.
             opts["timeout"] = max(curr_timeout, COMET_AIOSTREAMS_TIMEOUT, 20000)
             manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
@@ -1338,9 +1338,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     config["enableSeadex"] = True
 
     # Activate AIOStreams upstream features
-    # Background prefetch adds another episode search; keep it explicitly opt-in.
-    config["precacheNextEpisode"] = os.environ.get('AIO_PRECACHE_NEXT_EPISODE','false') == 'true'
-    config.pop('precacheSelector',None)
+    # Warm search results only. An empty selector prevents automatic stream pings
+    # and debrid downloads after the background search has completed.
+    config["precacheNextEpisode"] = os.environ.get('AIO_PRECACHE_NEXT_EPISODE','true').strip().lower() == 'true'
+    config["precacheSelector"] = "[]"
     config.pop('precacheCondition',None)
     config.pop('alwaysPrecache',None)
     has_debrid_active = any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services)
@@ -1392,6 +1393,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         for feature in ('titleMatching','yearMatching'):
             config[feature]['enabled']=True
     else:
+        config["precacheNextEpisode"] = False
         for feature in ('titleMatching','yearMatching','digitalReleaseFilter'):
             if isinstance(config.get(feature),dict):
                 config[feature]['enabled']=False
@@ -1400,7 +1402,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     # Failover remains sequential; prefetch must not create hidden extra calls.
     if isinstance(config.get('failover'),dict):
         config['failover']['parallel']=1
-        config['failover']['precacheFailover']=config['precacheNextEpisode']
+        config['failover']['precacheFailover']=False
     # TVDB is consumed by AIOMetadata. Do not make AIOStreams registration
     # depend on an optional TVDB endpoint or key being reachable.
 

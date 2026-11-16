@@ -673,6 +673,39 @@ For a management-app installation, update the stack with the latest
 restart does not apply changed Compose limits. Check sustained usage with
 `docker stats`; raising the limit to `1.0` allows roughly 100% if indexing is too slow.
 
+### Comet response times and next-episode searches
+
+Comet's AIOStreams preset allows at least 20 seconds. Its live scraper deadline
+defaults to 15 seconds per source (`COMET_LIVE_SCRAPE_TIMEOUT`), with no additional
+indexer initialization wait (`COMET_INDEXER_WAIT_TIMEOUT=0`). Indexer requests
+retain their eight-second timeout (`COMET_INDEXER_TIMEOUT`). Metadata lookup and
+debrid resolution also take time, so the scraper deadline is not a total response
+deadline. The former `COMET_SCRAPING_TIMEOUT` and `COMET_DEBRID_TIMEOUT` settings
+were not supported by the tested Comet version and have been removed.
+
+With a TMDB key configured, new setups enable next-episode background searches.
+Set `AIO_PRECACHE_NEXT_EPISODE=true` in your deployment environment to enable this
+on an existing installation, then apply setup again. An existing `false` setting
+is respected. The profile uses `precacheSelector: "[]"` to warm addon search caches
+without automatically downloading uncached releases or probing playback links.
+Failover prefetch stays disabled. This starts when an episode's streams are
+requested; it does not wait for playback progress and does add a next-episode
+search. Results remain subject to cache expiry and provider availability.
+
+On November 15, 2026, direct local Comet searches returned the following results.
+These were first observed requests, not guaranteed cold-cache benchmarks.
+
+| Episode | First request | Repeat | Playable candidates |
+| --- | ---: | ---: | ---: |
+| The Simpsons S01E02 | 11.98 s | 0.11 s | 12 |
+| Breaking Bad S01E02 | 0.75 s | 0.11 s | 6 |
+| Game of Thrones S01E02 | 9.02 s | 0.10 s | 16 |
+
+Counts matched on repeat requests. Zilean searches took 0.02–0.20 seconds;
+Prowlarr recorded a 10.75-second successful scrape and eight-second failures.
+These measurements cover stream discovery, not video playback or a measured
+before/after improvement from the new timeout defaults.
+
 ### Startup checklist and playback testing
 
 The portal shows a prominent startup checklist and keeps **Test my setup** locked

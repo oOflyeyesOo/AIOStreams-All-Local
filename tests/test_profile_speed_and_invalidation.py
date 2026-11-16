@@ -3,7 +3,7 @@
 Verifies:
 1. Changing providers/settings produces updated manifest configurations immediately.
 2. Search Broker applies cooldown on upstream failure and recovers when healthy.
-3. Next-episode prefetch toggle behaves as expected and defaults to disabled.
+3. Next-episode prefetch warms searches only and respects an explicit opt-out.
 """
 from concurrent.futures import ThreadPoolExecutor
 import copy
@@ -25,19 +25,30 @@ class ProfileSpeedAndInvalidationTests(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self.orig_env)
 
-    def test_precache_next_episode_default_is_disabled(self):
-        """Next-episode prefetch must default to False to prevent doubling upstream requests."""
+    def prefetch_config(self, setting=None, metadata_key="fixture-tmdb"):
         os.environ.pop("AIO_PRECACHE_NEXT_EPISODE", None)
-        self.assertFalse(
-            os.environ.get("AIO_PRECACHE_NEXT_EPISODE", "false") == "true"
-        )
+        if setting is not None:
+            os.environ["AIO_PRECACHE_NEXT_EPISODE"] = setting
+        with patch.object(bootstrap, "TMDB_API_KEY", metadata_key), \
+             patch.object(bootstrap, "load_env_file"), \
+             patch.dict(os.environ, {"TMDB_API_KEY": metadata_key}), \
+             patch.object(bootstrap, "make_request", return_value={}):
+            return bootstrap.build_default_config(probe_services=False)
 
-    def test_precache_next_episode_respects_opt_in(self):
-        """Setting AIO_PRECACHE_NEXT_EPISODE=true must activate prefetch."""
-        os.environ["AIO_PRECACHE_NEXT_EPISODE"] = "true"
-        self.assertTrue(
-            os.environ.get("AIO_PRECACHE_NEXT_EPISODE", "false") == "true"
-        )
+    def test_precache_default_warms_searches_without_stream_pings(self):
+        config = self.prefetch_config()
+        self.assertTrue(config["precacheNextEpisode"])
+        self.assertEqual(config["precacheSelector"], "[]")
+        self.assertFalse(config["failover"]["precacheFailover"])
+        self.assertNotIn("alwaysPrecache", config)
+        self.assertNotIn("precacheCondition", config)
+
+    def test_precache_respects_saved_opt_out(self):
+        self.assertFalse(self.prefetch_config("false")["precacheNextEpisode"])
+        self.assertTrue(self.prefetch_config(" TRUE ")["precacheNextEpisode"])
+
+    def test_precache_without_metadata_is_disabled(self):
+        self.assertFalse(self.prefetch_config("true", "")["precacheNextEpisode"])
 
     def test_search_broker_failure_cooldown_and_recovery(self):
         """Failing indexer enters cooldown; recovery allows subsequent requests."""
