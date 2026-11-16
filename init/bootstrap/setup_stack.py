@@ -392,7 +392,8 @@ def setup_prowlarr_indexers():
         if torznab_schema:
             z_payload = dict(torznab_schema)
             z_payload["name"] = "Zilean DMM (Local)"
-            z_payload["enable"] = os.environ.get("ENABLE_DMM", os.environ.get("ZILEAN_ENABLE_SCRAPING", "true")).lower() != "false"
+            # AIOStreams queries Zilean directly; keep disabled in Prowlarr to avoid duplicate scraping
+            z_payload["enable"] = False
             z_payload["priority"] = 1
             z_payload["appProfileId"] = 1
             for f in z_payload.get("fields", []):
@@ -416,7 +417,7 @@ def tune_prowlarr_indexers():
     active_indexers = make_request(f"{PROWLARR_URL}/api/v1/indexer", headers=headers)
     if not isinstance(active_indexers, list):
         return
-    disabled_names = ["limetorrents", "tokyo toshokan", "acg.rip"]
+    disabled_names = ["limetorrents", "tokyo toshokan", "acg.rip", "zilean"]
     priority_map = {
         "zilean": 1,
         "animetosho": 5,
