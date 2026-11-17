@@ -1649,12 +1649,13 @@ button:hover {{ background: #0369a1; }}
                     ui_url = service_ui_url(service, self.headers.get("Host", "localhost"), env)
                     if ui_url:
                         item["uiUrl"] = ui_url
-                    proxy_path = SERVICE_UI_PATHS.get(service, "/")
-                    if service == "postersplus":
-                        p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
-                        if p_key:
-                            proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
-                    item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
+                    proxy_path = SERVICE_UI_PATHS.get(service)
+                    if proxy_path is not None:
+                        if service == "postersplus":
+                            p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
+                            if p_key:
+                                proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
+                        item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
             self.json_response({"integrations": integrations})
             return
         if path == "/api/maintenance":
@@ -1833,6 +1834,9 @@ button:hover {{ background: #0369a1; }}
             return
         elif path in ("/api/zilean", "/api/zilean-stats"):
             self.handle_api_zilean_stats()
+            return
+        elif path in ("/api/lumiere/stats", "/api/lumiere-stats"):
+            self.handle_api_lumiere_stats()
             return
         elif path == "/api/backups":
             self.handle_api_backups_list()
@@ -2704,6 +2708,54 @@ button:hover {{ background: #0369a1; }}
             self.json_response({"success": True, "stats": stats})
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while retrieving Zilean statistics."}, 500)
+
+    def handle_api_lumiere_stats(self):
+        try:
+            endpoints = ["http://lumiere-db:8000/etl/status", "http://127.0.0.1:8000/etl/status"]
+            data = None
+            for ep in endpoints:
+                try:
+                    req = urllib.request.Request(ep, headers={"User-Agent": "AIO-Portal"})
+                    with urllib.request.urlopen(req, timeout=2) as resp:
+                        if resp.status == 200:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            break
+                except Exception:
+                    continue
+
+            manifest_info = {}
+            lumiere_dir = Path(WEB_ROOT) / "data" / "lumiere-db"
+            if lumiere_dir.is_dir():
+                manifest_files = list(lumiere_dir.glob("search/*/manifest.json"))
+                if manifest_files:
+                    manifest_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    try:
+                        manifest_info = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+                    except Exception:
+                        pass
+
+            if not data and not manifest_info:
+                self.json_response({"success": False, "error": "LumiereDB is unreachable or not initialized yet."}, 503)
+                return
+
+            result = {
+                "success": True,
+                "online": bool(data),
+                "phase": data.get("phase", "idle") if data else "offline",
+                "ready": data.get("index", {}).get("ready", False) if data else bool(manifest_info),
+                "generationId": data.get("index", {}).get("generationId", "") if data else manifest_info.get("indexVersion", ""),
+                "datasetDate": manifest_info.get("datasetDate", ""),
+                "docs": manifest_info.get("docs", 0),
+                "episodes": manifest_info.get("episodes", 0),
+                "people": manifest_info.get("people", 0),
+                "names": manifest_info.get("names", 0),
+                "builtAt": manifest_info.get("builtAt", ""),
+                "lastPollAt": data.get("lastPollAt") if data else None,
+                "nextPollAt": data.get("nextPollAt") if data else None,
+            }
+            self.json_response(result)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
 
     def handle_api_backups_list(self):
         try:

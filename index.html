@@ -610,6 +610,19 @@
     <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="same-origin" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
   </div>
 </dialog>
+<dialog id="lumiere-stats-dialog" class="service-log-dialog" aria-labelledby="lumiere-stats-title" aria-modal="true">
+  <div class="log-dialog-header">
+    <h2 id="lumiere-stats-title">LumiereDB Database Statistics</h2>
+    <form method="dialog"><button type="button" id="close-lumiere-stats-dialog" class="text-button log-dialog-close-btn" aria-label="Close LumiereDB statistics dialog">Close ✕</button></form>
+  </div>
+  <div class="log-dialog-toolbar">
+    <button type="button" id="btn-refresh-lumiere-stats" class="text-button">Refresh ↻</button>
+    <button type="button" id="btn-rebuild-lumiere-from-modal" class="text-button">Rebuild index ↻</button>
+  </div>
+  <div id="lumiere-stats-content" class="lumiere-stats-container" tabindex="0">
+    <p style="color:var(--text-muted);padding:1rem;">Loading LumiereDB metrics…</p>
+  </div>
+</dialog>
 </main>
 <div id="sticky-save-bar" class="sticky-save-bar" hidden>
   <div class="sticky-save-content">

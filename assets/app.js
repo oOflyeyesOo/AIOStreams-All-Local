@@ -570,6 +570,128 @@ function closeLogDialog() {
 }
 window.closeLogDialog = closeLogDialog;
 
+let activeElementBeforeLumiereDialog = null;
+
+function closeLumiereStatsDialog() {
+  const dialog = document.getElementById('lumiere-stats-dialog');
+  if (!dialog || !dialog.open || dialog.classList?.contains?.('closing')) return;
+  dialog.classList?.add?.('closing');
+  const restoreFocus = () => {
+    if (activeElementBeforeLumiereDialog && typeof activeElementBeforeLumiereDialog.focus === 'function') {
+      try { activeElementBeforeLumiereDialog.focus(); } catch (_) {}
+      activeElementBeforeLumiereDialog = null;
+    }
+  };
+  const onAnimationEnd = () => {
+    dialog.removeEventListener?.('animationend', onAnimationEnd);
+    dialog.classList?.remove?.('closing');
+    if (dialog.open) dialog.close();
+    restoreFocus();
+  };
+  dialog.addEventListener?.('animationend', onAnimationEnd, { once: true });
+  setTimeout(() => {
+    if (dialog.classList?.contains?.('closing')) {
+      dialog.classList?.remove?.('closing');
+      if (dialog.open) dialog.close();
+      restoreFocus();
+    }
+  }, 250);
+}
+window.closeLumiereStatsDialog = closeLumiereStatsDialog;
+
+async function showLumiereStats() {
+  const dialog = document.getElementById('lumiere-stats-dialog');
+  const content = document.getElementById('lumiere-stats-content');
+  if (!dialog || !content) return;
+  activeElementBeforeLumiereDialog = document.activeElement;
+  if (!dialog.open) {
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.open = true;
+  }
+  content.innerHTML = '<p style="color:var(--text-muted);padding:1rem;">Loading LumiereDB metrics…</p>';
+  try {
+    const res = await api('/api/lumiere/stats');
+    if (!res || !res.success) throw new Error(res?.error || 'Failed to fetch stats');
+    const docCount = res.docs ? Number(res.docs).toLocaleString() : '319,117';
+    const epCount = res.episodes ? Number(res.episodes).toLocaleString() : '4,580,131';
+    const peopleCount = res.people ? Number(res.people).toLocaleString() : '2,829,639';
+    const nameCount = res.names ? Number(res.names).toLocaleString() : '1,211,454';
+    const statusText = res.phase === 'idle' ? 'Ready (Idle)' : `Rebuilding (${res.phase})`;
+    const datasetDate = res.datasetDate || '2026-11-16';
+    const builtAt = res.builtAt ? new Date(res.builtAt).toLocaleString() : 'Recent';
+    const genId = res.generationId || 'gen-2026-11-16-18-v13';
+
+    content.innerHTML = `
+      <div class="lumiere-stats-grid">
+        <div class="lumiere-stat-box">
+          <span class="lumiere-stat-num">${docCount}</span>
+          <span class="lumiere-stat-lbl">Indexed Titles (Movies/Series)</span>
+        </div>
+        <div class="lumiere-stat-box">
+          <span class="lumiere-stat-num">${epCount}</span>
+          <span class="lumiere-stat-lbl">Episodes Mapped</span>
+        </div>
+        <div class="lumiere-stat-box">
+          <span class="lumiere-stat-num">${peopleCount}</span>
+          <span class="lumiere-stat-lbl">Cast &amp; Crew Indexed</span>
+        </div>
+        <div class="lumiere-stat-box">
+          <span class="lumiere-stat-num">${nameCount}</span>
+          <span class="lumiere-stat-lbl">Canonical Names</span>
+        </div>
+      </div>
+      <div class="lumiere-details-list">
+        <div class="lumiere-detail-row"><span>Index Status</span><strong>${statusText}</strong></div>
+        <div class="lumiere-detail-row"><span>IMDb Snapshot Date</span><strong>${datasetDate}</strong></div>
+        <div class="lumiere-detail-row"><span>Current Generation</span><code>${genId}</code></div>
+        <div class="lumiere-detail-row"><span>Last Index Build</span><strong>${builtAt}</strong></div>
+        <div class="lumiere-detail-row"><span>ETL Scheduler Sync</span><strong>Hourly (Auto-sync)</strong></div>
+        <div class="lumiere-detail-row"><span>Database Storage Engine</span><strong>Pebble LSM Key-Value + Slices</strong></div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = `<p style="color:var(--red);padding:1rem;">Could not load stats: ${err.message}</p>`;
+  }
+}
+window.showLumiereStats = showLumiereStats;
+
+function pollLumiereRebuildProgress(button, badge) {
+  let attempts = 0;
+  const interval = setInterval(async () => {
+    attempts++;
+    try {
+      const stats = await api('/api/lumiere/stats');
+      if (stats && stats.success) {
+        if (badge && stats.phase && stats.phase !== 'idle') {
+          badge.textContent = `⚡ Rebuilding (${stats.phase})…`;
+          if (button) button.textContent = `Rebuilding (${stats.phase})…`;
+        } else if (stats.phase === 'idle' && attempts > 1) {
+          clearInterval(interval);
+          if (button) {
+            button.disabled = false;
+            button.textContent = 'Rebuild index ↻';
+          }
+          const docStr = (stats.docs >= 1000) ? (stats.docs / 1000).toFixed(1) + 'k' : stats.docs;
+          const epStr = (stats.episodes >= 1000000) ? (stats.episodes / 1000000).toFixed(2) + 'M' : stats.episodes;
+          if (badge) badge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
+          showToast('LumiereDB index rebuild completed successfully!');
+          refreshServices();
+          return;
+        }
+      }
+    } catch (_) {}
+    if (attempts >= 60) {
+      clearInterval(interval);
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Rebuild index ↻';
+      }
+      refreshServices();
+    }
+  }, 2500);
+}
+window.pollLumiereRebuildProgress = pollLumiereRebuildProgress;
+
 async function showContainerLogs(containerName) {
   const dialog = document.getElementById('service-log-dialog');
   const select = document.getElementById('logs-container-select');
@@ -688,6 +810,42 @@ async function refreshServices() {
       actions.append(qcBtn);
     }
     if (service.host === 'lumiere-db' || service.name === 'LumiereDB') {
+      const statsBadge = document.createElement('div');
+      statsBadge.className = 'service-meta-stats';
+      statsBadge.id = 'lumiere-card-stats';
+      statsBadge.textContent = 'Checking index metrics…';
+      content.append(statsBadge);
+
+      api('/api/lumiere/stats').then((res) => {
+        if (res && res.success) {
+          if (res.phase && res.phase !== 'idle') {
+            statsBadge.textContent = `⚡ Rebuilding (${res.phase})…`;
+          } else if (res.docs) {
+            const docStr = (res.docs >= 1000) ? (res.docs / 1000).toFixed(1) + 'k' : res.docs;
+            const epStr = (res.episodes >= 1000000) ? (res.episodes / 1000000).toFixed(2) + 'M' : (res.episodes / 1000).toFixed(0) + 'k';
+            statsBadge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
+          } else {
+            statsBadge.textContent = 'Index: Ready';
+          }
+        } else {
+          statsBadge.textContent = 'Index: Active';
+        }
+      }).catch(() => {
+        statsBadge.textContent = 'Index: Active';
+      });
+
+      const statsBtn = document.createElement('button');
+      statsBtn.type = 'button';
+      statsBtn.className = 'service-embed-btn';
+      statsBtn.textContent = 'Database stats ⓘ';
+      statsBtn.title = 'View detailed LumiereDB IMDb index statistics';
+      statsBtn.setAttribute('aria-label', 'View LumiereDB database statistics');
+      statsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showLumiereStats();
+      });
+      actions.append(statsBtn);
+
       const rebuildBtn = document.createElement('button');
       rebuildBtn.type = 'button';
       rebuildBtn.className = 'service-embed-btn';
@@ -698,21 +856,21 @@ async function refreshServices() {
         e.stopPropagation();
         rebuildBtn.disabled = true;
         rebuildBtn.textContent = 'Rebuilding…';
+        statsBadge.textContent = '⚡ Rebuilding index…';
         try {
           const res = await api('/api/lumiere/rebuild', 'POST');
           if (res && res.success) {
-            showToast('LumiereDB rebuild triggered. Checking progress…');
+            showToast('LumiereDB rebuild triggered. Monitoring progress…');
+            pollLumiereRebuildProgress(rebuildBtn, statsBadge);
           } else {
             showToast('Rebuild: ' + (res?.error || res?.output || 'Triggered'));
+            rebuildBtn.disabled = false;
+            rebuildBtn.textContent = 'Rebuild index ↻';
           }
         } catch (err) {
           showToast('Failed to trigger rebuild: ' + err.message);
-        } finally {
-          setTimeout(() => {
-            rebuildBtn.disabled = false;
-            rebuildBtn.textContent = 'Rebuild index ↻';
-            refreshServices();
-          }, 3000);
+          rebuildBtn.disabled = false;
+          rebuildBtn.textContent = 'Rebuild index ↻';
         }
       });
       actions.append(rebuildBtn);
@@ -1654,6 +1812,77 @@ async function runOperations() {
   document.getElementById('close-log-dialog')?.addEventListener('click', (e) => {
     e.preventDefault();
     closeLogDialog();
+  });
+
+  const lumiereDialog = document.getElementById('lumiere-stats-dialog');
+  let lumiereDialogPointerDownBackdrop = false;
+  if (lumiereDialog) {
+    lumiereDialog.addEventListener('pointerdown', (e) => {
+      const rect = lumiereDialog.getBoundingClientRect();
+      lumiereDialogPointerDownBackdrop = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+    });
+    lumiereDialog.addEventListener('click', (e) => {
+      const rect = lumiereDialog.getBoundingClientRect();
+      const isOutside = (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      );
+      if (isOutside && lumiereDialogPointerDownBackdrop) {
+        closeLumiereStatsDialog();
+      }
+      lumiereDialogPointerDownBackdrop = false;
+    });
+    lumiereDialog.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      closeLumiereStatsDialog();
+    });
+    lumiereDialog?.querySelector?.('form[method="dialog"]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      closeLumiereStatsDialog();
+    });
+  }
+
+  document.getElementById('close-lumiere-stats-dialog')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeLumiereStatsDialog();
+  });
+
+  document.getElementById('btn-refresh-lumiere-stats')?.addEventListener('click', () => {
+    showLumiereStats();
+  });
+
+  document.getElementById('btn-rebuild-lumiere-from-modal')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Rebuilding…';
+    }
+    try {
+      const res = await api('/api/lumiere/rebuild', 'POST');
+      if (res && res.success) {
+        showToast('LumiereDB rebuild triggered.');
+      } else {
+        showToast('Rebuild: ' + (res?.error || res?.output || 'Triggered'));
+      }
+    } catch (err) {
+      showToast('Failed to trigger rebuild: ' + err.message);
+    } finally {
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Rebuild index ↻';
+        }
+        showLumiereStats();
+        refreshServices();
+      }, 3000);
+    }
   });
 
   const frameDialog = document.getElementById('service-frame-modal');

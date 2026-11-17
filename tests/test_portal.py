@@ -662,6 +662,25 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(data.get("success"))
             self.assertTrue(data["stats"]["healthy"])
 
+    def test_lumiere_stats_endpoint(self):
+        self.assertEqual(self.request("/api/lumiere/stats", auth=False)[0], 401)
+        with patch("urllib.request.urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.return_value = json.dumps({
+                "phase": "idle",
+                "index": {"ready": True, "generationId": "gen-test-123"}
+            }).encode("utf-8")
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request("/api/lumiere/stats", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+            self.assertTrue(data.get("ready"))
+            self.assertEqual(data.get("phase"), "idle")
+
     def test_public_database_options_can_be_saved_and_returned(self):
         status, body, _ = self.request(
             "/api/save-env", "POST",
