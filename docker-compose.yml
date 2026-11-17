@@ -145,6 +145,15 @@ services:
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
       - BUILTIN_ZILEAN_URL=${BUILTIN_ZILEAN_URL:-http://zilean:8181}
       - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
+      - BUILTIN_BITMAGNET_URL=${BUILTIN_BITMAGNET_URL:-http://bitmagnet:3333}
+      - BUILTIN_DEFAULT_BITMAGNET_TIMEOUT=${BUILTIN_DEFAULT_BITMAGNET_TIMEOUT:-5000}
+
+      # --- RemuxDB & Media Info Probing ---
+      - REMUXDB_ENABLED=${ENABLE_REMUXDB:-true}
+      - REMUXDB_BASE_URL=${REMUXDB_BASE_URL:-https://remuxdb.1632022.xyz}
+      - MEDIA_INFO_PROBE=${MEDIA_INFO_PROBE:-true}
+      - MEDIA_INFO_PROBE_ON=stremio,jellyfin,library
+      - MEDIA_INFO_BACKFILL=stremthru,remuxdb
 
       # --- Internal Tracker Integrations ---
       - BUILTIN_PROWLARR_URL=http://prowlarr:9696

@@ -428,6 +428,11 @@ async function loadManifest() {
       aioPlayer.href = playerUrl;
       aioPlayer.style.display = 'block';
     }
+    const hubPlayer = document.getElementById('hub-open-web-player');
+    if (hubPlayer) {
+      hubPlayer.href = playerUrl;
+      hubPlayer.style.display = 'inline-flex';
+    }
     const topbarPlayer = document.getElementById('topbar-open-player');
     if (topbarPlayer) {
       topbarPlayer.href = playerUrl;
@@ -905,12 +910,19 @@ async function refreshServices() {
   const info = cachedManifestInfo;
   const enabled = info?.jellyfinEnabled === true && info.uuid && aioSvc && aioSvc.enabled !== false;
   const aioAction = document.getElementById('aiostreams-player-action');
+  const hubPlayer = document.getElementById('hub-open-web-player');
   const topbarPlayer = document.getElementById('topbar-open-player');
   if (aioAction) {
     aioAction.style.display = enabled ? 'block' : 'none';
     if (enabled) {
       aioAction.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
       aioAction.textContent = 'Open AIOStreams Web Player ↗';
+    }
+  }
+  if (hubPlayer) {
+    hubPlayer.style.display = enabled ? 'inline-flex' : 'none';
+    if (enabled) {
+      hubPlayer.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
     }
   }
   if (topbarPlayer) {
