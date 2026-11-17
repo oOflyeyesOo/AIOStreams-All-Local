@@ -1261,7 +1261,9 @@
         "tvdb.collections.search": true,
         "tvmaze.search": true,
         "mal.search.movie": false,
-        "mal.search.series": false
+        "mal.search.series": false,
+        "lumiere.search": true,
+        "lumiere.people.search": true
       },
       "providerNames": {
         "gemini.search": "Smart Search"

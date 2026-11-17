@@ -52,7 +52,9 @@
         "kitsu.search.series": true,
         "people_search_movie": false,
         "people_search_series": false,
-        "tvdb.collections.search": false
+        "tvdb.collections.search": false,
+        "lumiere.search": true,
+        "lumiere.people.search": true
       },
       "searchDisplayTypes": {
         "movie": "Movie",

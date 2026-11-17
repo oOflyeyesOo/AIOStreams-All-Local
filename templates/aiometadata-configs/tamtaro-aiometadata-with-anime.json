@@ -1678,7 +1678,9 @@
         "tvdb.collections.search": true,
         "tvmaze.search": true,
         "mal.search.movie": true,
-        "mal.search.series": true
+        "mal.search.series": true,
+        "lumiere.search": true,
+        "lumiere.people.search": true
       }
     },
     "streaming": [
