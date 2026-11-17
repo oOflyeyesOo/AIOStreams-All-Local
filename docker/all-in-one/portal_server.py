@@ -122,7 +122,7 @@ def launch_setup():
 HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
-    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080
+    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "lumiere-db": 8000
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/stremio/configure", "aiometadata": "/configure",
@@ -144,6 +144,7 @@ INTERNAL_SERVICE_TARGETS = {
     "stremthru": ("stremthru", 8080, 8080),
     "anime-kitsu": ("anime-kitsu", 7000, 7005),
     "infinidysk": ("infinidysk", 3000, 3005),
+    "lumiere-db": ("lumiere-db", 8000, 8000),
 }
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -161,6 +162,7 @@ def probe_integration(item):
         "aiometadata": {"core", "scrapers", "all"},
         "postersplus": {"core", "scrapers", "all"},
         "subsense": {"core", "scrapers", "all"},
+        "lumiere-db": {"core", "scrapers", "all"},
     }
     enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))
     if host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE", "debrid") == "debrid":
@@ -2060,6 +2062,26 @@ button:hover {{ background: #0369a1; }}
             return
         elif path == "/api/backups/prune":
             self.handle_api_backups_prune()
+            return
+        elif path == "/api/lumiere/rebuild":
+            if self.auth_enabled and not self.is_authenticated():
+                self.send_auth_required()
+                return
+            try:
+                res = subprocess.run(
+                    ["docker", "exec", "lumiere-db", "/app/api", "rebuild"],
+                    capture_output=True, text=True, timeout=15
+                )
+                output = (res.stdout or res.stderr or "Rebuild command executed").strip()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": res.returncode == 0, "output": output}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
             return
 
         if self.check_proxy_referer_fallback(path, url_parts.query):

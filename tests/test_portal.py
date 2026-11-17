@@ -36,7 +36,7 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 10)
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 11)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,

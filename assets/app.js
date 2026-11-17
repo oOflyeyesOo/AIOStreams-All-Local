@@ -687,6 +687,36 @@ async function refreshServices() {
       });
       actions.append(qcBtn);
     }
+    if (service.host === 'lumiere-db' || service.name === 'LumiereDB') {
+      const rebuildBtn = document.createElement('button');
+      rebuildBtn.type = 'button';
+      rebuildBtn.className = 'service-embed-btn';
+      rebuildBtn.textContent = 'Rebuild index ↻';
+      rebuildBtn.title = 'Trigger immediate IMDb dataset sync and index rebuild';
+      rebuildBtn.setAttribute('aria-label', 'Rebuild LumiereDB search index');
+      rebuildBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        rebuildBtn.disabled = true;
+        rebuildBtn.textContent = 'Rebuilding…';
+        try {
+          const res = await api('/api/lumiere/rebuild', 'POST');
+          if (res && res.success) {
+            showToast('LumiereDB rebuild triggered. Checking progress…');
+          } else {
+            showToast('Rebuild: ' + (res?.error || res?.output || 'Triggered'));
+          }
+        } catch (err) {
+          showToast('Failed to trigger rebuild: ' + err.message);
+        } finally {
+          setTimeout(() => {
+            rebuildBtn.disabled = false;
+            rebuildBtn.textContent = 'Rebuild index ↻';
+            refreshServices();
+          }, 3000);
+        }
+      });
+      actions.append(rebuildBtn);
+    }
     const containerKey = (service.host || service.name).toLowerCase().replace(/[^a-z0-9_-]/g, '');
     const logBtn = document.createElement('button');
     logBtn.type = 'button';
