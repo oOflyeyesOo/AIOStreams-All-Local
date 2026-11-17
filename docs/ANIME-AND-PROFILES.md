@@ -67,7 +67,8 @@ The default `tamtaro-aiometadata-with-anime.json` configuration provides:
 - **Posters+ MAL Rating Badges**: MAL scores alongside IMDb ratings on posters.
 - **Watch Tracking**: MyAnimeList (`malWatchTracking: True`) and AniList (`anilistWatchTracking: True`).
 
-> [!NOTE] Jikan (MAL API) is optional. Set `JIKAN_API_BASE` to use a self-hosted or public Jikan instance.
+> [!NOTE]
+> Jikan (MAL API) is pre-configured to use the free Tenrai public endpoint (`https://api.tenrai.org/v4`) by default. You can override it with `JIKAN_API_BASE` in `.env` if you prefer a self-hosted instance.
 
 ---
 

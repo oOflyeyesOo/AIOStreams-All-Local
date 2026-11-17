@@ -141,7 +141,7 @@ See [docs/ANIME-AND-PROFILES.md](docs/ANIME-AND-PROFILES.md) for application-lev
 Trakt, Simkl, AniList, and subtitle/debrid providers are configured through the bundled services — not additional containers.
 
 > [!NOTE]
-> Jikan self-hosted support is available via the `JIKAN_API_BASE` environment variable in AIOMetadata.
+> Jikan support for anime schedules and fillers is pre-configured via Tenrai (`https://api.tenrai.org/v4`), or can be pointed to a self-hosted instance using `JIKAN_API_BASE`.
 
 ---
 
