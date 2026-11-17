@@ -1353,6 +1353,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             else:
                 validated_presets.append(p)
         elif ptype == "knaben":
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                continue
             p["enabled"] = True
             opts["name"] = "Knaben (Anime)"
             opts["mediaTypes"] = ["anime"]
