@@ -44,7 +44,7 @@ repo_root_cand = str(Path(__file__).resolve().parents[2])
 WEB_ROOT = os.environ.get("WEB_ROOT") or (repo_root_cand if os.path.isfile(os.path.join(repo_root_cand, "docker-compose.yml")) else "/app")
 ENV_PATH = os.path.realpath(os.path.join(WEB_ROOT, ".env"))
 ENV_EXAMPLE_PATH = os.path.join(WEB_ROOT, ".env.example")
-APP_VERSION = os.environ.get("APP_VERSION", "1.5.0")
+APP_VERSION = os.environ.get("APP_VERSION", "1.6.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
