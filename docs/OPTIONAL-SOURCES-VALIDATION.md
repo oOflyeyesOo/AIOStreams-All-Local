@@ -43,7 +43,7 @@ default source selection. Returned results included sources such as ThePirateBay
 1337x, Rutracker, Rutor, TorrentGalaxy, MagnetDL and RARBG; these labels describe
 Torrentio results, not newly deployed local scrapers. Some overlap with Prowlarr
 indexers is expected. Torrentio stays dedicated to AIOStreams native integration.
-Do not add a second copy through Comet or another aggregator. Hash deduplication
+Do not add a second copy through another aggregator. Hash deduplication
 removes duplicate results; global external-site request deduplication is not
 established.
 
@@ -70,7 +70,7 @@ Benchmarking revealed high latency costs, scrapers timing out on cold searches,
 and redundant scraper overhead.
 
 The stack has been streamlined to a high-speed local indexing and caching architecture:
-- **Comet** queries local **Prowlarr** indexers and the **Zilean** DMM cache.
+- **AIOStreams Native Presets** query local **Prowlarr** indexers and the **Zilean** DMM cache directly.
 - **Search Broker** coalesces duplicate indexer searches and provides 60s in-memory caching.
 - External multi-crawlers were retired in favor of native **Torrentio**, **RemuxDB**, and curated **DMM** hashlists.
 
@@ -79,7 +79,7 @@ The stack has been streamlined to a high-speed local indexing and caching archit
 The single-page form accepts server, port, username, password, TLS and connection
 count, plus an optional Newznab URL/API key. Connect my stack supplies the current
 InfiniDysk headless JSON schema and creates one native AIOStreams
-`Prowlarr → InfiniDysk` Usenet route. Comet's installed indexer manager filters
+`Prowlarr → InfiniDysk` Usenet route. The installed indexer manager filters
 Prowlarr indexers to `protocol == torrent`; the native Usenet route selects only
 Usenet sources. This does not create a second torrent-search route.
 
@@ -140,7 +140,7 @@ Existing Prowlarr user configurations are preserved.
 
 EasyNews uses one native `easynews-search` preset, restricted to the EasyNews
 account itself. An EasyNews-only account
-does not enable unsupported Comet/Torrentio routes. Configure `EASYNEWS_USER`
+does not enable unsupported routes. Configure `EASYNEWS_USER`
 and `EASYNEWS_PASSWORD` in the private environment file; these are not generic
 NNTP credentials. Pagination remains off. Actual EasyNews searches and paid
 access have not been validated.

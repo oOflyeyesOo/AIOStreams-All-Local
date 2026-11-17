@@ -13,7 +13,7 @@ Initial baseline (superseded; see current release below): **not ready for final 
 - Repeat movie requests still took about 20 seconds, indicating the timed-out secondary scraper remains a latency cost. End-to-end call-count instrumentation remains outstanding.
 - Fresh Zilean import was initially disabled for resource isolation. It is now enabled to populate episode cache; completion still needs verification.
 
-Routing changes under test: Comet owns Prowlarr/Zilean; AIOStreams owns anime ID mapping; Sootio has no recursive aggregator/indexer calls and uses distinct direct sources; MediaFusion does not re-query Prowlarr/Zilean. Anime acceptance remains required after removing Comet's duplicate import.
+Routing changes under test: AIOStreams queries Prowlarr and Zilean directly; AIOStreams owns anime ID mapping; Sootio has no recursive aggregator/indexer calls and uses distinct direct sources; MediaFusion does not re-query Prowlarr/Zilean.
 
 Other remaining release gates: source/manager maintenance parity, actual controller apply, live backup/restore acceptance, image builds/version pins, episode/metadata/subtitle/proxy functional matrix, request trace/count audit, screenshot refresh and CI verification. Source is uncommitted and has not been published as final.
 

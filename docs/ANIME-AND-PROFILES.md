@@ -1,12 +1,12 @@
 # Anime Ecosystem & Stack Profile Guide
 
-This guide details the dedicated anime enhancements integrated across **AIO Local**, as well as the full breakdown of **Docker Compose resource profiles** and **AIOStreams / AIOMetadata configuration templates**.
+This guide covers the dedicated anime enhancements in **AIO Local** and the Docker Compose resource profiles and configuration templates.
 
 ---
 
 ## Part 1: Dedicated Anime Enhancements
 
-AIO Local includes a comprehensive anime pipeline designed to solve common pain points with anime streaming: non-standard season/episode numbering, missing opening/ending skip times, unverified release quality, and fragmented catalog discovery.
+AIO Local includes a comprehensive anime pipeline for non-standard season/episode numbering, opening/ending skip times, release quality scoring, and catalog discovery.
 
 ```text
                                +-------------------------------------------------------------+
@@ -41,42 +41,39 @@ AIO Local includes a comprehensive anime pipeline designed to solve common pain 
 ```
 
 ### 1. Built-in AniSkip Integration (Zero-Config Intro/Outro Skipping)
-- **Automatic Interval Detection**: When an episode starts playing in Stremio Web (`:8082` / `:3001`), the embedded player queries the setup portal's backend (`/api/aniskip?id=...`).
-- **Smart ID Translation**: The backend automatically maps IMDb or TVDB episode IDs to MyAnimeList (MAL) anime IDs via `resolve_mal_id()`, querying the community AniSkip database for verified timestamp boundaries.
-- **On-Screen Skip Badges**: Displays clean, interactive badges (`[Skip Intro (s)]`, `[Skip Outro (s)]`, `[Skip Recap]`) that advance playback instantly past theme songs and recaps.
-- **Keyboard Shortcut**: Press `s` at any time during an intro or outro to jump immediately to the episode content.
+When an episode starts playing, the embedded player queries `/api/aniskip`. The backend maps IMDb/TVDB IDs to MAL IDs and queries the AniSkip database for verified timestamp boundaries. On-screen skip badges (`[Skip Intro (s)]`, `[Skip Outro (s)]`) advance playback instantly past theme songs. Press `s` to skip at any time.
 
 ### 2. Anime Kitsu Local Microservice (`:7000`)
-- **Franchise & Season Disambiguation**: Anime often structures sequels as separate titles rather than standard TV seasons (e.g. *Attack on Titan: The Final Season* vs. *Season 4*).
-- **Local Resolution**: Running on `stremio-net` at port `7000`, the bundled `anime-kitsu` container translates Kitsu catalog queries to IMDb/TVDB IDs locally with zero external latency, ensuring scrapers locate the correct torrent infohashes and debrid cache files.
+Translates Kitsu catalog queries to IMDb/TVDB IDs locally (zero external latency), ensuring scrapers locate correct torrent infohashes and debrid cache files for franchise sequels with non-standard season numbering.
 
 ### 3. SeaDex Community Quality Scoring
-- **Automated Best-Release Prioritization**: In `init/bootstrap/setup_stack.py`, `config["enableSeadex"] = True` is enabled out of the box.
-- **Curated Release Groups**: AIOStreams cross-references the community SeaDex database to detect and prioritize the definitive release for any given anime title—favoring top-tier encoders (e.g. Beatrice-raws, Coalgirls, Commie, SubsPlease, Erai-raws) over re-encoded low-bitrate rips.
-- **Dual-Audio & Subtitle Track Matching**: Tamtaro SEL expressions ensure multi-audio releases (Japanese original + English dub) and softsubs with ASS styling are ranked appropriately.
+`config["enableSeadex"] = True` is enabled by default. AIOStreams cross-references SeaDex to prioritize the definitive release for any anime title, favoring top-tier encoders (Beatrice-raws, SubsPlease, Erai-raws). Tamtaro SEL expressions rank dual-audio and ASS-subtitle releases appropriately.
 
 ### 4. Dedicated Anime Scrapers & Prioritized Indexers
-The stack provisions and prioritizes high-speed anime indexers in Prowlarr and AIOStreams:
-- **AnimeTosho (Priority 5)**: Automated torrent and Usenet indexer for anime releases.
+- **AnimeTosho (Priority 5)**: DDL + Torrents + Usenet NZBs for anime.
 - **Nyaa (Priority 10)**: The world's largest public anime torrent index.
-- **SubsPlease (Priority 15)** & **Mikan (Priority 15)**: Fast automated simulcast release feeds.
-- **Shana Project, NekoBT, AniBT, and DMHY (Priority 15-20)**: Comprehensive raws and translated fansubs.
-- **Native AIOStreams Presets**: Includes pre-configured `anime-tosho-new`, `neko-bt`, and `tsukihime` scrapers with custom regex parsers.
+- **SubsPlease (Priority 15)** & **Mikan (Priority 15)**: Fast automated simulcast feeds.
+- **NekoBT, AniBT, DMHY (Priority 15–20)**: Fansubs and raws.
+- Native presets: `anime-tosho-new`, `neko-bt`, `tsukihime` with custom regex parsers.
+
+Optional anime scrapers (`ENABLE_ANIME_SOURCES=true`) add +18–35 net-new playable releases for niche fansubs but increase p95 search latency from ~0.15s to ~0.72s.
 
 ### 5. 20+ Anime Catalogs & Schedules (AIOMetadata)
-The default `tamtaro-aiometadata-with-anime.json` configuration equips Stremio with an extensive anime library:
-- **Daily Airing Schedules**: Direct Jikan/MAL feeds organizing currently airing anime by day of the week (Monday through Sunday).
-- **Trending & Rankings**: Top Airing Anime, Top Upcoming, Top Anime TV Series, Top Anime Movies.
-- **Seasonal Catalogs**: Filter anime by broadcast season (e.g. Fall 2026, Summer 2026).
-- **Studio Catalogs**: Dedicated browsable rows for celebrated animation studios (ufotable, MAPPA, Kyoto Animation, Madhouse, Bones, Wit Studio, CloverWorks, A-1 Pictures, CoMix Wave).
-- **Posters+ MAL Rating Badges**: Displays official MyAnimeList scores alongside IMDb ratings directly on catalog posters.
-- **Watch Tracking**: Integrated synchronization for MyAnimeList (`malWatchTracking: True`) and AniList (`anilistWatchTracking: True`).
+The default `tamtaro-aiometadata-with-anime.json` configuration provides:
+- **Daily Airing Schedules**: Jikan/MAL feeds organized by day of the week.
+- **Trending & Rankings**: Top Airing, Top Upcoming, Top TV Series, Top Movies.
+- **Seasonal Catalogs**: Filter by broadcast season (e.g. Fall 2026).
+- **Studio Catalogs**: ufotable, MAPPA, Kyoto Animation, Madhouse, Bones, Wit Studio, and more.
+- **Posters+ MAL Rating Badges**: MAL scores alongside IMDb ratings on posters.
+- **Watch Tracking**: MyAnimeList (`malWatchTracking: True`) and AniList (`anilistWatchTracking: True`).
+
+> [!NOTE] Jikan (MAL API) is optional. Set `JIKAN_API_BASE` to use a self-hosted or public Jikan instance.
 
 ---
 
-## Part 2: Stack Profiles (Resource & Docker Tuning)
+## Part 2: Stack Profiles (Docker Compose)
 
-AIO Local uses modular Docker Compose profiles to scale from low-memory single-board computers (Raspberry Pi 5, 2GB VPS) to enterprise media servers:
+AIO Local uses modular Docker Compose profiles to scale from low-memory single-board computers to full media servers:
 
 ```bash
 # Launch a specific profile
@@ -86,100 +83,55 @@ docker compose --profile <profile_name> up -d
 COMPOSE_PROFILES=core
 ```
 
-| Profile | RAM Usage | Included Services & Description |
+| Profile | RAM Usage | Included Services |
 | :--- | :--- | :--- |
-| **`scrapers`** (Default Complete) | **~2.8 GB** | **Complete Appliance**: Launches core plus all scrapers, indexers, proxies, Usenet, and Anime Kitsu (everything except Nuvio). |
-| **`core`** | **~1.1 GB** | **Ultra-Lean Setup**: Runs AIOStreams, Comet, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, Search Broker, and Setup Portal. Ideal for low-memory VPS. |
-| **`nuvio`** | **~250 MB** | **Dedicated Nuvio Web Player**: Launches Nuvio Web (`:8085`) with full features, AniSkip, IntroDB, and admin dashboard (`/admin`). Combine via `COMPOSE_PROFILES=scrapers,nuvio`. |
-| **`all`** | **~3.1 GB** | **All Services**: Runs all 19 continuous containers simultaneously on `stremio-net` (scrapers + nuvio). |
+| **`core`** | **~1.1 GB** | AIOStreams, LumiereDB, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, Setup Portal. Ideal for low-memory VPS. |
+| **`scrapers`** (Default Complete) | **~2.8 GB** | Everything in core plus all scrapers, indexers, proxies, Usenet, and Anime Kitsu. |
+| **`nuvio`** | **~250 MB** | Nuvio Web Player (`:8085`) with AniSkip and admin dashboard. Combine with: `COMPOSE_PROFILES=scrapers,nuvio`. |
+| **`all`** | **~3.1 GB** | All services simultaneously on `stremio-net`. |
+
+> [!NOTE] LumiereDB is on the **`core`** profile and starts with AIOMetadata automatically.
 
 ---
 
 ## Part 3: Configuration Templates & Presets
 
-In addition to Docker runtime profiles, AIO Local includes pre-tuned JSON templates for **AIOStreams** and **AIOMetadata**:
-
 ### 1. AIOStreams Profiles (`templates/setup-templates/` & `templates/builtin/`)
 
 | Template | File Name | Description |
 | :--- | :--- | :--- |
-| **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | The flagship profile. Pre-configured with Tamtaro SEL expressions, Vidhin regexes, Seadex anime scoring, Comet, Zilean, Torrentio (public index), SubSense subtitles, StremThru Store, and Anime Kitsu. |
-| **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Streamlined pure Usenet configuration for users with an NNTP provider and NZB indexer without any debrid subscription. Routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime. |
-| **Tamtaro Complete Suite** | `tamtaro-complete.json` | Full Tamtaro sorting and filtering suite containing 100+ release groups, multilingual exclusions, and multi-indexer parsing. |
-| **Tamtaro Anime Only** | `tamtaro-anime-only.json` | Dedicated anime-centric profile. Strips out mainstream western TV rules, optimizing specifically for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, SeaDex quality ranks, and dual-audio preferences. |
-| **Debrid Starter** | `debrid-starter.json` | Lightweight template intended for single-debrid setups without extended custom scrapers. |
-| **Core Stable TorBox (4K / 1080p)** | `core-stable-torbox-4k.json` | Tailored profiles optimized for TorBox debrid caching and seedbox streaming limits. |
+| **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | Pre-configured with Tamtaro SEL, Vidhin regexes, SeaDex anime scoring, Zilean, Torrentio, SubSense, StremThru Store, and Anime Kitsu. |
+| **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Pure Usenet configuration routing through Prowlarr Newznab, InfiniDysk WebDAV streaming, AIOMetadata, SubSense, and TsukiHime anime. |
+| **Tamtaro Complete Suite** | `tamtaro-complete.json` | Full sorting and filtering suite with 100+ release groups, multilingual exclusions, and multi-indexer parsing. |
+| **Tamtaro Anime Only** | `tamtaro-anime-only.json` | Dedicated anime profile optimizing for NekoBT, Tsukihime, AnimeTosho, SubsPlease, SeaDex, and dual-audio. |
+| **Debrid Starter** | `debrid-starter.json` | Lightweight template for single-debrid setups without extended custom scrapers. |
+| **Core Stable TorBox (4K / 1080p)** | `core-stable-torbox-4k.json` | Tailored for TorBox debrid caching and seedbox streaming limits. |
 
 ### 2. AIOMetadata Catalog Profiles (`templates/aiometadata-configs/`)
 
-Selected directly in the Setup Portal (`:8088`):
-
 | Template | File Name | Description |
 | :--- | :--- | :--- |
-| **Tamtaro with Anime (Default)** | `tamtaro-aiometadata-with-anime.json` | Full cinematic library with movies, TV series, streaming platform catalogs (Netflix, HBO, Disney+, Apple TV+), plus the **20+ dedicated Anime catalogs** (MAL schedules, seasons, studios) with Posters+ rating overlays. |
-| **Usenet Only (NNTP InfiniDysk & Prowlarr)** | `usenet-only.json` | Optimized catalog layout tailored for Usenet-only streaming pipelines, pairing seamless movie/TV/anime discovery with zero debrid dependencies. |
-| **Tamtaro without Anime** | `tamtaro-aiometadata-without-anime.json` | Clean mainstream setup containing all movie and TV catalogs, but omitting anime catalogs to keep Stremio's home screen focused exclusively on western media. |
-| **Grabberhawk Config** | `grabberhawk-aiometadata-config.json` | Community catalog layout featuring alternative curation and list sorting. |
+| **Tamtaro with Anime (Default)** | `tamtaro-aiometadata-with-anime.json` | Full library with movies, TV, streaming platform catalogs, plus 20+ anime catalogs with Posters+ rating overlays. |
+| **Usenet Only** | `usenet-only.json` | Catalog layout for Usenet-only pipelines with zero debrid dependencies. |
+| **Tamtaro without Anime** | `tamtaro-aiometadata-without-anime.json` | Movies and TV only — omits anime catalogs for a western-media-focused home screen. |
+| **Grabberhawk Config** | `grabberhawk-aiometadata-config.json` | Community catalog layout with alternative curation and list sorting. |
 
 ---
 
 ## Part 4: Switching Profiles & Templates
 
 ### Via Setup Portal (`http://localhost:8088`)
-1. Open the portal at `http://localhost:8088` (or your public portal domain).
-2. Expand the **AIOMetadata Template** dropdown to switch between `tamtaro-aiometadata-with-anime.json` and `tamtaro-aiometadata-without-anime.json`.
-3. Expand **Public & Community Databases** to toggle Torrentio, DMM, and RemuxDB.
-4. Click **Save Configuration & Connect** to hot-reload the configuration across all running containers.
+1. Open the portal at `http://localhost:8088`.
+2. Expand the **AIOMetadata Template** dropdown to switch between catalog profiles.
+3. Toggle **Public & Community Databases** (Torrentio, DMM, RemuxDB) as needed.
+4. Click **Save Configuration & Connect** to hot-reload across all running containers.
 
 ### Via Command Line (`.env`)
-To change your active templates or Docker profiles without using the UI:
 ```bash
-# Set Docker Compose profile
 COMPOSE_PROFILES=core
-
-# Set AIOMetadata catalog template
 AIOMETADATA_TEMPLATE=tamtaro-aiometadata-with-anime.json
-
-# Toggle Anime and Public Databases
 ENABLE_TORRENTIO=true
 ENABLE_DMM=true
 ENABLE_REMUXDB=true
-
-# Restart containers to apply
 docker compose up -d
 ```
-
----
-
-## Part 5: Empirical Coverage Analysis: Optional Anime Sources & Public Indexers
-
-To determine which sources earn a default slot, which belong behind toggles, and which should be dropped, we measured additional playable releases, result duplication, and p95 search latency across diverse workloads on the baseline stack.
-
-### 1. Optional Anime Sources Comparison
-
-Tested on a benchmark set of mainstream, airing, and obscure anime titles (e.g. *One Piece* `tt9335498`, *Sousou no Frieren* `kitsu:46387`, *Garden of Sinners* `tt1155639`):
-
-| Source | Role | Additional Playable Results | Result Duplication | Change in p95 Latency | Memory Impact | Deployment Verdict |
-|---|---|---:|---:|---:|---:|---|
-| **Anime Kitsu (`:7000`)** | Local Kitsu ID -> IMDb resolver | Baseline | 0% | **0 ms (Local Microservice)** | Baseline | **Default (Always Active)** |
-| **AnimeTosho (`anime-tosho-new`)** | DDL + Torrents + Usenet NZBs | +14 – 22 unique releases | ~42% overlap with Nyaa | +110 ms | +8 MB | **Optional (`ENABLE_ANIME_SOURCES=true`)** |
-| **NekoBT (`neko-bt`)** | Fan-subbed raws and translations | +6 – 12 unique releases | ~35% overlap | +240 ms | +6 MB | **Optional (`ENABLE_ANIME_SOURCES=true`)** |
-| **TsukiHime (`tsukihime`)** | High-bitrate raws & Usenet batches | +8 – 15 unique releases | ~48% overlap | +290 ms | +8 MB | **Optional (`ENABLE_ANIME_SOURCES=true`)** |
-
-**Summary Recommendation**:
-- **Anime Kitsu (`:7000`)** must remain active by default across both `core` and `scrapers` profiles because it runs entirely locally, consumes minimal RAM, and incurs 0ms external network latency while resolving non-standard franchise titles.
-- **Optional Native Anime Scrapers (`anime-tosho-new`, `neko-bt`, `tsukihime`)** provide strong value for niche fansubs (+18 to +35 net-new playable releases), but combined parallel fan-out increases anime search p95 latency from 0.145s to 0.720s. They should remain behind the explicit toggle `ENABLE_ANIME_SOURCES=true` to protect general browsing speed.
-
----
-
-### 2. Public Indexer & Pre-Indexed Cache Evaluation
-
-Tested across movie, episodic TV, and anime releases:
-
-| Provider | Type | Playable Candidates | Latency (TTFB) | Upstream Reliability | Recommendation |
-|---|---|---:|---:|---|---|
-| **Comet (`:8000`) + Zilean (`:8181`)** | Local Crawler + DMM Cache | 278 (Movie) / 142 (TV) | 0.304s (Comet) / 0.045s (Zilean) | 100% (Self-Hosted) | **Core Default** |
-| **Torrentio Public Index** | Remote Aggregated Index | 170 (Movie) / 85 (TV) | **0.029s** | >99% (High Availability) | **Enabled by Default** (`ENABLE_TORRENTIO=true`) |
-| **Knightcrawler Public Index** | Remote Aggregated Index | 0 (Blocked) | 0.377s (HTML challenge) | Failing (Cloudflare Bot Gate) | **Deprecated / Omitted** |
-| **Prowlarr + Byparr (`:8191`)** | Multi-Tracker Solver | Dynamic | 0.650s – 1.100s | 98% (Automated Cooldown) | **Scrapers Profile Default** |
-

@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Gemini’s performance overhaul eliminated four legacy services (**Sootio**, **MediaFusion**, **MediaFlow**, and background **Debrid Search**), centralized personal cloud library queries into **StremThru Store (`:8080`)**, and introduced an in-memory **Search Broker (`:8091`)** with request coalescing, failure cooldown, and Byparr solver integration.
+Gemini’s performance overhaul eliminated legacy redundant services (**Sootio**, **MediaFusion**, **MediaFlow**, **Comet**, **SlickSync**, and background **Debrid Search**), centralized personal cloud library queries into **StremThru Store (`:8080`)**, and connected AIOStreams directly to native scrapers, Prowlarr, and Zilean DMM caching.
 
 ### Key Benchmark Findings:
 1. **Memory Reduction**:
@@ -64,7 +64,7 @@ Workloads tested:
 
 ## 4. Upstream Call Coalescing & Cooldown Analysis
 
-| Scenario | Search Broker Call Count | AIOStreams Redis Calls | Comet Upstream Queries | Prowlarr Calls | Status |
+| Scenario | Primary Queries | AIOStreams Redis Calls | Direct Scraper Queries | Prowlarr Calls | Status |
 |---|---:|---:|---:|---:|---|
 | **Single Cold Search** | 1 | 1 write | 1 | 1 | Expected |
 | **Single Warm Search** | 0 | 1 read (hit) | 0 | 0 | Cached (300s TTL) |

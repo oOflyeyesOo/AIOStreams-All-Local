@@ -7,9 +7,9 @@
 
 | Resource | Owner and path | Duplicate-work policy |
 |---|---|---|
-| Streams | Player → AIOStreams → Comet / Torrentio / RemuxDB / StremThru Store | One combined player manifest |
-| Indexer searches | Comet → search-broker → Prowlarr → indexers/Byparr | Identical in-flight requests share one result; 60s cache; cooldown backoff |
-| DMM hash discovery | Comet → Zilean | Local PostgreSQL DMM cache (<50ms lookup) |
+| Streams | Player → AIOStreams → Direct Scrapers / Torrentio / RemuxDB / StremThru Store | One combined player manifest |
+| Indexer searches | AIOStreams → Prowlarr → Torrents / Usenet | Direct native scraping with local timeout bounds |
+| DMM hash discovery | AIOStreams → Zilean | Local PostgreSQL DMM cache (<50ms lookup) |
 | Catalogs and metadata | AIOStreams → configured AIOMetadata; Kitsu for anime catalogs/metadata | Kitsu restricted to catalog/meta; unconfigured AIOMetadata omitted |
 | Subtitles | AIOStreams → configured SubSense URL (:3100) | Multi-provider subtitles (OpenSubtitles, SubDL, SubSource) |
 | Artwork | AIOMetadata → Posters+ `/poster?stremio_id=…` | Explicit render key; portal password is not reused |
@@ -74,8 +74,8 @@ configuration. Initial observed aggregate responses were 17.499 s for a movie an
 11.503 s for an episode; subsequent warm responses were 2.584 s and 1.409 s.
 Neither run is a controlled empty-cache benchmark.
 
-The repeat run confirmed movie/episode stream responses, native Comet results,
-Comet results and Kitsu anime metadata. Debrid Search and one episode Zilean
+The repeat run confirmed movie/episode stream responses, direct Prowlarr indexer results,
+Kitsu anime metadata, and Zilean DMM caching. Debrid Search and one episode Zilean
 lookup returned HTTP 200 with no matching items; empty results are not proof of
 service failure. Direct adapter counts use different filtering and warmed caches,
 so they cannot rank sources by quality or comparable cold latency.
@@ -102,8 +102,8 @@ StremThru and MediaFlow health endpoints passed; that alone is not transport pla
 
 `tools/trace_proxy.py` now supports catalog/meta/subtitle/artwork/library edges and
 per-port listeners for native adapters. `TRACE_EDGES_JSON` can declare, for example,
-`[{"port":8101,"service":"comet","caller":"aiostreams"}]`; point that caller's
-internal Comet origin at the listener without adding a URL prefix. Existing prefix
+`[{"port":9696,"service":"prowlarr","caller":"aiostreams"}]`; point that caller's
+internal Prowlarr origin at the listener without adding a URL prefix. Existing prefix
 routes still work. Keep listeners internal, wait for events to finish before reset,
 and read `/__trace/report`. Events contain caller, service, resource, elapsed time,
 status and per-process HMAC target fingerprints; URLs, headers, queries and bodies
@@ -118,4 +118,4 @@ duplicate-free traffic or every integration being end-to-end verified.
 
 ## Optional-source follow-up
 
-The current default adds native Torrentio, Comet, and Zilean DMM caching, and uses a Usenet-only native Prowlarr preset when configured. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.
+The current default adds native Torrentio, direct Prowlarr indexing, and Zilean DMM caching, and uses a Usenet-only native Prowlarr preset when configured. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.

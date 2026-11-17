@@ -2,7 +2,7 @@
 
 ## Packaging evidence
 
-All local manager images built successfully: portal, controller, AIOStreams, Stremio Web, bootstrap, PostgreSQL initializer and Kitsu. The generated manager definition validates. Packaged portal/controller started in project `aio-package` with named volumes and no source checkout; portal health, shared inventory imports, bootstrap imports and controller `/status` all passed. Custom Comet and metadata host ports survived portal reseeding. Cloudflare Tunnel remains optional. These are local images tagged `release-test`; they have not been published as final.
+All local manager images built successfully: portal, controller, AIOStreams, Stremio Web, bootstrap, PostgreSQL initializer and Kitsu. The generated manager definition validates. Packaged portal/controller started in project `aio-package` with named volumes and no source checkout; portal health, shared inventory imports, bootstrap imports and controller `/status` all passed. Custom metadata host ports survived portal reseeding. Cloudflare Tunnel remains optional. These are local images tagged `release-test`; they have not been published as final.
 
 Regression suite: **77 passed**. Tests cover trace redaction/response forwarding and manager host-port persistence in addition to the earlier portal/bootstrap/backup coverage.
 
@@ -10,7 +10,7 @@ Regression suite: **77 passed**. Tests cover trace redaction/response forwarding
 
 The instrument is an opt-in internal HTTP proxy. It never records request URLs, query strings, headers or response bodies. It covers only configured HTTP edges; it does not count encrypted external provider requests. Trace cases wait for unfinished requests to drain before resetting counters.
 
-The streamlined stack excludes slow external crawlers, relying on Comet, Prowlarr, Byparr, and the Intelligent Search Broker. The Search Broker bounds request concurrency, eliminates duplicate upstream queries, and enforces a 60s in-memory cache to guarantee fast response times.
+The streamlined stack excludes slow external crawlers, relying on direct Prowlarr indexers, Byparr, and Zilean DMM caching. Native scraping bounds request concurrency and eliminates redundant hops to guarantee fast response times.
 
 ### Warm requests after the change
 
