@@ -696,7 +696,7 @@ services:
     networks:
     - stremio-net
   jikan-api:
-    image: ghcr.io/jikan-me/jikan-rest:v4
+    image: ghcr.io/jikan-me/jikan-rest:latest
     restart: unless-stopped
     logging:
       driver: json-file

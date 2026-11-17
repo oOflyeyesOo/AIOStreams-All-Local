@@ -674,7 +674,7 @@ services:
       - stremio-net
 
   jikan-api:
-    image: ghcr.io/jikan-me/jikan-rest:v4
+    image: ghcr.io/jikan-me/jikan-rest:latest
     container_name: jikan-api
     profiles: ["anime-db", "all"]
     restart: unless-stopped
