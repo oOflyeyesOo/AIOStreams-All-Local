@@ -25,7 +25,7 @@ p=importlib.util.module_from_spec(s); s.loader.exec_module(p)
 assert os.environ.get('COMPOSE_CONTROL_SOCKET') == '/runtime/control.sock'
 assert os.environ.get('AIO_STARTUP_ONLY') != 'true'
 assert os.path.realpath('/app/.env') == '/data/.env'
-for host in ('aiostreams', 'comet', 'aiometadata', 'postersplus', 'subsense', 'prowlarr', 'infinidysk', 'stremthru', 'zilean'):
+for host in ('aiostreams', 'lumiere-db', 'aiometadata', 'postersplus', 'subsense', 'prowlarr', 'infinidysk', 'stremthru', 'zilean'):
     socket.getaddrinfo(host, None)
 for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping', 'http://infinidysk:3000/healthz'):
     urllib.request.urlopen(url, timeout=5).close()

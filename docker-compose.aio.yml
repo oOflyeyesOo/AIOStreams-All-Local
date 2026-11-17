@@ -19,7 +19,6 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3005"   # InfiniDysk Usenet Engine
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9039:9039"   # Posters+ Badges
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3100:3100"   # SubSense Subtitle Aggregator
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"   # Comet Fast Torrent Scraper
       - "${INTERNAL_BIND_IP:-127.0.0.1}:7005:7005"   # Anime Kitsu Catalog Provider
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"   # Zilean DMM Cache
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"   # Prowlarr Indexer Manager
@@ -27,9 +26,6 @@ services:
     environment:
       # Empty overrides preserve the appliance's saved settings and inner defaults.
       - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-}
-      - COMET_LIVE_SCRAPE_TIMEOUT=${COMET_LIVE_SCRAPE_TIMEOUT:-}
-      - COMET_INDEXER_WAIT_TIMEOUT=${COMET_INDEXER_WAIT_TIMEOUT:-}
-      - COMET_INDEXER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-}
       - SUBSENSE_WARP_ENABLED=${SUBSENSE_WARP_ENABLED:-false}
       # The outer port mappings above control host access to the nested services.
       - INTERNAL_BIND_IP=0.0.0.0

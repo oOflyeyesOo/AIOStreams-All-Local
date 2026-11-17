@@ -2210,7 +2210,7 @@ button:hover {{ background: #0369a1; }}
             "status": "online",
             "docker_ready": docker_ready,
             "aggregator_ready": aggregator_ready,
-            "version": "1.1.0",
+            "version": APP_VERSION,
             "ports": ports,
             "env": resp_env
         }

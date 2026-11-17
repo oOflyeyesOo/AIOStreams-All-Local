@@ -88,7 +88,7 @@ COMPOSE_PROFILES=core
 
 | Profile | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- |
-| **`scrapers`** (Default Complete) | **~2.8 GB** | **Complete Appliance**: Launches core plus all scrapers, indexers, proxies, Usenet, Stremio Web, SlickSync, and Anime Kitsu (everything except Nuvio). |
+| **`scrapers`** (Default Complete) | **~2.8 GB** | **Complete Appliance**: Launches core plus all scrapers, indexers, proxies, Usenet, and Anime Kitsu (everything except Nuvio). |
 | **`core`** | **~1.1 GB** | **Ultra-Lean Setup**: Runs AIOStreams, Comet, AIOMetadata, Posters+, SubSense, Shared PostgreSQL 16, Shared Redis 7, Search Broker, and Setup Portal. Ideal for low-memory VPS. |
 | **`nuvio`** | **~250 MB** | **Dedicated Nuvio Web Player**: Launches Nuvio Web (`:8085`) with full features, AniSkip, IntroDB, and admin dashboard (`/admin`). Combine via `COMPOSE_PROFILES=scrapers,nuvio`. |
 | **`all`** | **~3.1 GB** | **All Services**: Runs all 19 continuous containers simultaneously on `stremio-net` (scrapers + nuvio). |

@@ -46,7 +46,7 @@ class PortalTests(unittest.TestCase):
 
     def test_diagnostics_redacts_provider_values(self):
         with patch.object(portal, "probe_integration", return_value={
-            "name": "Comet", "group": "Scrapers", "reachable": True,
+            "name": "Prowlarr", "group": "Indexers", "reachable": True,
         }), patch.object(portal, "read_saved_env", return_value={
             "BASE_URL": "https://example.test",
             "TMDB_API_KEY": "tmdb-secret",
@@ -750,7 +750,7 @@ class PortalTests(unittest.TestCase):
 
     def test_diagnostics_export_endpoint(self):
         with patch.object(portal, "probe_integration", return_value={
-            "name": "Comet", "group": "Scrapers", "reachable": True,
+            "name": "Prowlarr", "group": "Indexers", "reachable": True,
         }):
             status, body, headers = self.request("/api/diagnostics/export", "GET", auth=True)
             self.assertEqual(status, 200)
@@ -790,16 +790,16 @@ class PortalTests(unittest.TestCase):
         from unittest.mock import MagicMock
         response = MagicMock()
         response.__enter__.return_value = response
-        with patch.object(portal, "setup_snapshot", return_value={"status": "complete"}), patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch.object(portal, "probe_integration", return_value={"name": "Comet", "reachable": True, "enabled": True}) as probe, patch.object(portal.urllib.request, "urlopen", return_value=response):
+        with patch.object(portal, "setup_snapshot", return_value={"status": "complete"}), patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch.object(portal, "probe_integration", return_value={"name": "Prowlarr", "reachable": True, "enabled": True}) as probe, patch.object(portal.urllib.request, "urlopen", return_value=response):
             response.read.return_value = b'{"id":"fixture","resources":["stream"]}'
             self.assertTrue(portal.playback_readiness()["ready"])
             probe.return_value = {"name": "Optional", "reachable": False, "enabled": False}
             self.assertTrue(portal.playback_readiness()["ready"])
-            probe.return_value = {"name": "Comet", "reachable": False, "enabled": True}
+            probe.return_value = {"name": "Prowlarr", "reachable": False, "enabled": True}
             self.assertFalse(portal.playback_readiness()["ready"])
             probe.return_value = {"name": "SubSense", "reachable": False, "enabled": True}
             self.assertTrue(portal.playback_readiness()["ready"])
-            probe.return_value = {"name": "Comet", "reachable": True, "enabled": True}
+            probe.return_value = {"name": "Prowlarr", "reachable": True, "enabled": True}
             response.read.return_value = b'{"id":"fixture","resources":["catalog"]}'
             self.assertFalse(portal.playback_readiness()["ready"])
             response.read.return_value = b'not json'

@@ -115,13 +115,13 @@ class ProfileSpeedAndInvalidationTests(unittest.TestCase):
         # Simulated profile generation with Premiumize only
         services_pm = [{"id": "premiumize", "enabled": True, "credentials": {"apiKey": "pm_key"}}]
         presets_pm = [
-            {"type": "comet", "instanceId": "comet-local", "enabled": True},
+            {"type": "prowlarr", "instanceId": "prowlarr-scraper", "enabled": True},
             {"type": "stremthruStore", "instanceId": "stremthru-store-local", "enabled": True}
         ]
 
         # User disables debrid and switches to Usenet Only
         services_usenet = [{"id": "nzbdav", "enabled": True, "credentials": {"apiKey": "nzb_key"}}]
-        # Comet and StremThruStore must be omitted or disabled when no debrid is active
+        # Torrent presets and StremThruStore must be omitted or disabled when no debrid is active
         has_debrid = any(s.get("enabled") and s.get("id") not in ("nzbdav", "easynews") for s in services_usenet)
         self.assertFalse(has_debrid)
 

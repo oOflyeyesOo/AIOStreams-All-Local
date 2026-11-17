@@ -11,11 +11,11 @@ import threading
 import time
 import urllib.parse
 
-TARGETS = {'comet':('comet',8000),
+TARGETS = {'lumiere-db':('lumiere-db',8000),
            'prowlarr':('prowlarr',9696), 'zilean':('zilean',8181),
            'aiometadata':('aiometadata',4005), 'subsense':('subsense',3100),
            'anime-kitsu':('anime-kitsu',7000), 'postersplus':('postersplus',8000),
-           'search-broker':('search-broker',8091)}
+           'stremthru':('stremthru',8080)}
 LOCK = threading.Lock()
 EVENTS = []
 FINGERPRINT_KEY = secrets.token_bytes(32)
@@ -66,7 +66,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     # Separate internal listeners preserve native addon paths and attribute callers.
-    # Example: [{"port":8101,"service":"comet","caller":"aiostreams"}]
+    # Example: [{"port":8101,"service":"prowlarr","caller":"aiostreams"}]
     for edge in json.loads(os.environ.get('TRACE_EDGES_JSON','[]')):
         if edge['service'] not in TARGETS or not str(edge['caller']).replace('-','').isalnum():
             raise ValueError('Invalid trace edge')

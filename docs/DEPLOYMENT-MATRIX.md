@@ -6,7 +6,7 @@ This document provides verified deployment patterns, platform compatibility, and
 
 ## 1. Verified Deployment Support Matrix
 
-| Host Environment | Architecture | Orchestrator / Tool | Profile Tested | Pinned Bundle | Custom Ports (`PORT_*`) | Reverse Proxy / Ingress | Players Verified | Watch Tracking (SlickSync) | Rollback & Restore | Status |
+| Host Environment | Architecture | Orchestrator / Tool | Profile Tested | Pinned Bundle | Custom Ports (`PORT_*`) | Reverse Proxy / Ingress | Players Verified | Watch Tracking (Trakt/Simkl) | Rollback & Restore | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
 | **Ubuntu 22.04 / 24.04 LTS** | `x86_64` | Docker Compose v2.27+ | `core`, `scrapers`, `nuvio` | `13855052857` | Verified | Traefik, Caddy, Nginx | Stremio Web (`:8082`), Nuvio (`:8085`), Desktop | Trakt, Simkl, AniList | Verified (zero data loss) | **Tier 1 (Production)** |
 | **Debian 12 (Bookworm)** | `x86_64` | Dockge v1.4+ | `scrapers`, `nuvio` | `13855052857` | Verified | Cloudflare Tunnel | Stremio Web (`:8082`), Android TV | Trakt, Simkl | Verified | **Tier 1 (Production)** |
@@ -62,8 +62,7 @@ All published host ports in `compose.manager.yml` can be customized without edit
 | `PORT_AIOMETADATA` | `4005` | AIOMetadata Catalogs & Ratings | Catalog manifest URL |
 | `PORT_STREMIO_WEB` | `8082` | Stremio Web Player | Setup portal launcher button (`Launch Stremio Web`) |
 | `PORT_NUVIO` | `8085` | Nuvio Web Player | Setup portal launcher button (`Launch Nuvio Web`) |
-| `PORT_SLICKSYNC` | `8086` | SlickSync Trakt Hub | SlickSync dashboard |
-| `PORT_COMET` | `8000` | Comet Torrent Crawler | Internal bind IP |
+| `PORT_LUMIEREDB` | `8000` | LumiereDB SQLite Search Index | Internal bind IP |
 | `PORT_ZILEAN` | `8181` | Zilean DMM Hash Cache | Internal bind IP |
 | `PORT_PROWLARR` | `9696` | Prowlarr Indexer Manager | Internal bind IP |
 | `PORT_SUBSENSE` | `3100` | SubSense Subtitles | Internal bind IP |
@@ -88,8 +87,8 @@ The Setup Portal (`:8088`) inspects runtime environment variables and dynamicall
 
 ---
 
-## 6. Watch Tracking (SlickSync) Reconnect & Survivability
+## 6. Watch Tracking (Trakt/Simkl) Reconnect & Survivability
 
-- **SlickSync Hub (`:8086`)** stores OAuth tokens and scrobble state in the persistent named volume `slicksync-data` (`/app/data`).
+- Watch tracking tokens for Trakt and Simkl are integrated directly into the core portal, AIOStreams, and AIOMetadata environment configuration.
 - **Survives Container Restarts & Updates**: Token refresh cycles for Trakt.tv and Simkl remain active across container recreations without prompting the user to re-authorize.
-- **Backup & Rollback Integration**: `tools/backup.py` includes `slicksync-data` in automated tar snapshots. Restoring a prior release backup recovers all linked accounts seamlessly.
+- **Backup & Rollback Integration**: `tools/backup.py` includes database and configuration files in automated tar snapshots. Restoring a prior release backup recovers all linked accounts seamlessly.

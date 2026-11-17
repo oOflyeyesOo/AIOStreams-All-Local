@@ -17,8 +17,6 @@ jobs:
         include:
           - source: "ghcr.io/viren070/aiostreams:latest"
             target: "aiostreams:latest"
-          - source: "ghcr.io/g0ldyy/comet:latest"
-            target: "comet:latest"
           - source: "ipromknight/zilean:latest"
             target: "zilean:latest"
           - source: "lscr.io/linuxserver/prowlarr:latest"
@@ -33,8 +31,6 @@ jobs:
             target: "aiometadata:latest"
           - source: "nepiraw/stremio-subsense:latest"
             target: "subsense:latest"
-          - source: "ghcr.io/slicknsliding/slicksync:private"
-            target: "slicksync:latest"
           - source: "ghcr.io/umbraprojects/postersplus:latest"
             target: "postersplus:latest"
           - source: "redis:alpine"

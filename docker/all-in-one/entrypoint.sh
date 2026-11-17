@@ -13,13 +13,11 @@ export AIO_STARTUP_ONLY=true
 
 # 1. Setup persistent storage & runtime directories
 mkdir -p /data/aiostreams \
-         /data/comet \
          /data/prowlarr \
          /data/subsense \
          /data/stremthru \
          /data/redis \
          /data/postgres \
-         /data/slicksync \
          /data/aiometadata \
          /data/postersplus \
          /data/infinidysk \
@@ -178,18 +176,16 @@ if [ "$daemon_ready" = "true" ]; then
     echo "=================================================================="
     echo " Appliance started. Check portal readiness and setup progress. "
     echo "=================================================================="
-    echo " â€¢ Appliance Web Portal:   http://localhost:8088"
-    echo " â€¢ AIOStreams Portal:     http://localhost:3001"
-    echo " â€¢ SlickSync Hub:         http://localhost:8086"
-    echo " â€¢ AIOMetadata:           http://localhost:4005"
-    echo " â€¢ Posters+:              http://localhost:9039"
-    echo " â€¢ SubSense Subtitles:    http://localhost:3100"
-    echo " â€¢ InfiniDysk Usenet:     http://localhost:3005"
-    echo " â€¢ Comet Scraper:         http://localhost:8000"
-    echo " â€¢ Anime Kitsu:           http://localhost:7005"
-    echo " â€¢ Prowlarr Indexers:     http://localhost:9696"
-    echo " â€¢ Zilean Hash Cache:     http://localhost:8181"
-    echo " â€¢ StremThru Proxy UI:    http://localhost:8080"
+    echo " • Appliance Web Portal:   http://localhost:8088"
+    echo " • AIOStreams Portal:     http://localhost:3001"
+    echo " • AIOMetadata:           http://localhost:4005"
+    echo " • Posters+:              http://localhost:9039"
+    echo " • SubSense Subtitles:    http://localhost:3100"
+    echo " • InfiniDysk Usenet:     http://localhost:3005"
+    echo " • Anime Kitsu:           http://localhost:7005"
+    echo " • Prowlarr Indexers:     http://localhost:9696"
+    echo " • Zilean Hash Cache:     http://localhost:8181"
+    echo " • StremThru Proxy UI:    http://localhost:8080"
     echo "=================================================================="
     echo ""
 

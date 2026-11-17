@@ -170,7 +170,7 @@ documentation link, and an explicit “optional if unavailable” policy.
 | Proxies | BuiltinProxy, StremThru | test signed URLs, redirects, HTTP 206, and multi-IP shield boundaries |
 | Usenet | InfiniDysk, NNTP credentials, NZB/indexer path | complete provider setup and playback or label as experimental |
 | Players | Stremio, Stremio Web, Nuvio Web | test install links, profiles, CORS, range requests, and mobile layouts |
-| Sync | SlickSync, Trakt, Simkl, AniList | test auth lifecycle, token storage, revoke, and conflict behavior |
+| Sync | Trakt, Simkl, AniList | test auth lifecycle, token storage, revoke, and conflict behavior |
 | Remote access | Cloudflare Tunnel plus reverse proxies | publish only AIOStreams/AIOMetadata and verify DNS/TLS instructions |
 
 **Exit gate:** every advertised integration has a green automated test, a

@@ -110,7 +110,7 @@ For remote playback, route these two endpoints through your reverse proxy or tun
 
 
 
-All other microservices (Comet, Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
+All other microservices (Zilean, Prowlarr, Posters+, SubSense, Postgres, Redis, etc.) remain strictly internal to the Docker network (`stremio-net`) and bind to loopback (`127.0.0.1`) on the host.
 
 
 
@@ -142,9 +142,7 @@ flowchart LR
 
         direction TB
 
-        Comet["Comet (:8000)"]
-
-
+        Lumiere["LumiereDB (:8000)"]
 
         Zilean["Zilean DMM (:8181)"]
 
@@ -176,11 +174,11 @@ flowchart LR
 
     
 
-    AIO -->|2. Internal Scrape| Comet
+    AIO -->|2. Native Scrape| Prowlarr & Zilean
 
     AIOMeta -->|Internal Poster Cache| Posters
 
-    Comet -->|3. Torrent/Cache Lookup| Zilean & Prowlarr & DB
+    AIO -->|3. Title Search Index| Lumiere
 
     AIO -->|4. Resolve & Follow 302 Redirect| CDN
 
@@ -192,7 +190,7 @@ flowchart LR
 
 * **Internal Loopback Binding (`INTERNAL_BIND_IP=127.0.0.1`)**: Internal scrapers, indexers, and proxies bind to `127.0.0.1` on the host, preventing unauthenticated access from the public internet even on a VPS where Docker bypasses UFW. For private home LAN NAS deployments needing direct LAN dashboard access, set `INTERNAL_BIND_IP=0.0.0.0` in `.env`.
 
-* **Built-in Stream Proxying**: AIOStreams' `BuiltinProxy` intercepts stream requests and transforms scraper links (e.g. `http://comet:8000/...`) into secure proxy endpoints (`${BASE_URL}/api/v1/proxy/...`).
+* **Built-in Stream Proxying**: AIOStreams' `BuiltinProxy` intercepts stream requests and transforms scraper links into secure proxy endpoints (`${BASE_URL}/api/v1/proxy/...`).
 
 * **Debrid CDN Redirect Handling**: When playing media, AIOStreams follows the provider's 302 redirect internally and streams video bytes directly to your player over HTTP 206 Partial Content.
 
@@ -272,8 +270,8 @@ For the appliance, the default `docker run` example publishes AIOStreams,
 and AIOMetadata. The AIOStreams player uses the AIOStreams port. To open another UI, publish its port when
 creating the container. For example, `-p 192.168.1.10:9696:9696` enables
 Prowlarr on the server's trusted LAN address. Use your actual server IP.
-Other UI ports include Comet `8000`, InfiniDysk `3005`, SubSense `3100`,
-Posters+ `9039`, StremThru `8080`, Anime Kitsu `7005`, and SlickSync `8086`.
+Other UI ports include InfiniDysk `3005`, SubSense `3100`,
+Posters+ `9039`, StremThru `8080`, and Anime Kitsu `7005`.
 For loopback-only access from another machine, forward the published ports
 and the portal over SSH, then open the forwarded portal at localhost.
 
@@ -362,8 +360,8 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 
 | Profile | Launch Command | RAM Usage | Included Services & Description |
 | :--- | :--- | :--- | :--- |
-| **`scrapers`** (Default Complete) | `docker compose --profile scrapers up -d` | **~2.8 GB** | Complete streaming appliance with all scrapers, indexers, proxies, Usenet, SlickSync, and Anime Kitsu. |
-| **`core`** (Ultra-Lean) | `docker compose --profile core up -d` | **~1.1 GB** | Fast, minimal Debrid stack: AIOStreams, Comet, AIOMetadata, Posters+, SubSense, PostgreSQL 16, Redis 7, Search Broker, and Portal. Ideal for low-memory VPS. |
+| **`scrapers`** (Default Complete) | `docker compose --profile scrapers up -d` | **~2.8 GB** | Complete streaming appliance with all indexers, proxies, Usenet, and Anime Kitsu. |
+| **`core`** (Ultra-Lean) | `docker compose --profile core up -d` | **~1.1 GB** | Fast, minimal Debrid stack: AIOStreams, AIOMetadata, Posters+, SubSense, PostgreSQL 16, Redis 7, and Portal. Ideal for low-memory VPS. |
 | **`all`** | `docker compose --profile all up -d` | **~3.1 GB** | Full stack with optional integrations. |
 
 > [!TIP]
@@ -372,7 +370,7 @@ Modular Docker Compose profiles allow you to scale your deployment from a lean, 
 ### 2. Application Configuration Profiles
 
 AIO Local bundles tailored setup profiles selectable via the portal (`:8088`) or `.env`:
-- **AIOStreams Flagship (`all-local-selfhosted.json`)**: Default profile pre-configured with Tamtaro SEL expressions, Vidhin release regexes, SeaDex anime scoring, Comet, Zilean, Torrentio, SubSense subtitles, StremThru Store, and Anime Kitsu.
+- **AIOStreams Flagship (`all-local-selfhosted.json`)**: Default profile pre-configured with Tamtaro SEL expressions, Vidhin release regexes, SeaDex anime scoring, Prowlarr, Zilean, Torrentio, SubSense subtitles, StremThru Store, and Anime Kitsu.
 - **Usenet Only (`usenet-only.json`)**: Dedicated pipeline for users with an NNTP Usenet account and NZB indexer(s) with **NO Debrid subscription required**. Automatically routes through Prowlarr Newznab indexers, InfiniDysk on-demand WebDAV/HTTP streaming, AIOMetadata, SubSense, and TsukiHime anime. Selectable via the **Usenet Only** mode pill on the setup portal or `STREAMING_MODE=usenet`.
 - **Tamtaro Anime Only (`tamtaro-anime-only.json`)**: Strips western TV rules to optimize strictly for anime releases, NekoBT, Tsukihime, AnimeTosho, SubsPlease, and dual-audio ranking.
 - **AIOMetadata Catalogs (`with-anime`, `usenet-only`, vs. `without-anime`)**: Choose between full mainstream catalogs plus 20+ dedicated anime catalogs (MAL schedules, season rows, studio spotlights) or clean movie/TV catalogs without anime rows.
@@ -394,9 +392,9 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Management & Watchdog** | AIO Portal (`:8088`), Stack Watchdog | Central setup wizard, dual manifest exporter, automated backups, and live integration monitor |
 
-| **Scrapers** | Comet (`:8000`) | Fast torrent & multi-source scrapers querying local Prowlarr and Zilean |
+| **Search Index** | LumiereDB (`:8000`) | High-performance IMDb SQLite catalog search index |
 
-| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Search Broker (`:8091`), Byparr (`:8191`) | DMM hash cache (<100ms lookup), intelligent indexer caching/deduplication broker, auto-provisioned indexers, and Cloudflare bypass |
+| **Indexers & Cache** | Zilean (`:8181`), Prowlarr (`:9696`), Byparr (`:8191`) | DMM hash cache (<100ms lookup), auto-provisioned indexers, and Cloudflare bypass |
 
 | **Metadata & Artwork** | AIOMetadata (`:4005`), Posters+ (`:9039`), Anime Kitsu (`:7005`) | Rich streaming-provider catalogs (Netflix, Disney+, Apple TV+, Max, Prime), rating badges, and local anime metadata |
 
@@ -408,19 +406,19 @@ See the [Anime Ecosystem & Profile Guide](docs/ANIME-AND-PROFILES.md) and [Strea
 
 | **Usenet Engine** | InfiniDysk (`:3005`) | High-throughput Usenet and WebDAV streaming engine |
 
-| **Player & Sync** | AIOStreams player (`:3001/jellyfin/web/`), SlickSync (`:8086`) | Built-in player, Trakt sync hub, collections builder |
+| **Web Player** | AIOStreams player (`:3001/jellyfin/web/`) | Built-in streaming player |
 
-| **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean, Comet, and AIOMetadata |
+| **Databases** | Shared PostgreSQL 16, Shared Redis 7 | High-performance backends for Zilean and AIOMetadata |
 
 
 
-The 19-service count covers continuous application, database, and platform containers monitored on `stremio-net`.
+The service inventory covers continuous application, database, and platform containers monitored on `stremio-net`.
 
 One-shot initialization jobs (database bootstrap, configuration provisioner) run at first boot and exit gracefully.
 
 Trakt, Simkl, AniList, Gemini, and the subtitle/debrid providers are adapters
 
-configured through the bundled AIOStreams, AIOMetadata, SlickSync, and
+configured through the bundled AIOStreams, AIOMetadata, and
 
 SubSense services rather than additional containers.
 
@@ -442,10 +440,11 @@ Every media query and stream playback undergoes a coordinated journey across the
                │
                ▼
   2. Select: AIOStreams (:3000 / :3001) Stream Resolution
-       ├── Intelligent Query Broker (:8091) ──► Prowlarr ──► Byparr (Cloudflare bypass)
-       ├── Primary Local Scrapers ────────────► Comet (:8000), Zilean DMM (:8181), StremThru Store (:8080)
+       ├── Native Prowlarr Scraper ───────────► Prowlarr (:9696) ──► Byparr (Cloudflare bypass)
+       ├── Primary Local Scrapers ────────────► Prowlarr (:9696), Zilean DMM (:8181), StremThru Store (:8080)
+       ├── Search Catalog ────────────────────► LumiereDB (:8000)
        ├── Public & Community Databases ──────► Torrentio (~30ms cloud index), RemuxDB (MediaInfo audio/HDR)
-       └── Native DHT & Multi-Tracker Indexing ► Bitsearch & SolidTorrents via Prowlarr
+       └── Anime Scrapers ────────────────────► Knaben (Anime), Anime Kitsu (:7005)
                │
                ▼
   3. Debrid Cache Probe & Filtering
@@ -478,13 +477,13 @@ Every media query and stream playback undergoes a coordinated journey across the
 
 2. **Parallel Scraper Fan-Out & Request Coalescing**:
    - When a title is clicked, AIOStreams queries enabled scrapers in parallel.
-   - The **Intelligent Search Broker** (`:8091`) coalesces identical in-flight indexer queries into one upstream call, caches results in memory for 60s (<20ms response), and bypasses Cloudflare challenges via Byparr (`:8191`).
-   - Primary local scrapers (**Comet**, **Zilean DMM cache**, **Anime Kitsu**) return instant local results without external scraping delays.
+   - The direct **Prowlarr Torrents** preset queries local Prowlarr indexers natively with automatic redirect handling and Debrid caching.
+   - Primary local scrapers (**Prowlarr**, **Zilean DMM cache**, **Anime Kitsu**, **Knaben (Anime)**) return instant local results without external scraping delays.
    - Selectable public databases (**Torrentio** cloud index at ~30ms, **RemuxDB** MediaInfo specs) inject massive pre-indexed release coverage without local crawler overhead.
 
 3. **Native DHT & Multi-Tracker Indexing (Prowlarr + Byparr)**:
    - Prowlarr natively probes Bitsearch, SolidTorrents, and top public trackers with automated Cloudflare bypass via Byparr.
-   - DHT meta-search indexers feed Comet and Zilean instant cached torrent hashes directly into AIOStreams without the overhead of heavy standalone scrapers.
+   - DHT meta-search indexers feed Zilean instant cached torrent hashes directly into AIOStreams without the overhead of heavy standalone scrapers.
 
 4. **Instant Debrid Cache Validation & SEL Scoring**:
    - Discovered infohashes are checked against the user's debrid provider API (Real-Debrid, Premiumize, Torbox, AllDebrid, Debrid-Link) or StremThru Store (`:8080`).
@@ -673,15 +672,9 @@ For a management-app installation, update the stack with the latest
 restart does not apply changed Compose limits. Check sustained usage with
 `docker stats`; raising the limit to `1.0` allows roughly 100% if indexing is too slow.
 
-### Comet response times and next-episode searches
+### Prowlarr direct scraping and next-episode searches
 
-Comet's AIOStreams preset allows at least 20 seconds. Its live scraper deadline
-defaults to 15 seconds per source (`COMET_LIVE_SCRAPE_TIMEOUT`), with no additional
-indexer initialization wait (`COMET_INDEXER_WAIT_TIMEOUT=0`). Indexer requests
-retain their eight-second timeout (`COMET_INDEXER_TIMEOUT`). Metadata lookup and
-debrid resolution also take time, so the scraper deadline is not a total response
-deadline. The former `COMET_SCRAPING_TIMEOUT` and `COMET_DEBRID_TIMEOUT` settings
-were not supported by the tested Comet version and have been removed.
+AIOStreams' native `prowlarr-scraper` preset queries local Prowlarr indexers directly with a 15-second timeout, bypassing intermediate reverse proxy bottlenecks. Metadata lookup and debrid resolution are handled natively in Node.js memory.
 
 With a TMDB key configured, new setups enable next-episode background searches.
 Set `AIO_PRECACHE_NEXT_EPISODE=true` in your deployment environment to enable this
@@ -691,18 +684,6 @@ without automatically downloading uncached releases or probing playback links.
 Failover prefetch stays disabled. This starts when an episode's streams are
 requested; it does not wait for playback progress and does add a next-episode
 search. Results remain subject to cache expiry and provider availability.
-
-On November 15, 2026, direct local Comet searches returned the following results.
-These were first observed requests, not guaranteed cold-cache benchmarks.
-
-| Episode | First request | Repeat | Playable candidates |
-| --- | ---: | ---: | ---: |
-| The Simpsons S01E02 | 11.98 s | 0.11 s | 12 |
-| Breaking Bad S01E02 | 0.75 s | 0.11 s | 6 |
-| Game of Thrones S01E02 | 9.02 s | 0.10 s | 16 |
-
-Counts matched on repeat requests. Zilean searches took 0.02–0.20 seconds;
-Prowlarr recorded a 10.75-second successful scrape and eight-second failures.
 These measurements cover stream discovery, not video playback or a measured
 before/after improvement from the new timeout defaults.
 

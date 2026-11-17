@@ -80,7 +80,7 @@ class ControllerTests(unittest.TestCase):
         own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
                'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
         config = {'services': {'aiostreams': {'environment': {'ALIASED_CONFIGURATIONS': 'local:id:before'}},
-                              'comet': {}, 'stack-bootstrap': {'restart': 'no'}}}
+                              'prowlarr': {}, 'stack-bootstrap': {'restart': 'no'}}}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             env = root / '.env'

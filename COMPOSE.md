@@ -21,7 +21,7 @@ reduce the power of its socket mount. Keep the portal authenticated and on a
 trusted network. Moving maintenance behind controller actions remains planned.
 
 ### Port Exposure & Firewall Protection
-By default, internal microservices (Comet, Prowlarr, Zilean,
+By default, internal microservices (LumiereDB, Prowlarr, Zilean,
 StremThru, etc.) bind their host ports to `127.0.0.1` using `INTERNAL_BIND_IP`.
 On a VPS or unfirewalled host, Docker will not expose these internal scrapers to the public
 internet. Only the two player ingress points are published externally:

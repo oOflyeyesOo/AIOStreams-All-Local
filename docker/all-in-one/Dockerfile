@@ -35,11 +35,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/setup.sh /app/docker/all-in-one/p
 # Expose all client and service ports
 # 8088: Appliance Web Portal & Setup
 # 3001: AIOStreams Super-Addon
-# 8086: SlickSync Hub
 # 4005: AIOMetadata
 # 9039: Posters+
 # 3100: SubSense Subtitles
-# 8000: Comet
 # 7005: Anime Kitsu
 # 8181: Zilean
 # 3005: InfiniDysk Usenet WebDAV

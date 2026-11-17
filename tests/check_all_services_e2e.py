@@ -120,41 +120,7 @@ def test_zilean():
         record("5. Zilean DMM Hash Cache", False, str(e))
 
 
-def test_comet():
-    try:
-        # Comet Manifest
-        with urllib.request.urlopen("http://comet:8000/manifest.json", timeout=5) as resp:
-            m = json.load(resp)
-            if m.get("id") not in ("stremio.comet.fast", "fe.stremio.comet"):
-                raise ValueError(f"Unexpected Comet manifest ID: {m.get('id')}")
 
-        # Comet Stream Query with debrid config
-        cfg = {
-            "maxResultsPerResolution": 0, "maxSize": 0, "cachedOnly": False, "removeTrash": True,
-            "resultFormat": ["all"],
-            "debridServices": [{"service": "premiumize", "apiKey": PREMIUMIZE_API_KEY}],
-            "enableTorrent": False, "scrapeDebridAccountTorrents": False, "debridStreamProxyPassword": "",
-            "languages": {"required": [], "exclude": [], "preferred": []}, "resolutions": {},
-            "options": {"remove_ranks_under": -10000000000, "allow_english_in_languages": False, "remove_unknown_languages": False}
-        }
-        b64 = base64.b64encode(json.dumps(cfg).encode()).decode()
-        stream_url = f"http://comet:8000/{b64}/stream/movie/tt1375666.json"
-        with urllib.request.urlopen(stream_url, timeout=30) as s_resp:
-            s_data = json.load(s_resp)
-            streams = s_data.get("streams", [])
-            if not streams:
-                raise ValueError("No streams returned by Comet")
-            sample_stream = streams[0]
-            playback_url = sample_stream.get("url")
-
-        # Test playback byte stream on comet playback URL
-        headers = {"Range": "bytes=0-1023", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        play_req = urllib.request.Request(playback_url, headers=headers)
-        with urllib.request.urlopen(play_req, timeout=20) as play_resp:
-            block = play_resp.read(1024)
-            record("6. Comet Fast Scraper & Streamer", True, f"Manifest OK, {len(streams)} streams found, 206 playback probed ({len(block)} bytes)")
-    except Exception as e:
-        record("6. Comet Fast Scraper & Streamer", False, str(e))
 
 
 
@@ -277,7 +243,7 @@ def test_aiostreams_and_playback():
 
         unproxied = [
             s.get("url") for s in playable_streams
-            if any(internal in s.get("url") for internal in ["comet:8000", "prowlarr:9696", "zilean:8181"])
+            if any(internal in s.get("url") for internal in ["prowlarr:9696", "zilean:8181"])
             or ("/api/v1/proxy/" not in s.get("url") and not s.get("url").startswith("https://"))
         ]
         if unproxied:
@@ -342,7 +308,6 @@ def main():
     test_prowlarr()
     test_flaresolverr()
     test_zilean()
-    test_comet()
     test_aiometadata()
     test_postersplus()
     test_subsense()

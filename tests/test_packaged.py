@@ -47,7 +47,7 @@ class PackagedPortalTests(unittest.TestCase):
             root = Path(folder)
             source = root/'source'
             source.mkdir()
-            entrypoint.seed(source,root/'target',{'PORT_COMET':'28000','PORT_AIOMETADATA':'24005'})
+            entrypoint.seed(source,root/'target',{'PORT_PROWLARR':'29696','PORT_AIOMETADATA':'24005'})
             env=(root/'target'/'.env').read_text()
-            self.assertIn('PORT_COMET=28000',env)
+            self.assertIn('PORT_PROWLARR=29696',env)
             self.assertIn('PORT_AIOMETADATA=24005',env)

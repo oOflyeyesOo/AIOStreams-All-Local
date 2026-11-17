@@ -4,7 +4,7 @@
 Creates clean, lightweight, compressed archives (.tar.gz) of:
   • PostgreSQL database cluster (atomic pg_dumpall of zilean, aiometadata)
   • Primary SQLite databases (AIOStreams db.sqlite, Debrid Search)
-  • Essential service configurations (Prowlarr, SlickSync, InfiniDysk, Stremio Web)
+  • Essential service configurations (Prowlarr, InfiniDysk, Stremio Web)
   • Environment settings (.env)
 
 Excludes ephemeral cache directories (stremthru hashlists, redis dumps, stremthru.db cache)

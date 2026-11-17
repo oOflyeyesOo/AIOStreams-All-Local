@@ -16,7 +16,7 @@ ARM hosts are not currently covered by the published image set.
 5. Enter your server address and provider keys in the portal, choose **Connect my
    stack**, and copy the manifest URL into your player.
 
-First startup can take several minutes while Comet and the other services build
+First startup can take several minutes while services initialize and build
 their caches. The setup controller allows up to ten minutes for service health
 before reporting a startup failure.
 
@@ -84,7 +84,7 @@ you have backed it up and deliberately migrated its data.
 
 ### Source Compose Profiles (`docker-compose.yml`)
 When deploying directly from source using `docker-compose.yml`, profiles allow running exactly the components you need:
-- **`core`** (default lean stack): AIOStreams, AIOMetadata, Comet, SubSense, Anime Kitsu, StremThru Store and backing databases/cache.
+- **`core`** (default lean stack): AIOStreams, AIOMetadata, Posters+, SubSense, Anime Kitsu, StremThru Store and backing databases/cache.
 - **`scrapers`** (recommended full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and Infinidysk Usenet.
 - **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`).
 - **`all`**: Activates all continuous services simultaneously.
@@ -129,9 +129,9 @@ a Hidden Cinemeta server.
 
 ### Host ports and optional coverage
 
-Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_COMET`, `PORT_AIOSTREAMS`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
+Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_LUMIEREDB`, `PORT_AIOSTREAMS`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
 
-The default request path uses Comet plus the StremThru Store (Debrid Cloud Library) integration. External scraping is powered by Comet querying local Prowlarr indexers and Zilean DMM torrent hash cache. StremThru Store directly replaces the retired Debrid Search container with zero-overhead, instant cloud library lookups.
+The default request path uses native Prowlarr indexer queries plus the StremThru Store (Debrid Cloud Library) integration. External scraping is powered by AIOStreams querying local Prowlarr indexers and Zilean DMM torrent hash cache directly. StremThru Store directly replaces the retired Debrid Search container with zero-overhead, instant cloud library lookups.
 
 Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.
 

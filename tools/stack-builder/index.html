@@ -100,13 +100,13 @@
             ✨ Full Stack (All 19 Services)
           </button>
           <button onclick="applyPreset('speed')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
-            ⚡ High-Speed Lean (Comet + Zilean + Prowlarr + StremThru)
+            ⚡ High-Speed Lean (LumiereDB + Zilean + Prowlarr + StremThru)
           </button>
           <button onclick="applyPreset('catalogs')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
-            📚 Catalogs & Subtitles Only (AIOMetadata, Kitsu, SubSense, Debrid Search)
+            📚 Catalogs & Subtitles Only (AIOMetadata, Kitsu, SubSense)
           </button>
           <button onclick="applyPreset('minimal')" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-[#242b2e] text-[#edf0ed] hover:border-[#e6a56b] hover:text-[#e6a56b] transition border border-[#2c3235]">
-            🎯 Minimal Debrid Core (AIOStreams + Comet + AIOMetadata + StremThru)
+            🎯 Minimal Debrid Core (AIOStreams + LumiereDB + AIOMetadata + StremThru)
           </button>
         </div>
       </div>
@@ -324,7 +324,7 @@
             <!-- ADDON_PASSWORD -->
             <div>
               <label class="block text-xs font-semibold text-[#edf0ed] mb-1">
-                Master Web Admin Password <span class="text-[#929b9f]">(Protects AIOStreams, SlickSync, AIOMetadata, Comet)</span>
+                Master Web Admin Password <span class="text-[#929b9f]">(Protects AIOStreams, AIOMetadata, and Web UIs)</span>
               </label>
               <input type="text" id="input-addon-password" value=""
                 onfocus="if(this.value==='admin') this.value=''; else this.select()"
@@ -376,16 +376,16 @@
               <span>⚡</span> Local Scrapers (Zero External API Endpoints)
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <!-- Comet -->
+              <!-- LumiereDB -->
               <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
                 <div>
                   <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">Comet</span>
+                    <span class="font-bold text-sm">LumiereDB</span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">:8000</span>
                   </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">High-speed Debrid scraper querying local Prowlarr & Zilean DMM cache.</p>
+                  <p class="text-[11px] text-[#929b9f] mt-1">High-performance SQLite movie & series search index catalog.</p>
                 </div>
-                <input type="checkbox" id="svc-comet" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
+                <input type="checkbox" id="svc-lumiere" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
               </label>
 
             </div>
@@ -504,17 +504,7 @@
 
               
 
-              <!-- SlickSync -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">SlickSync</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 font-mono">:8086</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">Nuvio & Stremio manager: Collections, Guards & Vault.</p>
-                </div>
-                <input type="checkbox" id="svc-slicksync" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
+
 
               <!-- InfiniDysk Usenet Engine -->
               <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
@@ -730,7 +720,7 @@
     const state = {
       services: {
         aiostreams: true,
-        comet: true,
+        lumiere: true,
         zilean: true,
         prowlarr: true,
         flaresolverr: true,
@@ -738,7 +728,6 @@
         aiometadata: true,
         subsense: true,
         stremthru: true,
-        slicksync: true,
         infinidysk: true
       },
       currentTab: 'compose'
@@ -746,7 +735,7 @@
 
     function handleServiceChange() {
       // Sync checkbox state
-      state.services.comet = document.getElementById('svc-comet').checked;
+      state.services.lumiere = document.getElementById('svc-lumiere') ? document.getElementById('svc-lumiere').checked : true;
       state.services.zilean = document.getElementById('svc-zilean').checked;
       state.services.prowlarr = document.getElementById('svc-prowlarr').checked;
       state.services.flaresolverr = document.getElementById('svc-flaresolverr').checked;
@@ -754,17 +743,7 @@
       state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
       state.services.subsense = document.getElementById('svc-subsense').checked;
       state.services.stremthru = document.getElementById('svc-stremthru').checked;
-      state.services.slicksync = document.getElementById('svc-slicksync').checked;
       state.services.infinidysk = document.getElementById('svc-infinidysk') ? document.getElementById('svc-infinidysk').checked : true;
-
-      // Smart dependency resolution
-      if (state.services.comet) {
-        // Comet works best with Prowlarr & Zilean
-        if (!state.services.prowlarr) {
-          state.services.prowlarr = true;
-          document.getElementById('svc-prowlarr').checked = true;
-        }
-      }
 
       updateOutputs();
     }
@@ -775,7 +754,7 @@
       } else if (presetName === 'speed') {
         state.services = {
           aiostreams: true,
-          comet: true,
+          lumiere: true,
           zilean: true,
           prowlarr: true,
           flaresolverr: true,
@@ -783,27 +762,25 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          slicksync: true,
           infinidysk: false
         };
       } else if (presetName === 'catalogs') {
         state.services = {
           aiostreams: true,
-          comet: false,
+          lumiere: false,
           zilean: false,
           prowlarr: false,
           flaresolverr: false,
           kitsu: true,
           aiometadata: true,
           subsense: true,
-            stremthru: true,
-          slicksync: true,
+          stremthru: true,
           infinidysk: false
         };
       } else if (presetName === 'minimal') {
         state.services = {
           aiostreams: true,
-          comet: true,
+          lumiere: true,
           zilean: true,
           prowlarr: true,
           flaresolverr: false,
@@ -811,13 +788,12 @@
           aiometadata: true,
           subsense: false,
           stremthru: true,
-          slicksync: false,
           infinidysk: false
         };
       }
 
       // Update checkboxes in DOM
-      document.getElementById('svc-comet').checked = state.services.comet;
+      if (document.getElementById('svc-lumiere')) document.getElementById('svc-lumiere').checked = state.services.lumiere;
       document.getElementById('svc-zilean').checked = state.services.zilean;
       document.getElementById('svc-prowlarr').checked = state.services.prowlarr;
       document.getElementById('svc-flaresolverr').checked = state.services.flaresolverr;
@@ -825,7 +801,6 @@
       document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
       document.getElementById('svc-subsense').checked = state.services.subsense;
       document.getElementById('svc-stremthru').checked = state.services.stremthru;
-      document.getElementById('svc-slicksync').checked = state.services.slicksync;
       if (document.getElementById('svc-infinidysk')) document.getElementById('svc-infinidysk').checked = state.services.infinidysk;
 
       updateOutputs();
@@ -871,9 +846,9 @@
       const s = state.services;
       return {
         needsPostgres: s.zilean || s.aiometadata,
-        needsRedis: s.aiometadata || s.subsense || s.slicksync || s.stremthru,
+        needsRedis: s.aiometadata || s.subsense || s.stremthru,
         needsMongo: false,
-        needsInitConfigs: s.prowlarr || s.slicksync || s.aiometadata || s.infinidysk || s.stremioWeb
+        needsInitConfigs: s.prowlarr || s.aiometadata || s.infinidysk || s.stremioWeb
       };
     }
 
@@ -918,7 +893,7 @@ MDBLIST_API_KEY=${inp.mdblistKey}
 # Google Gemini API Key (Optional, enables AI episode recaps/plot translations: https://aistudio.google.com/)
 GEMINI_API_KEY=${inp.geminiKey}
 
-# Master password protecting all web configuration pages (AIOStreams, SlickSync, AIOMetadata, Comet)
+# Master password protecting all web configuration pages (AIOStreams, AIOMetadata, and Web UIs)
 ADDON_PASSWORD=${inp.addonPassword}
 
 # ==============================================================================
@@ -990,11 +965,10 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       lines.push(`      - DATABASE_URI=sqlite:///data/db.sqlite`);
       lines.push(`      - ALLOW_PRIVATE_URLS=true`);
 
-      // Scraper endpoints
-      if (s.comet) {
-        lines.push(`\n      # --- Internal Local Scraper Endpoints ---`);
-        if (s.comet) lines.push(`      - COMET_URL=["http://comet:8000"]`);
-        lines.push(`      - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]`);
+      // Search index
+      if (s.lumiere) {
+        lines.push(`\n      # --- Internal Local Movie/Series Search Index ---`);
+        lines.push(`      - LUMIERE_URL=http://lumiere-db:8000`);
       }
 
       // Trackers
@@ -1056,7 +1030,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
 
       // depends_on for aiostreams
       const aiostreamsDeps = [];
-      if (s.comet) aiostreamsDeps.push('comet');
+      if (s.lumiere) aiostreamsDeps.push('lumiere-db');
       if (s.stremthru) aiostreamsDeps.push('stremthru');
       if (s.prowlarr) aiostreamsDeps.push('prowlarr');
       if (s.infinidysk) aiostreamsDeps.push('infinidysk');
@@ -1066,45 +1040,19 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
         aiostreamsDeps.forEach(d => lines.push(`      - ${d}`));
       }
 
-      // 2. SCRAPERS
-      if (s.comet) {
+      // 2. SEARCH INDEX
+      if (s.lumiere) {
         lines.push(`\n  # ============================================================================`);
-        lines.push(`  # 2. LOCAL SCRAPERS & INDEXERS`);
+        lines.push(`  # 2. LOCAL MOVIE/SERIES SEARCH INDEX (LUMIEREDB)`);
         lines.push(`  # ============================================================================`);
-
-        if (s.comet) {
-          lines.push(`  # Comet (High-speed torrent/Debrid scraper querying local Prowlarr & Zilean)`);
-          lines.push(`  comet:`);
-          lines.push(`    image: ghcr.io/g0ldyy/comet:latest`);
-          lines.push(`    container_name: comet`);
-          lines.push(`    restart: unless-stopped`);
-          lines.push(`    ports:`);
-          lines.push(`      - "8000:8000"`);
-          lines.push(`    environment:`);
-          lines.push(`      - FASTAPI_PORT=8000`);
-          lines.push(`      - DATABASE_PATH=/app/data/comet.db`);
-          if (s.prowlarr) {
-            lines.push(`      - INDEXER_MANAGER_TYPE=prowlarr`);
-            lines.push(`      - INDEXER_MANAGER_URL=http://prowlarr:9696`);
-            lines.push(`      - INDEXER_MANAGER_API_KEY=\${PROWLARR_API_KEY}`);
-          }
-          if (s.zilean) {
-            lines.push(`      - ZILEAN_URL=http://zilean:8181`);
-          }
-          lines.push(`      - CONFIGURE_PAGE_PASSWORD=\${ADDON_PASSWORD}`);
-          lines.push(`    volumes:`);
-          lines.push(`      - ./data/comet:/app/data`);
-          lines.push(`    networks:`);
-          lines.push(`      - stremio-net`);
-          const cometDeps = [];
-          if (s.prowlarr) cometDeps.push('prowlarr');
-          if (s.zilean) cometDeps.push('zilean');
-          if (cometDeps.length > 0) {
-            lines.push(`    depends_on:`);
-            cometDeps.forEach(d => lines.push(`      - ${d}`));
-          }
-        }
-
+        lines.push(`  lumiere-db:`);
+        lines.push(`    image: ghcr.io/0xconstant1/lumiere-db:latest`);
+        lines.push(`    container_name: lumiere-db`);
+        lines.push(`    restart: unless-stopped`);
+        lines.push(`    volumes:`);
+        lines.push(`      - ./data/lumiere-db:/app/data`);
+        lines.push(`    networks:`);
+        lines.push(`      - stremio-net`);
       }
 
       // 3. ZILEAN
@@ -1141,14 +1089,12 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           lines.push(`    restart: "no"`);
           lines.push(`    volumes:`);
           if (s.prowlarr) lines.push(`      - ./data/prowlarr:/prowlarr`);
-          if (s.slicksync) lines.push(`      - ./data/slicksync:/slicksync`);
           if (s.aiometadata) lines.push(`      - ./data/aiometadata:/aiometadata`);
           if (s.infinidysk) lines.push(`      - ./data/infinidysk:/infinidysk`);
                     
           let cmdParts = [];
           let dirs = [];
           if (s.prowlarr) dirs.push('/prowlarr');
-          if (s.slicksync) dirs.push('/slicksync');
           if (s.aiometadata) dirs.push('/aiometadata');
           if (s.infinidysk) dirs.push('/infinidysk');
                     if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
@@ -1245,46 +1191,7 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
 
       }
 
-      // 8. NUVIO & STREMIO SYNC HUB (SLICKSYNC)
-      if (s.slicksync) {
-        lines.push(`\n  # ============================================================================`);
-        lines.push(`  # 8. NUVIO & STREMIO SYNC HUB (SLICKSYNC)`);
-        lines.push(`  # ============================================================================`);
-        lines.push(`  slicksync:`);
-        lines.push(`    image: ghcr.io/slicknsliding/slicksync:private`);
-        lines.push(`    container_name: slicksync`);
-        lines.push(`    restart: unless-stopped`);
-        lines.push(`    ports:`);
-        lines.push(`      - "8086:3000"`);
-        lines.push(`    environment:`);
-        lines.push(`      - INSTANCE=private`);
-        lines.push(`      - INSTANCE_TYPE=private`);
-        lines.push(`      - NEXT_PUBLIC_INSTANCE_TYPE=private`);
-        lines.push(`      - DATABASE_URL=file:///app/data/sqlite.db`);
-        lines.push(`      - JWT_SECRET=\${SECRET_KEY}`);
-        lines.push(`      - ENCRYPTION_KEY=\${SECRET_KEY}`);
-        lines.push(`      - SLICKSYNC_PRIVATE_USERNAME=admin`);
-        lines.push(`      - SLICKSYNC_PRIVATE_PASSWORD=\${ADDON_PASSWORD}`);
-        lines.push(`      - REDIS_URL=redis://shared-redis:6379/2`);
-        lines.push(`      - AIOSTREAMS_URL=http://aiostreams:3000`);
-        lines.push(`      - AIOSTREAMS_AUTH_USERNAME=admin`);
-        lines.push(`      - AIOSTREAMS_AUTH_PASSWORD=\${ADDON_PASSWORD}`);
-        lines.push(`      - STREMIO_URL=http://aiostreams:3000`);
-        lines.push(`      - NODE_OPTIONS=--dns-result-order=ipv4first`);
-        lines.push(`    volumes:`);
-        lines.push(`      - ./data/slicksync:/app/data`);
-        lines.push(`    networks:`);
-        lines.push(`      - stremio-net`);
-        lines.push(`    depends_on:`);
-        lines.push(`      shared-redis:`);
-        lines.push(`        condition: service_started`);
-        lines.push(`      aiostreams:`);
-        lines.push(`        condition: service_started`);
-        if (db.needsInitConfigs) {
-          lines.push(`      init-configs:`);
-          lines.push(`        condition: service_completed_successfully`);
-        }
-      }
+
 
       // 9. DATABASES
       if (db.needsRedis || db.needsPostgres) {
@@ -1403,7 +1310,7 @@ docker run -d \\
       // Update Port map
       const portMap = [
         { name: 'AIOStreams', port: '3000', enabled: true },
-        { name: 'Comet', port: '8000', enabled: s.comet },
+        { name: 'LumiereDB', port: '8000', enabled: s.lumiere },
         { name: 'Zilean (DMM Cache)', port: '8181', enabled: s.zilean },
         { name: 'Prowlarr', port: '9696', enabled: s.prowlarr },
         { name: 'FlareSolverr', port: '8191', enabled: s.flaresolverr },
@@ -1411,8 +1318,7 @@ docker run -d \\
         { name: 'Anime Kitsu', port: '7005', enabled: s.kitsu },
         { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
         { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
-        { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk },
-        { name: 'SlickSync (Nuvio & Stremio Hub)', port: '8086', enabled: s.slicksync }
+        { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk }
       ];
 
       const portsTable = document.getElementById('ports-table');
