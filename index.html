@@ -32,25 +32,141 @@
     <a class="text-button" id="open-stack-password" href="#stack-admin-password">Set admin password</a>
     <a class="text-button" href="#integrations">Manage services</a>
   </div>
-  <div id="ready-actions" hidden>
-<div class="stack-actions playback-actions">
-<div id="deployment-players" class="stack-actions player-showcase-bar">
-  <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open player ↗</a>
-</div>
-  <button type="button" id="copy-manifest" class="primary-button" disabled><span>Copy manifest</span><span>⧉</span></button>
-  <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
-</div>
-
-<div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
-  <span class="quickconnect-label">Player sign-in</span>
-  <button type="button" id="copy-jellyfin-server-url" class="mini-action-btn" title="Copy Jellyfin server endpoint for client apps">Copy Server URL ⧉</button>
-  <button type="button" id="copy-jellyfin-username" class="mini-action-btn">Copy player username ⧉</button>
-  <a id="open-jellyfin-quickconnect" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Open AIOStreams settings, then Save &amp; Install to pair a device">Pair a device ↗</a>
-  <a id="install-aiostreams-web" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player">Hosted Web App ↗</a>
-</div>
-<p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
+  <div id="ready-actions" class="ready-banner-bar" hidden>
+    <div class="stack-actions playback-actions">
+      <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
+      <div id="deployment-players" class="player-showcase-bar">
+        <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open player ↗</a>
+      </div>
+    </div>
   </div>
-<div class="primary-manifest"><div class="manifest-preview"><div class="code-label"><span>aiostreams · manifest.json</span></div><code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code></div><a class="text-button" href="/api/export-manifest" download>Download manifest JSON ↓</a></div>
+
+  <section class="manifest-panel addon-hub-hero" id="manifest" aria-labelledby="hub-heading">
+    <div class="addon-hub-header">
+      <div class="addon-hub-title-group">
+        <div class="eyebrow">STREAMING &amp; ADDON SUITE</div>
+        <h2 id="hub-heading">Addon settings &amp; exports</h2>
+      </div>
+      <div id="addon-customization" class="addon-hub-creds-hint" hidden>
+        <span class="hub-creds-icon">🔑</span>
+        <span>Use <strong>admin</strong> &amp; stack password for AIOStreams dashboard · Use stack password to unlock AIOMetadata.</span>
+      </div>
+    </div>
+
+    <div class="addon-hub-cards">
+      <!-- Card 1: AIOStreams -->
+      <div class="addon-hub-card" id="hub-card-aiostreams">
+        <div class="hub-card-header">
+          <div class="hub-card-title-group">
+            <span class="hub-card-icon icon-aiostreams">⚡</span>
+            <div>
+              <h3>AIOStreams</h3>
+              <span class="hub-badge badge-streams">STREAMING CORE</span>
+            </div>
+          </div>
+        </div>
+        <p class="hub-card-desc">Unified multi-provider stream aggregator with custom sorting, format filters, and deduplication.</p>
+        <div class="manifest-preview">
+          <div class="code-label"><span>aiostreams · manifest.json</span><span class="code-dot">● ● ●</span></div>
+          <code id="manifest-url">Your AIOStreams manifest will appear here<br>after setup.</code>
+        </div>
+        <div class="hub-card-actions">
+          <button type="button" id="copy-manifest" class="primary-button hub-btn-copy" disabled><span>Copy manifest</span> <span>⧉</span></button>
+          <a id="install-stremio" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Open in Stremio</span> <span>↗</span></a>
+          <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer"><span>Configure</span> <span>↗</span></a>
+          <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Dashboard ↗</a>
+          <a class="subtle-link" href="/api/export-manifest" download>Download manifest JSON ↓</a>
+        </div>
+      </div>
+
+      <!-- Card 2: AIOMetadata -->
+      <div class="addon-hub-card" id="hub-card-aiometadata">
+        <div class="hub-card-header">
+          <div class="hub-card-title-group">
+            <span class="hub-card-icon icon-aiometadata">🎬</span>
+            <div>
+              <h3>AIOMetadata</h3>
+              <span class="hub-badge badge-metadata">RICH CATALOGS &amp; POSTERS</span>
+            </div>
+          </div>
+        </div>
+        <p class="hub-card-desc">Posters+, LumiereDB, and cross-platform scrobble sync for Trakt, Simkl, AniList, and MAL.</p>
+        <div class="manifest-preview">
+          <div class="code-label"><span>aiometadata · manifest.json</span><span class="code-dot">● ● ●</span></div>
+          <code id="aiometa-manifest-url">Your AIOMetadata manifest will appear here<br>after setup.</code>
+        </div>
+        <div class="hub-card-actions">
+          <button type="button" id="copy-aiometa-manifest" class="light-button hub-btn-copy" disabled><span>Copy manifest</span> <span>⧉</span></button>
+          <a id="install-aiometa-stremio" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Open in Stremio</span> <span>↗</span></a>
+          <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer"><span>Configure profile</span> <span>↗</span></a>
+          <a id="connect-tracking" class="subtle-link disabled" href="#" target="_blank" rel="noopener noreferrer">Tracking accounts ↗</a>
+        </div>
+      </div>
+
+      <!-- Card 3: Media Server & Virtual Shares -->
+      <div class="addon-hub-card" id="hub-card-mediaserver">
+        <div class="hub-card-header">
+          <div class="hub-card-title-group">
+            <span class="hub-card-icon icon-mediaserver">🍿</span>
+            <div>
+              <h3>Media Server &amp; Shares</h3>
+              <span class="hub-badge badge-shares">JELLYFIN &amp; WEBDAV</span>
+            </div>
+          </div>
+        </div>
+        <p class="hub-card-desc">Native Jellyfin server endpoint and virtual WebDAV streaming mounts for external clients &amp; smart TVs.</p>
+
+        <div class="hub-share-block">
+          <div class="hub-share-header">
+            <span class="hub-share-title">Jellyfin Server URL</span>
+            <span class="hub-share-tag">CLIENT APPS</span>
+          </div>
+          <div class="manifest-preview hub-endpoint-preview">
+            <div class="code-label"><span>jellyfin · endpoint</span></div>
+            <code id="jellyfin-server-url-display">http://localhost:3001/jellyfin</code>
+          </div>
+          <div class="hub-card-actions">
+            <button type="button" id="copy-jellyfin-server-url" class="light-button" title="Copy Jellyfin server endpoint for client apps"><span>Copy Server URL</span> <span>⧉</span></button>
+            <a id="open-jellyfin-quickconnect" class="light-button" href="#" target="_blank" rel="noopener noreferrer" title="Open AIOStreams settings, then Save &amp; Install to pair a device"><span>Pair Device</span> <span>↗</span></a>
+            <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy player username ⧉</button>
+            <a id="install-aiostreams-web" class="subtle-link mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player" hidden>Hosted Web App ↗</a>
+          </div>
+          <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
+            <span class="quickconnect-label">Device Pairing:</span>
+            <span class="quickconnect-sub">Pair your smart TV or client app with your stack admin credentials.</span>
+          </div>
+          <p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
+        </div>
+
+        <div class="hub-share-block hub-share-divider">
+          <div class="hub-share-header">
+            <span class="hub-share-title">WebDAV Virtual Share</span>
+            <span class="hub-share-tag">INFUSE · KODI · VLC</span>
+          </div>
+          <div class="manifest-preview hub-endpoint-preview">
+            <div class="code-label"><span>webdav · stream share</span></div>
+            <code id="webdav-url">http://localhost:3001/webdav</code>
+          </div>
+          <div class="hub-card-actions">
+            <button type="button" id="copy-webdav-url" class="light-button" title="Copy WebDAV URL for Infuse, Kodi, or VLC"><span>Copy WebDAV URL</span> <span>⧉</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Toolbar: Quick Downloads / Tools bar -->
+    <div class="addon-hub-toolbar" id="share-export-menu">
+      <div class="hub-toolbar-label">
+        <span class="hub-toolbar-icon">🧰</span>
+        <span>Quick Downloads &amp; Export Tools</span>
+      </div>
+      <div class="hub-toolbar-actions">
+        <button type="button" id="copy-aniskip-api" class="light-button hub-tool-btn" title="Copy AniSkip auto-skip API URL"><span>Copy AniSkip URL</span> <span>⧉</span></button>
+        <a id="download-aiometa-json" class="light-button hub-tool-btn" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json"><span>Download AIOMetadata anime config JSON</span> <span>↓</span></a>
+        <a class="light-button hub-tool-btn" href="/api/backup" download><span>Download backup archive</span> <span>⤓</span></a>
+      </div>
+    </div>
+  </section>
   <details class="startup-checklist"><summary>Service checks</summary><pre id="startup-checks">Checking services…</pre></details>
 <section class="progress-panel panel" id="progress-panel" hidden><div><h3 id="progress-title">Setup progress</h3><p id="progress-description">Setup output will appear here when you connect your stack.</p><div class="progress-actions" id="progress-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" id="btn-toggle-setup-logs" class="mini-action-btn" hidden>View setup output ▾</button><button type="button" id="btn-inspect-container-logs" class="mini-action-btn">Inspect container logs ↓</button></div></div><details id="setup-details" class="setup-details-accordion" hidden><summary>Setup details</summary><pre id="setup-logs"></pre></details></section>
 <div id="playback-test-card" class="playback-test-card" style="display:none;">
@@ -250,40 +366,7 @@
 <p class="under-button">Your services, configured together. Setup details stay available below.</p>
 </form>
 </section>
-<div class="right-column">
-<section class="manifest-panel" id="manifest"><h2>Addon settings &amp; exports</h2>
-<div class="optional-setup" id="addon-customization" hidden>
-  <h3>Customize your addons</h3>
-  <div class="manifest-actions">
-    <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOStreams ↗</a>
-    <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer">Configure AIOMetadata ↗</a>
-  </div>
-  <p class="field-help">Use <strong>admin</strong> and your stack password for the AIOStreams dashboard. Use your stack password to unlock the AIOMetadata profile.</p>
-  <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Open AIOStreams admin dashboard ↗</a>
-  <a class="subtle-link" href="#integrations">View all self-hosted service UIs ↓</a>
-</div>
 
-<section class="share-export-menu" id="share-export-menu"><h3>Links and downloads</h3>
-<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
-  <a id="install-stremio" class="subtle-link disabled" href="#">Open AIOStreams in Stremio ↗</a>
-
-  <div class="manifest-preview" style="margin-top:8px">
-    <div class="code-label"><span>aiometadata · manifest.json</span><span class="code-dot">● ● ●</span></div>
-    <code id="aiometa-manifest-url">Your AIOMetadata manifest will appear here<br>after setup.</code>
-  </div>
-  <button type="button" id="copy-aiometa-manifest" class="light-button" disabled style="width:100%;">Copy optional AIOMetadata manifest <span>⧉</span></button>
-  <a id="install-aiometa-stremio" class="subtle-link disabled" href="#">Open optional AIOMetadata in Stremio ↗</a>
-  <a id="connect-tracking" class="subtle-link disabled" href="#" target="_blank" rel="noopener noreferrer">Connect tracking accounts in AIOMetadata ↗</a>
-
-  <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
-    <button type="button" id="copy-aniskip-api" class="light-button" style="width:100%;">Copy AniSkip auto-skip API URL <span>⧉</span></button>
-    <a id="download-aiometa-json" class="subtle-link" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json">Download AIOMetadata anime config JSON ↓</a>
-    <a class="subtle-link" href="/api/backup" download>Download stack backup archive ⤓</a>
-  </div>
-</div>
-</section>
-</section>
-</div>
 </div>
 <section id="integrations" class="integrations-section"><div class="integrations-heading"><div><h2>Manage services</h2></div><div class="service-toolbar"><button type="button" id="open-service-logs" class="text-button">View logs</button><button id="refresh-services" class="text-button">Refresh status</button></div></div><p class="section-description">Open a service to customize it, or view its logs here. If a UI cannot open from your browser, check that its port is published or that its reverse proxy URL is set.</p><div class="service-summary"><span class="status-dot"></span><span id="services-summary">Checking your local services…</span></div><div id="service-grid" class="service-grid"></div></section>
 <details class="panel advanced-tools" id="advanced-tools"><summary>System Diagnostics, Backups &amp; Maintenance (Optional)</summary>

@@ -28,5 +28,8 @@ for db in zilean aiometadata; do
   fi
 done
 
+echo "[init-postgres] Ensuring user 'aio' exists for bitmagnet..."
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
+
 echo "[init-postgres] All application databases successfully verified and ready!"
 exit 0

@@ -396,6 +396,13 @@ async function loadManifest() {
   const info = await api('/api/manifest-info');
   cachedManifestInfo = info;
   manifestLoaded = true;
+  const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+  const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+  const serverUrl = info.jellyfinServer || `${aioBase}/jellyfin`;
+  const jfDisplay = document.getElementById('jellyfin-server-url-display');
+  if (jfDisplay) jfDisplay.textContent = serverUrl;
+  const webdavDisplay = document.getElementById('webdav-url');
+  if (webdavDisplay) webdavDisplay.textContent = `${aioBase}/webdav`;
   const customization = document.getElementById('addon-customization');
   if (customization && info.aiostreamsConfigure && info.aiostreamsDashboard && info.aiometadataConfigure) {
     document.getElementById('configure-aiostreams').href = info.aiostreamsConfigure;
@@ -406,12 +413,11 @@ async function loadManifest() {
   if (info.directManifest) {
     currentManifest = info.aliasManifest || info.directManifest;
     document.getElementById('manifest-url').textContent = currentManifest;
+    const copyBtn = document.getElementById('copy-manifest');
+    if (copyBtn) copyBtn.disabled = false;
     const install = document.getElementById('install-stremio');
     install.href = currentManifest.replace(/^https?:/, 'stremio:');
     install.classList.remove('disabled');
-    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
-    const aioBase = info.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
-    const serverUrl = info.jellyfinServer || `${aioBase}/jellyfin`;
     const installAioWeb = document.getElementById('install-aiostreams-web');
     if (installAioWeb) {
       installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
@@ -1132,8 +1138,19 @@ if (copyAniskipBtn) {
 const copyJellyfinBtn = document.getElementById('copy-jellyfin-server-url');
 if (copyJellyfinBtn) {
   copyJellyfinBtn.addEventListener('click', e => {
-    if (!cachedManifestInfo?.jellyfinEnabled) return;
-    copyToClipboard(`${cachedManifestInfo.baseUrl}/jellyfin`, 'Jellyfin server URL copied.', e.currentTarget);
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const aioBase = cachedManifestInfo?.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+    const url = (cachedManifestInfo && cachedManifestInfo.jellyfinServer) || `${aioBase}/jellyfin`;
+    copyToClipboard(url, 'Jellyfin server URL copied.', e.currentTarget);
+  });
+}
+
+const copyWebdavBtn = document.getElementById('copy-webdav-url');
+if (copyWebdavBtn) {
+  copyWebdavBtn.addEventListener('click', e => {
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const aioBase = cachedManifestInfo?.baseUrl || `${location.protocol}//${location.hostname}:${aioPort}`;
+    copyToClipboard(`${aioBase}/webdav`, 'WebDAV URL copied. Use in Infuse, Kodi, or VLC.', e.currentTarget);
   });
 }
 

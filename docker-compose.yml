@@ -236,6 +236,41 @@ services:
       init-postgres:
         condition: service_completed_successfully
 
+  # Autonomous DHT crawler & BitTorrent indexer
+  bitmagnet:
+    image: ghcr.io/bitmagnet-io/bitmagnet:latest
+    container_name: bitmagnet
+    profiles: ["scrapers", "all"]
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:3333:3333"
+    environment:
+      - POSTGRES_HOST=shared-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=aio
+      - POSTGRES_PASSWORD=aio_local_secret
+      - POSTGRES_DB=postgres
+      - POSTGRES_SSLMODE=disable
+      - REDIS_ADDR=shared-redis:6379
+      - REDIS_HOST=shared-redis:6379
+      - REDIS_URL=redis://shared-redis:6379
+    command:
+      - worker
+      - run
+      - --keys=http_server
+      - --keys=queue_server
+      - --keys=dht_crawler
+    volumes:
+      - ./data/bitmagnet:/root/.local/share/bitmagnet
+    networks:
+      - stremio-net
+    depends_on:
+      init-postgres:
+        condition: service_completed_successfully
+      shared-redis:
+        condition: service_healthy
+
   # ============================================================================
   # 4. TRACKER AGGREGATORS & CLOUDFLARE BYPASS
   # ============================================================================
@@ -362,6 +397,8 @@ services:
       - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
+      - BITMAGNET_URL=${BITMAGNET_URL:-http://bitmagnet:3333}
+      - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
     command: python3 -u /init/setup_stack.py
     networks:
       - stremio-net
@@ -613,6 +650,39 @@ services:
       init-configs:
         condition: service_completed_successfully
 
+  # ============================================================================
+  # 7. SELF-HOSTED ANIME DATABASE (JIKAN / MAL)
+  # ============================================================================
+  jikan-mongo:
+    image: mongo:7-jammy
+    container_name: jikan-mongo
+    profiles: ["anime-db", "all"]
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./data/jikan-mongo:/data/db
+    networks:
+      - stremio-net
+
+  jikan-api:
+    image: ghcr.io/jikan-me/jikan-rest:v4
+    container_name: jikan-api
+    profiles: ["anime-db", "all"]
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:80"
+    environment:
+      - DB_CONNECTION=mongodb
+      - DB_HOST=jikan-mongo
+      - DB_PORT=27017
+      - DB_DATABASE=jikan
+      - APP_ENV=production
+    networks:
+      - stremio-net
+    depends_on:
+      - jikan-mongo
+
   # Posters+ (Dynamic poster rating overlays, Oscars/Emmy badges, 4K/HDR quality badges)
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
@@ -713,6 +783,7 @@ services:
           for db in zilean aiometadata; do
             psql -h shared-postgres -U postgres -d postgres -c "CREATE DATABASE $$db;" 2>/dev/null || true
           done
+          psql -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
           echo "[init-postgres] Done!"
           exit 0
         fi

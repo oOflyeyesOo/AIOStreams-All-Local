@@ -542,3 +542,52 @@ class BootstrapTests(unittest.TestCase):
                         check_conn.close()
             finally:
                 pass
+
+    def test_jikan_api_base_resolution(self):
+        # Default should return Tenrai
+        self.assertEqual(bootstrap.resolve_jikan_api_base("", probe_services=False), "https://api.tenrai.org/v4")
+        # Explicit custom URL should be respected
+        self.assertEqual(bootstrap.resolve_jikan_api_base("https://custom.jikan.moe/v4", probe_services=False), "https://custom.jikan.moe/v4")
+        # When local jikan is reachable, seamlessly select it
+        with patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "jikan-api" in url):
+            self.assertEqual(bootstrap.resolve_jikan_api_base("", probe_services=True), "http://jikan-api:80/v4")
+
+    def test_bitmagnet_prowlarr_registration_when_reachable(self):
+        schemas = [
+            {"definitionName": "Torznab", "implementation": "Torznab", "name": "Torznab", "fields": [
+                {"name": "baseUrl", "value": ""},
+                {"name": "apiPath", "value": ""},
+                {"name": "apiKey", "value": ""},
+            ]}
+        ]
+        requests = []
+        def request(url, method="GET", data=None, headers=None, timeout=12):
+            if url.endswith("/api/v1/indexer") and method == "GET":
+                return []
+            if url.endswith("/api/v1/indexer/schema"):
+                return schemas
+            if method == "POST":
+                requests.append((url, data))
+                return {"id": 10}
+            return {}
+
+        with patch.object(bootstrap, "make_request", side_effect=request), \
+             patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "bitmagnet" in url):
+            bootstrap.setup_prowlarr_indexers()
+
+        bitmagnet_req = next((d for u, d in requests if d.get("name") == "Bitmagnet (Torznab Local)"), None)
+        self.assertIsNotNone(bitmagnet_req)
+        self.assertTrue(bitmagnet_req["enable"])
+        fields = {f["name"]: f["value"] for f in bitmagnet_req["fields"]}
+        self.assertEqual(fields["baseUrl"], "http://bitmagnet:3333/torznab")
+
+    def test_bitmagnet_aiostreams_preset_when_configured(self):
+        with patch.dict(os.environ, {"BITMAGNET_URL": "http://bitmagnet:3333"}), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', 'rd_test'), \
+             patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "bitmagnet" in url or "aiostreams" in url):
+            config = bootstrap.build_default_config(probe_services=True)
+            preset = next((p for p in config.get("presets", []) if p.get("instanceId") == "bitmagnet-local"), None)
+            self.assertIsNotNone(preset)
+            self.assertEqual(preset["type"], "torznab")
+            self.assertTrue(preset["enabled"])
+            self.assertEqual(preset["options"]["url"], "http://bitmagnet:3333/torznab")

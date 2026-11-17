@@ -277,6 +277,25 @@ def is_url_reachable(url, timeout=2.0):
     except Exception:
         return False
 
+DEFAULT_JIKAN_URL = "https://api.tenrai.org/v4"
+LOCAL_JIKAN_URL = "http://jikan-api:80/v4"
+
+def resolve_jikan_api_base(configured_url="", probe_services=True):
+    explicit = (configured_url or os.environ.get("JIKAN_API_BASE") or "").strip()
+    if explicit and explicit != DEFAULT_JIKAN_URL:
+        return explicit.rstrip("/")
+    if probe_services:
+        for candidate in (LOCAL_JIKAN_URL, "http://jikan-api/v4"):
+            if is_url_reachable(candidate, timeout=1.0) or is_url_reachable(f"{candidate}/seasons/now", timeout=1.0):
+                return candidate
+    return explicit or DEFAULT_JIKAN_URL
+
+JIKAN_API_BASE = resolve_jikan_api_base(os.environ.get("JIKAN_API_BASE"))
+if JIKAN_API_BASE and JIKAN_API_BASE != os.environ.get("JIKAN_API_BASE"):
+    os.environ["JIKAN_API_BASE"] = JIKAN_API_BASE
+    if os.environ.get("AIO_SKIP_ENV_FILE") != "true" and JIKAN_API_BASE != DEFAULT_JIKAN_URL:
+        update_env_file("JIKAN_API_BASE", JIKAN_API_BASE)
+
 # ==============================================================================
 # 1. PROWLARR PROVISIONING
 # ==============================================================================
@@ -431,6 +450,28 @@ def setup_prowlarr_indexers():
                 print("[Prowlarr Setup] ✓ Successfully provisioned Zilean DMM local Torznab indexer.", flush=True)
                 added_count += 1
 
+    # Ensure Bitmagnet local Torznab indexer is provisioned if reachable or configured
+    bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
+    if not any("bitmagnet" in d for d in existing_definitions):
+        torznab_schema = next((s for s in schemas if s.get("implementation") == "Torznab"), None)
+        if torznab_schema and (is_url_reachable(bitmagnet_url, timeout=1.0) or is_url_reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or os.environ.get("BITMAGNET_URL")):
+            b_payload = dict(torznab_schema)
+            b_payload["name"] = "Bitmagnet (Torznab Local)"
+            b_payload["enable"] = True
+            b_payload["priority"] = 2
+            b_payload["appProfileId"] = 1
+            for f in b_payload.get("fields", []):
+                if f.get("name") == "baseUrl":
+                    f["value"] = f"{bitmagnet_url}/torznab"
+                elif f.get("name") == "apiPath":
+                    f["value"] = "/api"
+                elif f.get("name") == "apiKey":
+                    f["value"] = os.environ.get("BITMAGNET_API_KEY", "") or PROWLARR_API_KEY
+            res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=b_payload, headers=headers)
+            if isinstance(res, dict) and "id" in res:
+                print("[Prowlarr Setup] ✓ Successfully provisioned Bitmagnet Torznab local indexer.", flush=True)
+                added_count += 1
+
     print(f"[Prowlarr Setup] Prowlarr indexer provisioning complete. Added {added_count} new indexers.", flush=True)
 
 # ==============================================================================
@@ -443,6 +484,7 @@ def tune_prowlarr_indexers():
     disabled_names = ["acg.rip", "zilean"]
     priority_map = {
         "zilean": 1,
+        "bitmagnet": 2,
         "animetosho": 5,
         "althub": 5,
         "the pirate bay": 10,
@@ -871,6 +913,14 @@ def setup_aiometadata_tamtaro():
         "mdblist": {"movie": True, "series": True}
     }
 
+    current_jikan = resolve_jikan_api_base(os.environ.get("JIKAN_API_BASE"))
+    if current_jikan != DEFAULT_JIKAN_URL:
+        print(f"[AIOMetadata Setup] ✓ Local Jikan Anime DB detected ({current_jikan}).", flush=True)
+    else:
+        print(f"[AIOMetadata Setup] Using cloud Jikan endpoint ({DEFAULT_JIKAN_URL}).", flush=True)
+    config["jikanApiBase"] = current_jikan
+    config["jikanUrl"] = current_jikan
+
     # Register configuration in AIOMetadata
     save_payload = {
         "config": config,
@@ -1292,6 +1342,24 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     "useMultipleInstances": False
                 }
             })
+        bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
+        if not any(p.get("instanceId") == "bitmagnet-local" for p in presets):
+            bitmagnet_reachable = reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0)
+            if bitmagnet_reachable or os.environ.get("BITMAGNET_URL"):
+                presets.append({
+                    "type": "torznab",
+                    "instanceId": "bitmagnet-local",
+                    "enabled": True,
+                    "options": {
+                        "name": "Bitmagnet (Local)",
+                        "url": f"{bitmagnet_url}/torznab",
+                        "apiKey": os.environ.get("BITMAGNET_API_KEY", ""),
+                        "timeout": 8000,
+                        "resources": ["stream"],
+                        "mediaTypes": [],
+                        "useMultipleInstances": False
+                    }
+                })
 
     subtitle_config = {"languages": ["eng"]}
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
@@ -1417,6 +1485,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             else:
                 p["enabled"] = False
                 print("[AIOStreams Setup] ℹ️ Zilean is unreachable or DMM disabled; preset disabled.", flush=True)
+            validated_presets.append(p)
+        elif ptype == "torznab":
+            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                continue
+            opts["timeout"] = int(opts.get("timeout") or 8000)
+            bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
+            opts["url"] = opts.get("url") or f"{bitmagnet_url}/torznab"
+            if not probe_services or reachable(opts["url"], timeout=1.0) or reachable(bitmagnet_url, timeout=1.0):
+                p["enabled"] = True
+                print("[AIOStreams Setup] ✓ Bitmagnet Torznab (Local) is online and active.", flush=True)
+            else:
+                p["enabled"] = False
+                print("[AIOStreams Setup] ℹ️ Bitmagnet is unreachable; preset disabled.", flush=True)
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.

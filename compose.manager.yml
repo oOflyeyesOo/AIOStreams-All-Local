@@ -66,12 +66,14 @@ services:
     - control-socket:/runtime
     - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     - aiostreams-data:/app/data/aiostreams
+    - bitmagnet-data:/app/data/bitmagnet
     - prowlarr-data:/app/data/prowlarr
     - aiometadata-data:/app/data/aiometadata
     - infinidysk-data:/app/data/infinidysk
     - postersplus-data:/app/data/postersplus
     - lumiere-db-data:/app/data/lumiere-db
     - stremthru-data:/app/data/stremthru
+    - jikan-mongo-data:/app/data/jikan-mongo
     - subsense-data:/app/data/subsense
     - redis-data:/app/data/redis
     - postgres-data:/app/data/postgres
@@ -106,12 +108,14 @@ services:
     - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
     - PORT_AIOSTREAMS=${PORT_AIOSTREAMS:-3001}
     - PORT_ZILEAN=${PORT_ZILEAN:-8181}
+    - PORT_BITMAGNET=${PORT_BITMAGNET:-3333}
     - PORT_PROWLARR=${PORT_PROWLARR:-9696}
     - PORT_FLARESOLVERR=${PORT_FLARESOLVERR:-8191}
     - PORT_STREMTHRU=${PORT_STREMTHRU:-8080}
     - PORT_INFINIDYSK=${PORT_INFINIDYSK:-3005}
     - PORT_ANIME_KITSU=${PORT_ANIME_KITSU:-7005}
     - PORT_AIOMETADATA=${PORT_AIOMETADATA:-4005}
+    - PORT_JIKAN_API=${PORT_JIKAN_API:-8001}
     - PORT_POSTERSPLUS=${PORT_POSTERSPLUS:-9039}
     - PORT_SUBSENSE=${PORT_SUBSENSE:-3100}
     healthcheck:
@@ -252,6 +256,41 @@ services:
       init-postgres:
         condition: service_completed_successfully
     volumes: []
+  bitmagnet:
+    image: ghcr.io/bitmagnet-io/bitmagnet:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    ports:
+    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_BITMAGNET:-3333}:3333
+    environment:
+    - POSTGRES_HOST=shared-postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=aio
+    - POSTGRES_PASSWORD=aio_local_secret
+    - POSTGRES_DB=postgres
+    - POSTGRES_SSLMODE=disable
+    - REDIS_ADDR=shared-redis:6379
+    - REDIS_HOST=shared-redis:6379
+    - REDIS_URL=redis://shared-redis:6379
+    command:
+    - worker
+    - run
+    - --keys=http_server
+    - --keys=queue_server
+    - --keys=dht_crawler
+    volumes:
+    - bitmagnet-data:/root/.local/share/bitmagnet
+    networks:
+    - stremio-net
+    depends_on:
+      init-postgres:
+        condition: service_completed_successfully
+      shared-redis:
+        condition: service_healthy
   init-configs:
     image: alpine:latest
     restart: 'no'
@@ -371,6 +410,8 @@ services:
     - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
     - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
+    - BITMAGNET_URL=${BITMAGNET_URL:-http://bitmagnet:3333}
+    - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
     command: python3 -u /init/setup_stack.py
     networks:
     - stremio-net
@@ -635,6 +676,39 @@ services:
     depends_on:
       init-configs:
         condition: service_completed_successfully
+  jikan-mongo:
+    image: mongo:7-jammy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    volumes:
+    - jikan-mongo-data:/data/db
+    networks:
+    - stremio-net
+  jikan-api:
+    image: ghcr.io/jikan-me/jikan-rest:v4
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    ports:
+    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_JIKAN_API:-8001}:80
+    environment:
+    - DB_CONNECTION=mongodb
+    - DB_HOST=jikan-mongo
+    - DB_PORT=27017
+    - DB_DATABASE=jikan
+    - APP_ENV=production
+    networks:
+    - stremio-net
+    depends_on:
+    - jikan-mongo
+    volumes: []
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
     restart: unless-stopped
@@ -732,7 +806,9 @@ services:
     - "if [ -f /init-databases.sh ]; then\n  exec sh /init-databases.sh\nelse\n  echo \"[init-postgres] Waiting for shared-postgres...\"\
       \n  until psql -h shared-postgres -U postgres -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; do sleep 1; done\n  for\
       \ db in zilean aiometadata; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE $$db;\" 2>/dev/null\
-      \ || true\n  done\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
+      \ || true\n  done\n  psql -h shared-postgres -U postgres -d postgres -c \"DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM\
+      \ pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \\$\\\
+      $;\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
     networks:
     - stremio-net
   shared-postgres:
@@ -767,12 +843,14 @@ volumes:
   aio-config: {}
   control-socket: {}
   aiostreams-data: {}
+  bitmagnet-data: {}
   prowlarr-data: {}
   aiometadata-data: {}
   infinidysk-data: {}
   postersplus-data: {}
   lumiere-db-data: {}
   stremthru-data: {}
+  jikan-mongo-data: {}
   subsense-data: {}
   redis-data: {}
   postgres-data: {}
