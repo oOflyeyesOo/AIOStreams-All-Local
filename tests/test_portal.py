@@ -1551,6 +1551,7 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertTrue(len(captured) > 0)
             self.assertEqual(captured[0].headers.get("X-api-key"), "prowlarr-secret-key")
+            self.assertEqual(captured[0].selector, "/api/v1/indexerstats")
 
         # 4. Referer fallback for /api/v1/... routes without /service-proxy/ prefix
         captured.clear()
@@ -1558,6 +1559,23 @@ class PortalTests(unittest.TestCase):
             status, body, _ = self.request("/api/v1/indexerstats", auth=False, headers={"Referer": "http://localhost:8088/service-proxy/prowlarr/"})
             self.assertEqual(status, 200)
             self.assertTrue(len(captured) > 0)
+            self.assertEqual(captured[0].selector, "/api/v1/indexerstats")
+
+        # 5. Cookie fallback for SPA routes when Referer is absent or lost
+        captured.clear()
+        with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
+            status, body, _ = self.request("/queue", auth=False, headers={"Cookie": "active_service_proxy=infinidysk"})
+            self.assertEqual(status, 200)
+            self.assertTrue(len(captured) > 0)
+            self.assertEqual(captured[0].selector, "/queue")
+
+        # 6. Non-portal API pass-through for InfiniDysk
+        captured.clear()
+        with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
+            status, body, _ = self.request("/api/get-overview-stats", auth=False, headers={"Cookie": "active_service_proxy=infinidysk"})
+            self.assertEqual(status, 200)
+            self.assertTrue(len(captured) > 0)
+            self.assertEqual(captured[0].selector, "/api/get-overview-stats")
 
 
 if __name__ == "__main__":

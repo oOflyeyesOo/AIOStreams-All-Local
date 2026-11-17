@@ -523,11 +523,12 @@ function canEmbedService(value) {
   }
 }
 
-function openServiceViewer(title, url) {
+function openServiceViewer(title, url, directUrl) {
   const dialog = document.getElementById('service-frame-modal');
   const titleEl = document.getElementById('service-frame-title');
   const iframe = document.getElementById('service-frame-iframe');
   const external = document.getElementById('service-frame-external');
+  const direct = document.getElementById('service-frame-direct');
   if (!dialog || !iframe) {
     window.open(url, '_blank', 'noopener,noreferrer');
     return;
@@ -537,6 +538,15 @@ function openServiceViewer(title, url) {
   serviceViewerScroll = {left: window.scrollX, top: window.scrollY, behavior: 'instant'};
   if (titleEl) titleEl.textContent = title || 'Service Viewer';
   if (external) external.href = url;
+  if (direct) {
+    if (directUrl) {
+      direct.href = directUrl;
+      direct.style.display = '';
+      direct.title = `Open ${title || 'service'} directly on native host port (${directUrl})`;
+    } else {
+      direct.style.display = 'none';
+    }
+  }
   iframe.title = title || 'Embedded service';
   iframe.src = url;
   if (dialog.classList?.contains?.('closing')) {
@@ -775,7 +785,7 @@ async function refreshServices() {
       card.classList?.add?.('service-card-interactive');
       card.addEventListener?.('click', (e) => {
         if (!e.target?.closest?.('a') && !e.target?.closest?.('button')) {
-          openServiceViewer(service.name, embedUrl);
+          openServiceViewer(service.name, embedUrl, service.uiUrl);
         }
       });
       const embedBtn = document.createElement('button');
@@ -786,7 +796,7 @@ async function refreshServices() {
       embedBtn.setAttribute('aria-label', `Open ${service.name} in embedded viewer`);
       embedBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openServiceViewer(service.name, embedUrl);
+        openServiceViewer(service.name, embedUrl, service.uiUrl);
       });
       if (canEmbedService(embedUrl)) actions.append(embedBtn);
     }
@@ -804,7 +814,7 @@ async function refreshServices() {
       playerEmbedBtn.setAttribute('aria-label', 'Open AIOStreams Web Player in embedded viewer');
       playerEmbedBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openServiceViewer('AIOStreams Web Player', playerEmbedUrl);
+        openServiceViewer('AIOStreams Web Player', playerEmbedUrl, playerUrl);
       });
       if (canEmbedService(playerEmbedUrl)) actions.append(playerEmbedBtn);
 

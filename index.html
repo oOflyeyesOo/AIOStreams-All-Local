@@ -685,11 +685,12 @@
     </div>
     <div class="service-frame-actions">
       <button type="button" id="service-frame-reload" class="text-button" title="Reload frame" aria-label="Reload frame">↻ Reload</button>
+      <a id="service-frame-direct" class="text-button" href="#" target="_blank" rel="noopener noreferrer" title="Open directly on host port (full WebSocket support)" aria-label="Open directly on host port" style="display:none;">↗ Direct Port</a>
       <a id="service-frame-external" class="text-button" href="#" target="_blank" rel="noopener noreferrer" title="Open in new tab" aria-label="Open in new tab">↗ Pop Out</a>
       <button type="button" id="service-frame-close" class="text-button service-frame-close-btn" aria-label="Close service viewer">✕ Close</button>
     </div>
   </div>
-  <p class="service-frame-help">If this page stays blank or refuses to load, choose Pop Out.</p>
+  <p class="service-frame-help">If this page stays blank or refuses to load, choose Pop Out or Direct Port.</p>
   <div class="service-frame-body">
     <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="same-origin" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
   </div>

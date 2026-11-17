@@ -1081,6 +1081,30 @@ def get_infinidysk_session_cookie(force_refresh=False):
     return _INFINIDYSK_SESSION
 
 
+PORTAL_API_GET_PATHS = {
+    "/api/setup-status", "/api/export-manifest", "/api/playback-readiness",
+    "/api/integrations", "/api/maintenance", "/api/search-status",
+    "/api/diagnostics/export", "/api/diagnostics-export", "/api/diagnostics",
+    "/api/config-export", "/api/export-profile", "/api/export-aiometadata",
+    "/api/profile-recommendation", "/api/update-plan", "/api/proxy-config",
+    "/api/status", "/api/manifest-info", "/api/env", "/api/logs",
+    "/api/templates", "/api/backup", "/api/resources", "/api/health-stats",
+    "/api/watchdog", "/api/zilean", "/api/zilean-stats",
+    "/api/lumiere/stats", "/api/lumiere-stats", "/api/backups",
+    "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
+    "/api/aniskip",
+}
+
+PORTAL_API_POST_PATHS = {
+    "/api/webhook-test", "/api/setup", "/api/aiometadata/apply-template",
+    "/api/validate-provider", "/api/smoke-test", "/api/test-playback",
+    "/api/config-import", "/api/save-env", "/api/quick-setup",
+    "/api/settings", "/api/env", "/api/save", "/api/restart",
+    "/api/clean-cache", "/api/watchdog", "/api/backups/prune",
+    "/api/lumiere/rebuild", "/api/aniskip",
+}
+
+
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
     server_version = "AIO-Portal"
     sys_version = ""
@@ -1216,6 +1240,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
                    or (relative.parts and relative.parts[0] in ("assets", "templates")
                        and target.suffix.lower() in (".json", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".css", ".js")))
         if not allowed or not target.is_file() or any(p.startswith(".") for p in relative.parts):
+            url_parts = urllib.parse.urlsplit(self.path)
+            if self.check_proxy_referer_fallback(url_parts.path, url_parts.query):
+                return None
             self.send_error(404)
             return None
         return super().send_head()
@@ -1237,12 +1264,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
 
         normalized_subpath = "/" + subpath.lstrip("/") if subpath else "/"
         query_str = f"?{query}" if query else ""
-        # Prowlarr is configured with urlBase=/service-proxy/prowlarr, so it
-        # expects the full prefixed path in every request (not just the subpath).
-        if service == "prowlarr" and not normalized_subpath.startswith("/service-proxy/prowlarr"):
-            rel_url = f"/service-proxy/prowlarr{normalized_subpath}{query_str}"
-        else:
-            rel_url = f"{normalized_subpath}{query_str}"
+        rel_url = f"{normalized_subpath}{query_str}"
 
         if service == "postersplus" and "access_key" not in query and normalized_subpath in ("/", "/admin", "/admin/"):
             p_key = env_vars.get("POSTERSPLUS_ACCESS_KEY") or env_vars.get("ADDON_PASSWORD", "admin")
@@ -1438,8 +1460,9 @@ button:hover {{ background: #0369a1; }}
                     if fresh_cookie:
                         infinidysk_auto_cookie = fresh_cookie
 
+            self.send_header("Set-Cookie", f"active_service_proxy={service}; Path=/; SameSite=Lax")
             if service == "infinidysk" and infinidysk_auto_cookie:
-                self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/service-proxy/infinidysk/; SameSite=Lax")
+                self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/; SameSite=Lax")
 
             if "x-frame-options" not in [k.lower() for k in resp_headers.keys()]:
                 self.send_header("X-Frame-Options", "SAMEORIGIN")
@@ -1472,18 +1495,25 @@ button:hover {{ background: #0369a1; }}
             self.proxy_to_service("aiostreams", path, query, is_alias=True)
             return
 
-    def check_proxy_referer_fallback(self, path, query=""):
+    def get_active_service_from_request(self):
         referer = self.headers.get("Referer", "")
-        if not referer:
-            return False
-        match = re.search(r"/service-proxy/([a-zA-Z0-9_-]+)(?:/|$)", referer)
-        if match:
-            service = match.group(1)
-            if service in INTERNAL_SERVICE_TARGETS:
-                self.proxy_to_service(service, path, query, is_alias=False)
-                return True
-        elif "/jellyfin" in referer and "aiostreams" in INTERNAL_SERVICE_TARGETS:
-            self.proxy_to_service("aiostreams", path, query, is_alias=True)
+        if referer:
+            match = re.search(r"/service-proxy/([a-zA-Z0-9_-]+)(?:/|$)", referer)
+            if match and match.group(1) in INTERNAL_SERVICE_TARGETS:
+                return match.group(1), False
+            if "/jellyfin" in referer and "aiostreams" in INTERNAL_SERVICE_TARGETS:
+                return "aiostreams", True
+        cookie_header = self.headers.get("Cookie", "")
+        if cookie_header:
+            match = re.search(r"(?:^|;\s*)active_service_proxy=([a-zA-Z0-9_-]+)", cookie_header)
+            if match and match.group(1) in INTERNAL_SERVICE_TARGETS:
+                return match.group(1), False
+        return None, False
+
+    def check_proxy_referer_fallback(self, path, query=""):
+        service, is_alias = self.get_active_service_from_request()
+        if service:
+            self.proxy_to_service(service, path, query, is_alias=is_alias)
             return True
         return False
 
@@ -1608,8 +1638,9 @@ button:hover {{ background: #0369a1; }}
             except (OSError, ValueError, TypeError, json.JSONDecodeError, urllib.error.URLError):
                 self.json_response({"status": "starting", "manifest": "unavailable"}, 503)
             return
-        if path.startswith("/api/v1/") and self.check_proxy_referer_fallback(path, url_parts.query):
-            return
+        if path.startswith("/api/") and path not in PORTAL_API_GET_PATHS:
+            if self.check_proxy_referer_fallback(path, url_parts.query):
+                return
         if (path.startswith("/api/") or path in ("/", "/index.html", "/dashboard", "/dashboard.html")) and not self.authorize():
             return
         if path == "/api/setup-status":
@@ -1862,8 +1893,9 @@ button:hover {{ background: #0369a1; }}
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
             self.handle_proxy_route(path, url_parts.query)
             return
-        if path.startswith("/api/v1/") and self.check_proxy_referer_fallback(path, url_parts.query):
-            return
+        if path.startswith("/api/") and path not in PORTAL_API_POST_PATHS:
+            if self.check_proxy_referer_fallback(path, url_parts.query):
+                return
         if os.environ.get("AIO_STARTUP_ONLY") == "true":
             self.json_response({"error": "Appliance is still starting. Wait for the setup portal before saving settings."}, 503)
             return
