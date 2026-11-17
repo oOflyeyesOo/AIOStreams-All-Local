@@ -3137,3 +3137,183 @@ a.disabled, button.disabled {
   from { opacity: 0; transform: translateX(30px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* LumiereDB Progress Bar & Live Search Sandbox */
+.lumiere-progress-card {
+  background: var(--surface-subtle, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.lumiere-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+.lumiere-phase-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.lumiere-phase-tag.synced {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.lumiere-phase-tag.indexing {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.lumiere-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.lumiere-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+.lumiere-progress-fill.synced {
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+}
+.lumiere-progress-fill.indexing {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  animation: pulse 1.5s infinite;
+}
+
+.lumiere-search-sandbox {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lumiere-sandbox-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lumiere-test-results {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lumiere-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+.lumiere-result-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lumiere-result-title {
+  color: var(--text-main);
+}
+.lumiere-result-year {
+  color: var(--text-muted);
+}
+.lumiere-result-type {
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.lumiere-result-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lumiere-result-imdb {
+  color: #38bdf8;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+.lumiere-result-imdb:hover {
+  text-decoration: underline;
+}
+.lumiere-result-pop {
+  color: #facc15;
+  font-size: 0.72rem;
+}
+.lumiere-latency-tag {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Service Viewer Web Player Banner */
+.service-frame-player-banner {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.15), rgba(99, 102, 241, 0.15));
+  border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.82rem;
+  flex-wrap: wrap;
+}
+.player-helper-title {
+  font-weight: 600;
+  color: #38bdf8;
+}
+.player-helper-cred {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.player-helper-cred strong {
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+.player-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.player-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.player-copy-all-btn {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #fff;
+  font-weight: 600;
+}
+.player-copy-all-btn:hover {
+  background: #0369a1;
+}

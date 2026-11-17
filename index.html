@@ -130,6 +130,7 @@
             <button type="button" id="copy-jellyfin-server-url" class="light-button" title="Copy Jellyfin server endpoint for client apps"><span>Copy Server URL</span> <span>⧉</span></button>
             <a id="open-jellyfin-quickconnect" class="light-button" href="#" target="_blank" rel="noopener noreferrer" title="Open AIOStreams settings, then Save &amp; Install to pair a device"><span>Pair Device</span> <span>↗</span></a>
             <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy player username ⧉</button>
+            <button type="button" id="copy-jellyfin-password" class="subtle-link mini-action-btn">Copy player password ⧉</button>
             <a id="install-aiostreams-web" class="subtle-link mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player" hidden>Hosted Web App ↗</a>
           </div>
           <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
@@ -691,6 +692,12 @@
     </div>
   </div>
   <p class="service-frame-help">If this page stays blank or refuses to load, choose Pop Out or Direct Port.</p>
+  <div id="service-frame-player-helper" class="service-frame-player-banner" style="display:none;">
+    <span class="player-helper-title">🎬 AIOStreams Web Player Login:</span>
+    <span class="player-helper-cred">Username: <strong id="player-helper-user">admin</strong> <button type="button" class="player-copy-btn" onclick="copyPlayerCred('user')">Copy</button></span>
+    <span class="player-helper-cred">Password: <strong id="player-helper-pass">admin</strong> <button type="button" class="player-copy-btn" onclick="copyPlayerCred('pass')">Copy</button></span>
+    <button type="button" class="player-copy-btn player-copy-all-btn" onclick="copyPlayerCred('both')">📋 Copy All</button>
+  </div>
   <div class="service-frame-body">
     <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="same-origin" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
   </div>
@@ -706,6 +713,17 @@
   </div>
   <div id="lumiere-stats-content" class="lumiere-stats-container" tabindex="0">
     <p style="color:var(--text-muted);padding:1rem;">Loading LumiereDB metrics…</p>
+  </div>
+  <div class="lumiere-search-sandbox">
+    <div class="lumiere-sandbox-head">
+      <span style="font-weight:600;font-size:0.85rem;">⚡ Live Title Search Sandbox</span>
+      <span style="font-size:0.75rem;color:var(--text-muted);">Real-time Pebble LSM queries</span>
+    </div>
+    <form id="lumiere-sandbox-form" onsubmit="handleLumiereSandboxSearch(event)" style="display:flex;gap:0.5rem;margin-top:0.4rem;">
+      <input type="text" id="lumiere-test-input" placeholder="Test title search (e.g. Inception, Breaking Bad)…" class="field-input" style="flex:1;padding:0.4rem 0.6rem;font-size:0.82rem;" />
+      <button type="submit" id="btn-lumiere-test-search" class="btn btn-secondary" style="padding:0.4rem 0.8rem;font-size:0.82rem;white-space:nowrap;">Search ⚡</button>
+    </form>
+    <div id="lumiere-test-results" class="lumiere-test-results"></div>
   </div>
 </dialog>
 </main>

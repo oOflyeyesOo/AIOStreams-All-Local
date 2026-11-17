@@ -549,6 +549,17 @@ function openServiceViewer(title, url, directUrl) {
   }
   iframe.title = title || 'Embedded service';
   iframe.src = url;
+
+  const playerHelper = document.getElementById('service-frame-player-helper');
+  const isWebPlayer = (title && title.toLowerCase().includes('player')) || (url && url.includes('/jellyfin'));
+  if (playerHelper) {
+    playerHelper.style.display = isWebPlayer ? 'flex' : 'none';
+    if (isWebPlayer) {
+      const userEl = document.getElementById('player-helper-user');
+      if (userEl) userEl.textContent = cachedManifestInfo?.jellyfinUser || 'admin';
+    }
+  }
+
   if (dialog.classList?.contains?.('closing')) {
     dialog.classList.remove('closing');
   }
@@ -637,12 +648,22 @@ async function showLumiereStats() {
     const epCount = res.episodes ? Number(res.episodes).toLocaleString() : '4,580,131';
     const peopleCount = res.people ? Number(res.people).toLocaleString() : '2,829,639';
     const nameCount = res.names ? Number(res.names).toLocaleString() : '1,211,454';
-    const statusText = res.phase === 'idle' ? 'Ready (Idle)' : `Rebuilding (${res.phase})`;
+    const isIdle = res.phase === 'idle';
+    const statusText = isIdle ? 'Ready (Idle)' : `Rebuilding (${res.phase})`;
     const datasetDate = res.datasetDate || '2026-11-16';
     const builtAt = res.builtAt ? new Date(res.builtAt).toLocaleString() : 'Recent';
     const genId = res.generationId || 'gen-2026-11-16-18-v13';
 
     content.innerHTML = `
+      <div class="lumiere-progress-card">
+        <div class="lumiere-progress-header">
+          <span>ETL Indexing Progress: <strong>${isIdle ? '100% Synced' : 'Indexing…'}</strong></span>
+          <span class="lumiere-phase-tag ${isIdle ? 'synced' : 'indexing'}">${isIdle ? '✓ Optimal LSM State' : res.phase}</span>
+        </div>
+        <div class="lumiere-progress-track">
+          <div class="lumiere-progress-fill ${isIdle ? 'synced' : 'indexing'}" style="width: ${isIdle ? '100%' : '65%'}"></div>
+        </div>
+      </div>
       <div class="lumiere-stats-grid">
         <div class="lumiere-stat-box">
           <span class="lumiere-stat-num">${docCount}</span>
@@ -675,6 +696,55 @@ async function showLumiereStats() {
   }
 }
 window.showLumiereStats = showLumiereStats;
+
+async function handleLumiereSandboxSearch(e) {
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  const input = document.getElementById('lumiere-test-input');
+  const resultsEl = document.getElementById('lumiere-test-results');
+  const btn = document.getElementById('btn-lumiere-test-search');
+  if (!input || !resultsEl) return;
+  const query = input.value.trim();
+  if (!query) {
+    resultsEl.innerHTML = '<span style="color:var(--text-muted);font-size:0.78rem;">Enter a movie or TV show title above to test query latency.</span>';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  resultsEl.innerHTML = '<span style="color:var(--text-muted);font-size:0.78rem;">Searching Pebble LSM index…</span>';
+  try {
+    const res = await api(`/api/lumiere/search?q=${encodeURIComponent(query)}&limit=8`);
+    if (!res || !res.success) throw new Error(res?.error || 'Search lookup failed');
+    const items = res.items || [];
+    if (!items.length) {
+      resultsEl.innerHTML = `<span style="color:var(--text-muted);font-size:0.78rem;">No titles found for "${query}" (Latency: ${res.latencyMs || 0}ms)</span>`;
+      return;
+    }
+    const html = items.map(item => `
+      <div class="lumiere-result-item">
+        <div class="lumiere-result-main">
+          <strong class="lumiere-result-title">${item.title}</strong>
+          ${item.year ? `<span class="lumiere-result-year">(${item.year})</span>` : ''}
+          <span class="lumiere-result-type">${item.type || 'title'}</span>
+        </div>
+        <div class="lumiere-result-meta">
+          <a href="https://www.imdb.com/title/${item.imdbId}/" target="_blank" rel="noopener noreferrer" class="lumiere-result-imdb">${item.imdbId}</a>
+          <span class="lumiere-result-pop">★ ${item.popularity || 0}</span>
+        </div>
+      </div>
+    `).join('');
+    resultsEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0.2rem 0.4rem;font-size:0.75rem;color:var(--text-muted);border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span>Found <strong>${res.count}</strong> matches</span>
+        <span class="lumiere-latency-tag">⚡ ${res.latencyMs}ms</span>
+      </div>
+      ${html}
+    `;
+  } catch (err) {
+    resultsEl.innerHTML = `<span style="color:var(--red);font-size:0.78rem;">Lookup error: ${err.message}</span>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+window.handleLumiereSandboxSearch = handleLumiereSandboxSearch;
 
 function pollLumiereRebuildProgress(button, badge) {
   let attempts = 0;
@@ -1177,10 +1247,29 @@ if (copyWebdavBtn) {
 }
 
 document.getElementById('copy-jellyfin-username')?.addEventListener('click', e => {
-  if (cachedManifestInfo?.uuid) {
-    copyToClipboard(cachedManifestInfo.uuid, 'Player username copied.', e.currentTarget);
-  }
+  const username = cachedManifestInfo?.jellyfinUser || cachedManifestInfo?.uuid || 'admin';
+  copyToClipboard(username, `Player username (${username}) copied.`, e.currentTarget);
 });
+
+document.getElementById('copy-jellyfin-password')?.addEventListener('click', e => {
+  const passInput = document.getElementById('stack-admin-password');
+  const pass = (passInput && passInput.value) || 'admin';
+  copyToClipboard(pass, 'Stack admin password copied. Use for Web Player login.', e.currentTarget);
+});
+
+function copyPlayerCred(which) {
+  const user = cachedManifestInfo?.jellyfinUser || cachedManifestInfo?.uuid || 'admin';
+  const passInput = document.getElementById('stack-admin-password');
+  const pass = (passInput && passInput.value) || 'admin';
+  if (which === 'user') {
+    copyToClipboard(user, `Copied player username: ${user}`);
+  } else if (which === 'pass') {
+    copyToClipboard(pass, 'Copied player password.');
+  } else {
+    copyToClipboard(`Username: ${user}\nPassword: ${pass}`, `Copied player credentials (User: ${user})`);
+  }
+}
+window.copyPlayerCred = copyPlayerCred;
 
 document.getElementById('test-saved-usenet-btn')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;

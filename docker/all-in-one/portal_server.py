@@ -448,6 +448,8 @@ def playback_readiness():
             return {"name": name, "status": "waiting"}
     with ThreadPoolExecutor(max_workers=4) as pool:
         checks.extend(pool.map(check_http, targets))
+    remux_enabled = env.get("ENABLE_REMUXDB", "true").lower() not in ("false", "0", "no")
+    checks.append({"name": "RemuxDB & MediaInfo Probes", "status": "ready" if remux_enabled else "off"})
     # Setup may have begun while network probes were running.
     try:
         stable = setup_snapshot().get("status") in ("idle", "complete")
@@ -1091,6 +1093,7 @@ PORTAL_API_GET_PATHS = {
     "/api/templates", "/api/backup", "/api/resources", "/api/health-stats",
     "/api/watchdog", "/api/zilean", "/api/zilean-stats",
     "/api/lumiere/stats", "/api/lumiere-stats", "/api/backups",
+    "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
     "/api/aniskip",
 }
@@ -1869,6 +1872,9 @@ button:hover {{ background: #0369a1; }}
         elif path in ("/api/lumiere/stats", "/api/lumiere-stats"):
             self.handle_api_lumiere_stats()
             return
+        elif path in ("/api/lumiere/search", "/api/lumiere-search"):
+            self.handle_api_lumiere_search()
+            return
         elif path == "/api/backups":
             self.handle_api_backups_list()
             return
@@ -2370,6 +2376,9 @@ button:hover {{ background: #0369a1; }}
             "jellyfinServerProxy": jellyfin_server_proxy,
             "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
             "officialWebPlayer": "https://web.aiostreams.org",
+            "jellyfinUser": "admin",
+            "remuxDbEnabled": env_vars.get("ENABLE_REMUXDB", "true").lower() not in ("false", "0", "no"),
+            "mediaInfoProbeEnabled": True,
             "jellyfinEnabled": jellyfin_enabled_val,
             "aiometadataHost": aiom_host,
             "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
@@ -2786,6 +2795,61 @@ button:hover {{ background: #0369a1; }}
                 "nextPollAt": data.get("nextPollAt") if data else None,
             }
             self.json_response(result)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_lumiere_search(self):
+        try:
+            url_parts = urllib.parse.urlsplit(self.path)
+            query_params = urllib.parse.parse_qs(url_parts.query)
+            q = (query_params.get("q") or query_params.get("query") or [""])[0].strip()
+            if not q:
+                self.json_response({"success": True, "query": "", "latencyMs": 0, "count": 0, "items": []})
+                return
+
+            limit = min(max(int((query_params.get("limit") or ["10"])[0] or 10), 1), 50)
+            encoded_query = urllib.parse.quote(q)
+            endpoints = [
+                f"http://lumiere-db:8000/search?query={encoded_query}&limit={limit}",
+                f"http://127.0.0.1:8000/search?query={encoded_query}&limit={limit}"
+            ]
+            data = None
+            t0 = time.perf_counter()
+            for ep in endpoints:
+                try:
+                    req = urllib.request.Request(ep, headers={"User-Agent": "AIO-Portal"})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 200:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            break
+                except Exception:
+                    continue
+            t1 = time.perf_counter()
+            latency_ms = round((t1 - t0) * 1000, 1)
+
+            if data is None:
+                self.json_response({"success": False, "error": "LumiereDB is unreachable or not responding."}, 503)
+                return
+
+            raw_items = data.get("items", []) if isinstance(data, dict) else []
+            items = []
+            for item in raw_items:
+                if isinstance(item, dict) and item.get("tconst"):
+                    items.append({
+                        "imdbId": item.get("tconst"),
+                        "title": item.get("primaryTitle") or item.get("originalTitle") or "Untitled",
+                        "year": item.get("startYear"),
+                        "type": item.get("titleType") or "movie",
+                        "popularity": item.get("popularity", 0),
+                    })
+
+            self.json_response({
+                "success": True,
+                "query": q,
+                "latencyMs": latency_ms,
+                "count": len(items),
+                "items": items
+            })
         except Exception as e:
             self.json_response({"success": False, "error": str(e)}, 500)
 

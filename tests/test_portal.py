@@ -681,6 +681,25 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(data.get("ready"))
             self.assertEqual(data.get("phase"), "idle")
 
+    def test_lumiere_search_endpoint(self):
+        self.assertEqual(self.request("/api/lumiere/search?q=Inception", auth=False)[0], 401)
+        with patch("urllib.request.urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.return_value = json.dumps({
+                "items": [{"tconst": "tt1375666", "primaryTitle": "Inception", "startYear": 2010, "titleType": "movie"}]
+            }).encode("utf-8")
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request("/api/lumiere/search?q=Inception", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data.get("success"))
+            self.assertEqual(data.get("query"), "Inception")
+            self.assertEqual(len(data.get("items")), 1)
+            self.assertEqual(data["items"][0]["imdbId"], "tt1375666")
+
     def test_public_database_options_can_be_saved_and_returned(self):
         status, body, _ = self.request(
             "/api/save-env", "POST",
