@@ -20,37 +20,25 @@ First startup can take several minutes while services initialize and build
 their caches. The setup controller allows up to ten minutes for service health
 before reporting a startup failure.
 
-Portainer's [Web editor instructions](https://docs.portainer.io/user/docker/stacks/add)
-describe where to paste the file. In Dockge, choose **Compose** to create a stack,
-paste the same file, add environment values and deploy. Other Compose editors can
-use the same file; product-specific UI paths may differ.
-
 The setup controller and portal maintenance tools mount the host Docker socket.
-Both therefore have Docker-engine control; the controller's restricted API does
-not remove that underlying access. Protect portal credentials and keep its port
-on a trusted network. See [COMPOSE.md](COMPOSE.md). No privileged container or
-nested Docker daemon is needed for this deployment.
+Both therefore have Docker-engine control. Protect portal credentials and keep its
+port on a trusted network. See [COMPOSE.md](COMPOSE.md).
 
 The controller applies settings to this Compose project only. Keep the project
 name stable. Change provider keys in the portal; a manager redeploy initially uses
 its own environment, so choose **Connect my stack** again after redeploying to
-reapply saved keys. Editing arbitrary service settings in the manager is not
-persisted by the setup button, which uses the packaged Compose definition. Use
-the source deployment for custom Compose definitions.
+reapply saved keys.
 
 ## Image access and versions
 
-Images are built by [Build Docker manager images](../../actions/workflows/build-manager-images.yml)
-on relevant source pushes to `main`. Wait for **all seven builds** to succeed (`search-broker`, `portal`, `controller`, `aiostreams`, `bootstrap`, `postgres-init`, and `kitsu`) before installing a
-new revision. They are published under `ghcr.io/ooflyeyesoo/aio-local-*` with
-`latest` and full commit-SHA tags. Set `AIO_IMAGE_TAG` to a successful commit SHA to
-keep all packaged components on the same release. Upstream services still use
-their own image tags, usually `latest`.
+Images are published under `ghcr.io/ooflyeyesoo/aio-local-*` with `latest` and
+full commit-SHA tags. The six packaged images are `aiostreams`, `kitsu`, `portal`,
+`bootstrap`, `controller`, and `postgres-init`. Wait for all six builds to succeed
+before installing a new revision. Set `AIO_IMAGE_TAG` to a successful commit SHA to
+keep all packaged components on the same release.
 
 This repository is private. If its GHCR packages are private, add a GHCR registry
-credential with permission to read those packages in your Docker management app
-before deployment. Publishing a workflow does not make packages publicly readable.
-The source deployment below remains available without these packaged images.
+credential with read permission in your Docker management app before deployment.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -62,54 +50,48 @@ The source deployment below remains available without these packaged images.
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Host Docker socket path |
 
 Do not run a source installation and a manager installation with the default
-ports on the same host at the same time. The full stack also publishes service
-ports listed in the Compose file, including 3001 for AIOStreams and its built-in player.
+ports on the same host at the same time.
 
 ## Storage, updates and removal
 
 `aio-config` stores saved settings and the packaged UI/Compose definition. Each
-application has its own named data volume. Docker prefixes the volume names with
-your stack name. Back up all these volumes before upgrades. Do not remove volumes
-when recreating the stack. Pull the new images, redeploy through your management
-app, then choose **Connect my stack**. Upgrades refresh packaged files while
-preserving saved provider keys and application data.
+application has its own named data volume. Back up all volumes before upgrades.
+Pull the new images, redeploy through your management app, then choose
+**Connect my stack**. Upgrades refresh packaged files while preserving saved
+provider keys and application data.
 
 Stopping the stack stops its containers. Removing the stack without deleting
 volumes keeps its data available for redeployment under the same project name.
-Existing checkout-based installations use bind-mounted `data/` and `.env`; they
-are not automatically migrated into named volumes. Keep that installation until
-you have backed it up and deliberately migrated its data.
 
 ## Stack profiles vs. Manager deployment
 
 ### Source Compose Profiles (`docker-compose.yml`)
-When deploying directly from source using `docker-compose.yml`, profiles allow running exactly the components you need:
-- **`core`** (default lean stack): AIOStreams, AIOMetadata, Posters+, SubSense, Anime Kitsu, StremThru Store and backing databases/cache.
-- **`scrapers`** (recommended full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and Infinidysk Usenet.
+
+When deploying from source, profiles let you run only the components you need:
+
+- **`core`** (default lean stack): AIOStreams, AIOMetadata, Posters+, SubSense, Anime Kitsu, StremThru Store, LumiereDB, and backing databases/cache.
+- **`scrapers`** (recommended for full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and InfiniDysk Usenet.
 - **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`).
 - **`all`**: Activates all continuous services simultaneously.
 
 ### Packaged Manager Deployment (`compose.manager.yml`)
-The packaged manager configuration automatically includes all 19 continuous microservices (combining core, scrapers, and players) without needing profile flags, while granting full host-port customization via `PORT_<SERVICE>` environment variables. Only test harnesses (`stack-check`) and ingress tunnels (`cloudflared`) remain profile-gated.
+
+The packaged manager configuration automatically includes all continuous
+microservices without profile flags, while allowing full host-port customization
+via `PORT_<SERVICE>` environment variables.
 
 ## Source Compose option
 
-For custom settings or building locally, clone/download the repository into your
-server's stack folder and use `docker-compose.yml`:
+Clone the repository and use `docker-compose.yml` for custom settings or local builds:
 
 ```sh
 docker compose --profile scrapers up -d --build --remove-orphans
 ```
 
-Dockge can manage this folder directly when it is inside its configured stacks
-directory. The source file needs the rest of the repository beside it; pasting it
-alone into an editor will not supply its scripts. `--remove-orphans` also removes
-the retired Hidden Cinemeta container from this project.
-
 To build the manager images locally, tag all targets consistently:
 
 ```sh
-for target in search-broker portal controller aiostreams bootstrap postgres-init; do
+for target in portal controller aiostreams bootstrap postgres-init; do
   docker build -f docker/packaged/Dockerfile --target "$target" -t "aio-local-$target:local" .
 done
 docker build -f docker/anime-kitsu/Dockerfile -t aio-local-kitsu:local .
@@ -117,26 +99,14 @@ AIO_IMAGE_PREFIX=aio-local AIO_IMAGE_TAG=local docker compose -f compose.manager
 ```
 
 For maintainers, `python3 scripts/generate_manager_compose.py` regenerates the
-manager configuration from the source stack (requires `PyYAML==6.0.3`). CI checks
-that the committed generated file is current.
+manager configuration from the source stack (requires `PyYAML==6.0.3`).
 
-## Optional Cinemeta tool
+## Host ports and firewall
 
-[Hidden Cinemeta](https://hidden-cinemeta.vercel.app/) is linked from the portal.
-It is an external, optional tool; this project no longer builds, starts or polls
-a Hidden Cinemeta server.
+Every published host port in `compose.manager.yml` can be set as `PORT_<SERVICE>`
+(hyphens become underscores), including `PORT_LUMIEREDB`, `PORT_AIOSTREAMS`,
+`PORT_AIOMETADATA`, and `PORT_PORTAL`. Cloudflare Tunnel remains disabled unless
+its `tunnel` profile is selected and a token supplied.
 
-
-### Host ports and optional coverage
-
-Every published host port in `compose.manager.yml` can be set in the manager environment editor as `PORT_<SERVICE>` (hyphens become underscores), including `PORT_LUMIEREDB`, `PORT_AIOSTREAMS`, `PORT_AIOMETADATA`, and `PORT_PORTAL`. The portal preserves these settings when its controller reapplies configuration. Cloudflare Tunnel remains disabled unless its `tunnel` profile is selected and a token supplied.
-
-The default request path uses native Prowlarr indexer queries plus the StremThru Store (Debrid Cloud Library) integration. External scraping is powered by AIOStreams querying local Prowlarr indexers and Zilean DMM torrent hash cache directly. StremThru Store directly replaces the retired Debrid Search container with zero-overhead, instant cloud library lookups.
-
-Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test instruments. They are not deployed in the normal manager stack and measure configured internal HTTP edges only, not encrypted traffic to external providers.
-
-When upgrading a Compose installation that bundled Stremio Web and Nuvio Web,
-redeploy the same project with `docker compose up -d --remove-orphans` (use the
-same Compose file and profiles). In a Docker manager, select its orphan removal
-option or remove only the two retired player containers. Their saved data stays
-on disk. Open the AIOStreams player from the portal after setup finishes.
+Tracing tools (`tools/trace_proxy.py`, `tests/trace_requests.py`) are opt-in test
+instruments, not deployed in the normal manager stack.
