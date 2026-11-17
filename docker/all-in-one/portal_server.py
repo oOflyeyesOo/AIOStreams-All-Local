@@ -49,6 +49,7 @@ if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
 from tools.usenet_config import EXTRA_SOURCES, extra_sources, form_updates, public_settings, credential
+from tools.metadata_config import prepare_metadata_template, request_metadata, MetadataRequestError
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
@@ -1922,35 +1923,26 @@ button:hover {{ background: #0369a1; }}
                 existing_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") or os.environ.get("AIOMETADATA_PROFILE_UUID")
                 aiom_base = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 
-                api_keys = tmpl_cfg.setdefault("apiKeys", {})
-                for k, env_k in [("tmdb", "TMDB_API_KEY"), ("tvdb", "TVDB_API_KEY"), ("mdblist", "MDBLIST_API_KEY"),
-                                 ("rpdb", "RPDB_API_KEY"), ("fanart", "FANART_API_KEY"), ("gemini", "GEMINI_API_KEY")]:
-                    val = env_vars.get(env_k) or os.environ.get(env_k)
-                    if val:
-                        api_keys[k] = val
-
-                save_data = json.dumps({"config": tmpl_cfg, "password": addon_pw, "addonPassword": addon_pw}).encode()
-                endpoint = f"{aiom_base}/api/config/update/{existing_profile}" if existing_profile else f"{aiom_base}/api/config/save"
-                req_method = "PUT" if existing_profile else "POST"
-                req = urllib.request.Request(endpoint, data=save_data, method=req_method, headers={"Content-Type": "application/json"})
-                aiom_res = {}
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        aiom_res = json.load(resp)
-                except Exception as e:
-                    if existing_profile:
-                        req_fb = urllib.request.Request(f"{aiom_base}/api/config/save", data=save_data, method="POST", headers={"Content-Type": "application/json"})
-                        try:
-                            with urllib.request.urlopen(req_fb, timeout=10) as resp:
-                                aiom_res = json.load(resp)
-                        except Exception as e2:
-                            self.json_response({"success": False, "error": f"Failed to contact AIOMetadata: {e2}"}, 502)
-                            return
-                    else:
-                        self.json_response({"success": False, "error": f"Failed to contact AIOMetadata: {e}"}, 502)
-                        return
-
-                user_uuid = aiom_res.get("userUUID") or aiom_res.get("uuid") or existing_profile
+                settings = {**os.environ, **env_vars, "ADDON_PASSWORD": addon_pw}
+                credentials = {"password": addon_pw, "addonPassword": addon_pw}
+                existing_cfg = {}
+                if existing_profile:
+                    profile_path = urllib.parse.quote(existing_profile, safe="")
+                    loaded = request_metadata(f"{aiom_base}/api/config/load/{profile_path}", credentials)
+                    existing_cfg = loaded.get("config")
+                    if not isinstance(existing_cfg, dict):
+                        raise MetadataRequestError(502)
+                tmpl_cfg = prepare_metadata_template(tmpl_cfg, settings, existing_cfg)
+                save_data = {"config": tmpl_cfg, **credentials}
+                if existing_profile and existing_cfg.get("configVersion") is not None:
+                    save_data["baseVersion"] = existing_cfg["configVersion"]
+                endpoint = f"{aiom_base}/api/config/update/{profile_path}" if existing_profile else f"{aiom_base}/api/config/save"
+                aiom_res = request_metadata(endpoint, save_data, "PUT" if existing_profile else "POST")
+                user_uuid = aiom_res.get("userUUID") or aiom_res.get("uuid")
+                if not isinstance(user_uuid, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", user_uuid):
+                    raise MetadataRequestError(502)
+                if existing_profile and user_uuid != existing_profile:
+                    raise MetadataRequestError(502)
                 updates = {"AIOMETADATA_TEMPLATE": tmpl}
                 if user_uuid:
                     updates["AIOMETADATA_PROFILE_UUID"] = str(user_uuid)
@@ -1968,8 +1960,18 @@ button:hover {{ background: #0369a1; }}
                     "configureUrl": f"{aiom_host}/stremio/{user_uuid}/configure" if user_uuid else f"{aiom_host}/configure",
                     "manifestUrl": f"{aiom_host}/stremio/{user_uuid}/manifest.json" if user_uuid else f"{aiom_host}/manifest.json"
                 })
-            except Exception as e:
-                self.json_response({"success": False, "error": str(e)}, 500)
+            except MetadataRequestError as error:
+                status = error.upstream_status
+                response_status = status if status in (400, 409, 502, 504) else 422
+                self.json_response({"success": False, "error": str(error),
+                                    "errorCode": "AIOMETADATA_PRESET_FAILED",
+                                    "upstreamStatus": status}, response_status)
+            except ValueError:
+                self.json_response({"success": False, "error": "Invalid metadata preset or request.",
+                                    "errorCode": "AIOMETADATA_PRESET_FAILED"}, 400)
+            except Exception:
+                self.json_response({"success": False, "error": "Could not apply or persist the metadata preset. Check portal logs.",
+                                    "errorCode": "AIOMETADATA_PRESET_FAILED"}, 500)
             return
         if path == "/api/validate-provider":
             try:

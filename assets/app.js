@@ -177,6 +177,12 @@ async function api(path, options, attempt=0) {
     const response = await fetch(new URL(path,location.origin).href, options);
     if (!response.ok) {
       const error = new Error(response.status === 401 ? 'Sign in with your portal password, then retry.' : `The server returned ${response.status}. Check setup details and retry.`);
+      if (path === '/api/aiometadata/apply-template') {
+        const detail = await response.json().catch(() => null);
+        if (detail?.errorCode === 'AIOMETADATA_PRESET_FAILED' && typeof detail.error === 'string') {
+          error.message = detail.error;
+        }
+      }
       error.status = response.status;
       throw error;
     }

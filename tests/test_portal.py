@@ -541,6 +541,50 @@ class PortalTests(unittest.TestCase):
             else:
                 os.environ.pop("AIOMETADATA_PROFILE_UUID", None)
 
+    def test_metadata_update_preserves_identity_and_accounts(self):
+        saved = {"AIOMETADATA_PROFILE_UUID": "existing-profile", "TMDB_API_KEY": "fixture"}
+        loaded = {"success": True, "config": {"configVersion": 42,
+                  "apiKeys": {"traktTokenId": "saved-link"}, "jellyfinUsers": [{"id": "mine"}]}}
+        with patch.object(portal, "read_saved_env", return_value=saved), \
+             patch.object(portal, "request_metadata", side_effect=[loaded, {"success": True, "userUUID": "existing-profile"}]) as upstream, \
+             patch.object(portal, "save_env_updates") as persist:
+            status, body, _ = self.request("/api/aiometadata/apply-template", "POST",
+                {"template": "tamtaro-aiometadata-with-anime.json"}, auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(upstream.call_count, 2)
+        update = upstream.call_args
+        self.assertTrue(update.args[0].endswith("/update/existing-profile"))
+        self.assertEqual(update.args[2], "PUT")
+        self.assertEqual(update.args[1]["baseVersion"], 42)
+        self.assertEqual(update.args[1]["config"]["apiKeys"]["traktTokenId"], "saved-link")
+        self.assertEqual(update.args[1]["config"]["jellyfinUsers"], [{"id": "mine"}])
+        persist.assert_called_once()
+
+    def test_metadata_failed_update_never_creates_replacement_profile(self):
+        from tools.metadata_config import MetadataRequestError
+        for failure in (400, 401, 409, 504):
+            with self.subTest(failure=failure), \
+                 patch.object(portal, "read_saved_env", return_value={"AIOMETADATA_PROFILE_UUID": "existing-profile"}), \
+                 patch.object(portal, "request_metadata", side_effect=[
+                     {"success": True, "config": {}}, MetadataRequestError(failure)]) as upstream, \
+                 patch.object(portal, "save_env_updates") as persist:
+                status, body, _ = self.request("/api/aiometadata/apply-template", "POST",
+                    {"template": "tamtaro-aiometadata-with-anime.json"}, auth=True)
+                self.assertEqual(status, 422 if failure == 401 else failure)
+                self.assertEqual(json.loads(body)["upstreamStatus"], failure)
+                self.assertEqual(upstream.call_count, 2)
+                persist.assert_not_called()
+
+    def test_metadata_failed_load_never_overwrites_profile(self):
+        from tools.metadata_config import MetadataRequestError
+        with patch.object(portal, "read_saved_env", return_value={"AIOMETADATA_PROFILE_UUID": "existing-profile"}), \
+             patch.object(portal, "request_metadata", side_effect=MetadataRequestError(401)) as upstream, \
+             patch.object(portal, "save_env_updates") as persist:
+            status, body, _ = self.request("/api/aiometadata/apply-template", "POST", {}, auth=True)
+        self.assertEqual(status, 422)
+        self.assertEqual(upstream.call_count, 1)
+        persist.assert_not_called()
+
     def test_aniskip_endpoint_cors_and_skip_times(self):
         status, _, headers = self.request("/api/aniskip?id=tt9335498&season=1&episode=1", method="OPTIONS")
         self.assertEqual(status, 200)

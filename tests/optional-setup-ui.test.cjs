@@ -4,6 +4,28 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('assets/app.js','utf8');
 
+test('preset rejection displays the safe service reason without retrying the write',async()=>{
+  let calls=0;
+  const context=vm.createContext({URL,location:new URL('http://server:8088'),
+    fetch:async()=>{calls++;return {ok:false,status:400,json:async()=>({
+      errorCode:'AIOMETADATA_PRESET_FAILED',error:'Save the required API key(s): TMDB.'
+    })};}
+  });
+  vm.runInContext(source.slice(source.indexOf('async function api('),source.indexOf('function notify(')),context);
+  await assert.rejects(vm.runInContext("api('/api/aiometadata/apply-template',{method:'POST'})",context),
+    /required API key.*TMDB/);
+  assert.equal(calls,1);
+});
+
+test('preset failure keeps a safe generic error for non-JSON gateway responses',async()=>{
+  const context=vm.createContext({URL,location:new URL('http://server:8088'),
+    fetch:async()=>({ok:false,status:502,json:async()=>{throw Error('html gateway body');}})
+  });
+  vm.runInContext(source.slice(source.indexOf('async function api('),source.indexOf('function notify(')),context);
+  await assert.rejects(vm.runInContext("api('/api/aiometadata/apply-template',{method:'POST'})",context),
+    /server returned 502/);
+});
+
 function form(saved){
   const nodes=new Map(),calls=[];
   const document={
