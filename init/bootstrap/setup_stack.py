@@ -259,6 +259,9 @@ def make_request(url, method="GET", data=None, headers=None, timeout=12):
             content = resp.read().decode("utf-8", errors="ignore")
             return json.loads(content) if content.strip().startswith(("{", "[")) else {"status": resp.status, "text": content}
     except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 307, 308) and e.headers.get("Location"):
+            redirect_url = urllib.parse.urljoin(url, e.headers.get("Location"))
+            return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout)
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"error": e.code, "message": err_msg}
     except Exception as e:
@@ -278,6 +281,7 @@ def is_url_reachable(url, timeout=2.0):
 # 1. PROWLARR PROVISIONING
 # ==============================================================================
 def wait_for_prowlarr(max_attempts=20, interval=2):
+    global PROWLARR_URL
     print(f"[Prowlarr Setup] Waiting for Prowlarr at {PROWLARR_URL}...", flush=True)
     headers = {"X-Api-Key": PROWLARR_API_KEY}
     for attempt in range(1, max_attempts + 1):
@@ -285,6 +289,13 @@ def wait_for_prowlarr(max_attempts=20, interval=2):
         if isinstance(res, dict) and "version" in res:
             print(f"[Prowlarr Setup] ✓ Prowlarr v{res.get('version')} is online! (attempt {attempt})", flush=True)
             return True
+        if not (isinstance(res, dict) and "version" in res) and not PROWLARR_URL.endswith("/service-proxy/prowlarr"):
+            probe_url = f"{PROWLARR_URL}/service-proxy/prowlarr"
+            probe_res = make_request(f"{probe_url}/api/v1/system/status", headers=headers, timeout=2)
+            if isinstance(probe_res, dict) and "version" in probe_res:
+                print(f"[Prowlarr Setup] ✓ Prowlarr v{probe_res.get('version')} is online with urlBase at {probe_url}! (attempt {attempt})", flush=True)
+                PROWLARR_URL = probe_url
+                return True
         if attempt >= 8 and not is_url_reachable(PROWLARR_URL, timeout=1.0):
             print("[Prowlarr Setup] ℹ️ Prowlarr is unreachable. Check its container, selected Compose profile, and Docker network. Indexer setup was not completed.", flush=True)
             return False
@@ -361,16 +372,29 @@ def setup_prowlarr_indexers():
         if extra.lower() not in [t.lower() for t in target_list]:
             target_list.append(extra)
 
+    indexer_aliases = {
+        "animetosho": "animetosho-xyz",
+        "anime tosho": "animetosho-xyz",
+        "tokyotoshokan": "tokyotosho",
+        "tokyo toshokan": "tokyotosho",
+        "thepiratebay": "thepiratebay",
+        "the pirate bay": "thepiratebay",
+        "tpb": "thepiratebay",
+        "nyaa": "nyaasi",
+        "nyaa.si": "nyaasi",
+    }
+
     for target in target_list:
-        target_lower = target.lower()
-        if any(target_lower in d for d in existing_definitions):
+        target_lower = target.lower().strip()
+        target_lookup = indexer_aliases.get(target_lower, target_lower)
+        if any(target_lower in d or target_lookup in d for d in existing_definitions):
             continue
 
         matched_schema = None
         for schema in schemas:
             s_def = schema.get("definitionName", "").lower()
             s_name = schema.get("name", "").lower()
-            if s_def == target_lower or s_name == target_lower:
+            if s_def in (target_lower, target_lookup) or s_name in (target_lower, target_lookup):
                 matched_schema = schema
                 break
 
@@ -416,17 +440,25 @@ def tune_prowlarr_indexers():
     active_indexers = make_request(f"{PROWLARR_URL}/api/v1/indexer", headers=headers)
     if not isinstance(active_indexers, list):
         return
-    disabled_names = ["limetorrents", "tokyo toshokan", "acg.rip", "zilean"]
+    disabled_names = ["acg.rip", "zilean"]
     priority_map = {
         "zilean": 1,
         "animetosho": 5,
         "althub": 5,
         "the pirate bay": 10,
+        "thepiratebay": 10,
         "nyaa": 10,
+        "nyaasi": 10,
         "yts": 10,
+        "1337x": 10,
+        "eztv": 15,
+        "torrentgalaxy": 15,
+        "tokyo toshokan": 15,
+        "tokyotosho": 15,
         "subsplease": 15,
         "mikan": 15,
         "shana project": 15,
+        "limetorrents": 20,
         "nekobt": 20,
         "anibt": 20,
         "dmhy": 20,
@@ -439,6 +471,9 @@ def tune_prowlarr_indexers():
             if idx.get("enable"):
                 idx["enable"] = False
                 updated = True
+        elif not idx.get("enable") and any(essential in name_lower for essential in ["limetorrents", "tokyo tosho", "nyaa", "1337x", "pirate bay", "yts", "eztv", "animetosho"]):
+            idx["enable"] = True
+            updated = True
         new_pri = 25
         for k, p in priority_map.items():
             if k in name_lower:
