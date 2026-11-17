@@ -35,16 +35,15 @@
         }
       },
       {
-        "type": "comet",
-        "instanceId": "c9f",
+        "type": "prowlarr",
+        "instanceId": "prowlarr-scraper",
         "enabled": true,
         "options": {
-          "name": "Comet",
-          "timeout": 20000,
+          "name": "Prowlarr Torrents",
+          "timeout": 15000,
           "resources": ["stream"],
-          "includeP2P": false,
-          "removeTrash": true,
-          "mediaTypes": []
+          "mediaTypes": [],
+          "url": "http://prowlarr:9696"
         }
       },
       {

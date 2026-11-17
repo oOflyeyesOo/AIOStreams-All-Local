@@ -615,8 +615,9 @@ services:
     - SUGGEST_ENABLED=false
     healthcheck:
       test:
-      - CMD-SHELL
-      - wget -q --spider http://127.0.0.1:8000/health || curl -fsSL http://127.0.0.1:8000/health > /dev/null || exit 1
+      - CMD
+      - /app/api
+      - healthcheck
       interval: 15s
       timeout: 5s
       retries: 5

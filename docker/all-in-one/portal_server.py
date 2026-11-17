@@ -1109,6 +1109,15 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if length < 0:
             raise ValueError("Content-Length cannot be negative")
         if length > max_size:
+            try:
+                drain = min(length, 1024 * 1024)
+                while drain > 0:
+                    chunk = self.rfile.read(min(drain, 65536))
+                    if not chunk:
+                        break
+                    drain -= len(chunk)
+            except Exception:
+                pass
             raise ValueError("Request body is too large")
         if length == 0:
             return {}

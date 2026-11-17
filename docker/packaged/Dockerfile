@@ -32,7 +32,4 @@ COPY tests/check_stack.py tests/check_streams.py tests/check_playback.py /
 FROM postgres:16-alpine AS postgres-init
 COPY init/postgres/init-databases.sh /init-databases.sh
 
-FROM python:3.11-alpine AS search-broker
-COPY tools/search_broker.py /search_broker.py
-USER 65532:65532
-ENTRYPOINT ["python3", "-u", "/search_broker.py"]
+

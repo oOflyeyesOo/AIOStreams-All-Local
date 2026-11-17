@@ -43,7 +43,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: search-broker, target: search-broker, file: docker/packaged/Dockerfile}
           - {name: portal, target: portal, file: docker/packaged/Dockerfile}
           - {name: controller, target: controller, file: docker/packaged/Dockerfile}
           - {name: aiostreams, target: aiostreams, file: docker/packaged/Dockerfile}
