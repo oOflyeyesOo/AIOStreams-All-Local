@@ -13,11 +13,13 @@ spec.loader.exec_module(bootstrap)
 
 
 class BootstrapTests(unittest.TestCase):
-    def test_comet_provisioning_allows_scraping_and_debrid_to_finish(self):
+    def test_prowlarr_provisioning_allows_scraping_and_debrid_to_finish(self):
         with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "fixture-key"):
             config = bootstrap.build_default_config(probe_services=False)
-        comet = next(p for p in config["presets"] if p["type"] == "comet")
-        self.assertGreaterEqual(comet["options"]["timeout"], 20000)
+        prowlarr = next(p for p in config["presets"] if p["instanceId"] == "prowlarr-scraper")
+        self.assertEqual(prowlarr["options"]["sources"], ["torrent"])
+        self.assertEqual(prowlarr["options"]["prowlarrUrl"], "http://prowlarr:9696")
+        self.assertTrue(prowlarr["enabled"])
 
     def setUp(self):
         # Unit tests model availability explicitly; DNS/network delays belong in E2E checks.
@@ -426,66 +428,21 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(usenet_p['options']['sources'], ['usenet'])
         self.assertEqual(usenet_p['options']['services'], ['nzbdav'])
 
-    def test_comet_preset_timeout_is_20s_and_not_overwritten(self):
-        # 1. Default preset has timeout >= 20000
+    def test_prowlarr_scraper_preset_and_knaben_anime(self):
         with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'valid-mock-key'), \
              patch.object(bootstrap, 'is_url_reachable', return_value=True):
             config = bootstrap.build_default_config(probe_services=False)
-            comet_p = next((p for p in config.get('presets', []) if p.get('type') == 'comet'), None)
-            self.assertIsNotNone(comet_p)
-            self.assertGreaterEqual(comet_p['options']['timeout'], 20000)
+            prowlarr_p = next((p for p in config.get('presets', []) if p.get('instanceId') == 'prowlarr-scraper'), None)
+            self.assertIsNotNone(prowlarr_p)
+            self.assertTrue(prowlarr_p['enabled'])
+            self.assertEqual(prowlarr_p['options']['sources'], ['torrent'])
+            self.assertEqual(prowlarr_p['options']['url'], 'http://prowlarr:9696')
 
-        # 2. Existing config with higher timeout (e.g. 25000) is preserved and not clobbered down to 8000
-        custom_base = {
-            "presets": [
-                {
-                    "type": "comet",
-                    "instanceId": "comet-local",
-                    "enabled": True,
-                    "options": {
-                        "name": "Comet (Local)",
-                        "url": "http://comet:8000",
-                        "timeout": 25000,
-                        "resources": ["stream"],
-                        "includeP2P": False,
-                        "removeTrash": True,
-                        "mediaTypes": []
-                    }
-                }
-            ]
-        }
-        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'valid-mock-key'), \
-             patch.object(bootstrap, 'is_url_reachable', return_value=True):
-            config = bootstrap.build_default_config(base_config=custom_base, probe_services=False)
-            comet_p = next((p for p in config.get('presets', []) if p.get('type') == 'comet'), None)
-            self.assertIsNotNone(comet_p)
-            self.assertEqual(comet_p['options']['timeout'], 25000)
-
-        # 3. Existing config with old 8000 timeout is raised to >= 20000
-        old_base = {
-            "presets": [
-                {
-                    "type": "comet",
-                    "instanceId": "comet-local",
-                    "enabled": True,
-                    "options": {
-                        "name": "Comet (Local)",
-                        "url": "http://comet:8000",
-                        "timeout": 8000,
-                        "resources": ["stream"],
-                        "includeP2P": False,
-                        "removeTrash": True,
-                        "mediaTypes": []
-                    }
-                }
-            ]
-        }
-        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'valid-mock-key'), \
-             patch.object(bootstrap, 'is_url_reachable', return_value=True):
-            config = bootstrap.build_default_config(base_config=old_base, probe_services=False)
-            comet_p = next((p for p in config.get('presets', []) if p.get('type') == 'comet'), None)
-            self.assertIsNotNone(comet_p)
-            self.assertGreaterEqual(comet_p['options']['timeout'], 20000)
+            knaben_p = next((p for p in config.get('presets', []) if p.get('instanceId') == 'knaben-scraper'), None)
+            self.assertIsNotNone(knaben_p)
+            self.assertTrue(knaben_p['enabled'])
+            self.assertEqual(knaben_p['options']['mediaTypes'], ['anime'])
+            self.assertEqual(knaben_p['options']['name'], 'Knaben (Anime)')
 
     def test_ensure_infinidysk_admin_provisions_and_skips_wizard(self):
         called_urls = []

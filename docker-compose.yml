@@ -5,31 +5,6 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  search-broker:
-    image: python:3.11-alpine
-    profiles: ["core", "scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: 128m
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    user: "65532:65532"
-    volumes:
-      - ./tools/search_broker.py:/search_broker.py:ro
-    command: ["python3", "-u", "/search_broker.py"]
-    environment:
-      - SEARCH_TIMEOUT=${SEARCH_TIMEOUT:-8}
-      - SEARCH_WORKERS=${SEARCH_WORKERS:-4}
-      - SEARCH_CACHE_TTL=${SEARCH_CACHE_TTL:-60}
-      - SEARCH_FAILURE_COOLDOWN=${SEARCH_FAILURE_COOLDOWN:-120}
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8091/healthz', timeout=2)"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks: [stremio-net]
-
   stack-check:
     profiles: ["test"]
     image: python:3.11-alpine
@@ -167,7 +142,6 @@ services:
       - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
 
       # --- Internal Local Scraper Endpoints ---
-      - COMET_URL=["http://comet:8000"]
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
       - BUILTIN_ZILEAN_URL=${BUILTIN_ZILEAN_URL:-http://zilean:8181}
       - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
@@ -222,57 +196,7 @@ services:
         condition: service_healthy
 
   # ============================================================================
-  # 2. LOCAL SCRAPERS & INDEXERS
-  # ============================================================================
-
-  # Comet (High-speed torrent/Debrid scraper querying local Prowlarr & Zilean)
-  comet:
-    image: ghcr.io/g0ldyy/comet:latest
-    container_name: comet
-    profiles: ["core", "scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${COMET_MEM_LIMIT:-1024m}
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8000:8000"
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/manifest.json', timeout=3)"]
-      interval: 15s
-      timeout: 5s
-      retries: 6
-      start_period: 10m
-    environment:
-      # AIOStreams owns anime ID mapping; Comet receives normalized IMDb IDs.
-      - ANIME_MAPPING_ENABLED=false
-      - FASTAPI_PORT=8000
-      - DATABASE_PATH=/app/data/comet.db
-      - ADMIN_DASHBOARD_PASSWORD=${ADDON_PASSWORD:-admin}
-      - PROXY_DEBRID_STREAM=false
-      - INDEXER_MANAGER_TYPE=prowlarr
-      - INDEXER_MANAGER_URL=http://search-broker:8091
-      - INDEXER_MANAGER_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - INDEXER_MANAGER_TIMEOUT=${COMET_INDEXER_TIMEOUT:-8}
-      # Comet applies this per scraper, not to the entire response.
-      - LIVE_SCRAPE_TIMEOUT=${COMET_LIVE_SCRAPE_TIMEOUT:-15}
-      - INDEXER_MANAGER_WAIT_TIMEOUT=${COMET_INDEXER_WAIT_TIMEOUT:-0}
-      - COMET_SCRAPE_TORRENT_TITLE_MATCH_THRESHOLD=${COMET_SCRAPE_TORRENT_TITLE_MATCH_THRESHOLD:-0.85}
-      - SCRAPE_PROWLARR=true
-      - SCRAPE_ZILEAN=false
-      - SCRAPE_NYAA=false
-      - SCRAPE_ANIMETOSHO=false
-      - ZILEAN_URL=http://zilean:8181
-      - STREMTHRU_URL=http://stremthru:8080
-      - TMDB_API_KEY=${TMDB_API_KEY:-}
-    volumes:
-      - ./data/comet:/app/data
-    networks:
-      - stremio-net
-
-  # ============================================================================
-  # 3. FAST DMM TORRENT HASH CACHE (ZILEAN)
+  # 2. FAST DMM TORRENT HASH CACHE (ZILEAN)
   # ============================================================================
   zilean:
     image: ipromknight/zilean:latest
@@ -396,8 +320,6 @@ services:
       - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
       - FLARESOLVERR_URL=http://flaresolverr:8191
       - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
-      - COMET_URL=http://comet:8000
-      - COMET_AIOSTREAMS_TIMEOUT=${COMET_AIOSTREAMS_TIMEOUT:-20000}
       - AIOSTREAMS_URL=http://aiostreams:3000
       - AIOMETADATA_URL=http://aiometadata:4005
       - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}

@@ -3,7 +3,7 @@
 
 Creates clean, lightweight, compressed archives (.tar.gz) of:
   • PostgreSQL database cluster (atomic pg_dumpall of zilean, aiometadata)
-  • Primary SQLite databases (AIOStreams db.sqlite, Comet comet.db, Debrid Search)
+  • Primary SQLite databases (AIOStreams db.sqlite, Debrid Search)
   • Essential service configurations (Prowlarr, SlickSync, InfiniDysk, Stremio Web)
   • Environment settings (.env)
 
@@ -190,7 +190,6 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("aiostreams/db.sqlite", False),
             ("aiostreams/aiostreams_install.json", False),
             ("aiostreams/instance-id", False),
-            ("comet/comet.db", False),
             ("prowlarr/config.xml", False),
             ("prowlarr/prowlarr.db", False),
             ("infinidysk", True),

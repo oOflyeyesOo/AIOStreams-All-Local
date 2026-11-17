@@ -34,32 +34,36 @@
     ],
     "presets": [
       {
-        "type": "comet",
-        "instanceId": "comet-local",
+        "type": "prowlarr",
+        "instanceId": "prowlarr-scraper",
         "enabled": true,
         "options": {
-          "name": "Comet (Local)",
-          "url": "http://comet:8000",
-          "timeout": 20000,
+          "name": "Prowlarr Torrents",
+          "prowlarrUrl": "http://prowlarr:9696",
+          "prowlarrApiKey": "prowlarr_internal_secret_key_99",
+          "sources": [
+            "torrent"
+          ],
           "resources": [
             "stream"
           ],
-          "includeP2P": false,
-          "removeTrash": true,
+          "timeout": 10000,
           "mediaTypes": []
         }
       },
       {
         "type": "knaben",
         "instanceId": "knaben-scraper",
-        "enabled": false,
+        "enabled": true,
         "options": {
-          "name": "Knaben (Built-in)",
-          "timeout": 15000,
+          "name": "Knaben (Anime)",
+          "timeout": 8000,
           "resources": [
             "stream"
           ],
-          "mediaTypes": [],
+          "mediaTypes": [
+            "anime"
+          ],
           "useMultipleInstances": false
         }
       },

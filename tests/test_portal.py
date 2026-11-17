@@ -36,7 +36,7 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 11)
+        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 10)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,
@@ -1377,62 +1377,11 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(status_html, 502)
             self.assertIn(b"Connecting to prowlarr", body_html)
 
-    def test_comet_check_endpoints_and_attribution(self):
-        # 1. GET /api/comet-check
-        mock_result = {
-            "healthy": True,
-            "sample_id": "tt1375666",
-            "kind": "movie",
-            "primary_bottleneck": "prowlarr",
-            "attribution": "Prowlarr is the main delay (3500.0ms)",
-            "comet": {"latency_ms": 4200.0, "status": "ok", "stream_count": 5},
-            "prowlarr": {"latency_ms": 3500.0, "status": "ok", "result_count": 12},
-            "zilean": {"latency_ms": 200.0, "status": "ok", "result_count": 3},
-            "debrid": {"provider": "premiumize", "latency_ms": 400.0, "status": "ok"}
-        }
-        with patch.object(portal, "probe_comet_scraper_pipeline", return_value=mock_result) as mock_probe:
-            status, body, _ = self.request("/api/comet-check?id=tt1375666&kind=movie", auth=True)
-            self.assertEqual(status, 200)
-            data = json.loads(body.decode("utf-8"))
-            self.assertTrue(data["healthy"])
-            self.assertEqual(data["primary_bottleneck"], "prowlarr")
-            self.assertEqual(data["comet"]["stream_count"], 5)
-            mock_probe.assert_called_with(sample_id="tt1375666", kind="movie")
-
-        # 2. POST /api/comet-check
-        with patch.object(portal, "probe_comet_scraper_pipeline", return_value=mock_result) as mock_probe:
-            status, body, _ = self.request("/api/comet-check", "POST", {"id": "tt0137523", "kind": "movie"}, auth=True)
-            self.assertEqual(status, 200)
-            data = json.loads(body.decode("utf-8"))
-            self.assertEqual(data["primary_bottleneck"], "prowlarr")
-            mock_probe.assert_called_with(sample_id="tt0137523", kind="movie")
-
-        # 3. Direct probe logic attribution test
-        def mock_urlopen(req, timeout=None):
-            url = req.full_url if hasattr(req, "full_url") else str(req)
-            resp = MagicMock()
-            resp.__enter__.return_value = resp
-            if "prowlarr" in url:
-                resp.read.return_value = b'[{"title": "Movie 1"}]'
-            elif "zilean" in url:
-                resp.read.return_value = b'[{"raw_title": "Movie Torrent"}]'
-            elif "premiumize" in url:
-                resp.read.return_value = b'{"status": "success", "response": [true]}'
-            elif "comet" in url:
-                resp.read.return_value = b'{"streams": [{"title": "1080p Stream", "url": "https://debrid.test/stream"}]}'
-            else:
-                resp.read.return_value = b'{}'
-            return resp
-
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-            res = portal.probe_comet_scraper_pipeline(sample_id="tt1375666", kind="movie")
-            self.assertIn("healthy", res)
-            self.assertIn("primary_bottleneck", res)
-            self.assertIn("attribution", res)
-            self.assertIn("comet", res)
-            self.assertIn("prowlarr", res)
-            self.assertIn("zilean", res)
-            self.assertIn("debrid", res)
+    def test_comet_check_endpoints_removed(self):
+        status, _, _ = self.request("/api/comet-check", auth=True)
+        self.assertEqual(status, 404)
+        status, _, _ = self.request("/api/comet-check", "POST", {"id": "tt0137523"}, auth=True)
+        self.assertEqual(status, 404)
 
     def test_service_proxy_postersplus_access_key_redirect(self):
         with patch.dict(os.environ, {"POSTERSPLUS_ACCESS_KEY": "supersecretkey"}), \

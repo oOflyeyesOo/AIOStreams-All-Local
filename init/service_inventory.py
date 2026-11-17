@@ -2,7 +2,6 @@
 
 INTEGRATIONS = (
     ("AIOStreams", "aiostreams", 3000, "Core"),
-    ("Comet", "comet", 8000, "Scrapers"),
     ("Prowlarr", "prowlarr", 9696, "Indexers"),
     ("FlareSolverr", "flaresolverr", 8191, "Indexers"),
     ("Zilean", "zilean", 8181, "Indexers"),

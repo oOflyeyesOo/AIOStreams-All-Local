@@ -206,10 +206,10 @@
 <div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
 <label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
 <div class="credential-sharing-notice notice-callout notice-callout-warning">
-  <strong style="color:var(--accent-gold);">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Comet, TorBox/Real-Debrid direct).
+  <strong style="color:var(--accent-gold);">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Prowlarr, TorBox/Real-Debrid direct).
 </div>
 <div id="overlap-warning-banner" class="overlap-warning-banner notice-callout notice-callout-info">
-  <strong style="color:var(--accent-cyan);">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr / Comet) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
+  <strong style="color:var(--accent-cyan);">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
 </div>
 <p>Calls out to the public Torrentio index database (<code>https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
 <div class="field-grid" style="margin-top:10px;">
@@ -515,24 +515,6 @@
   <div class="op-card">
     <div class="op-card-header">
       <div class="op-card-title-group">
-        <span class="op-badge">SCRAPER</span>
-        <h3>Comet Scraper &amp; Delay Attribution</h3>
-      </div>
-      <span class="op-status-dot"></span>
-    </div>
-    <p class="op-card-desc">Tests end-to-end Comet scrape latency and attributes bottlenecks to Prowlarr, Zilean, or Debrid (Premiumize).</p>
-    <div class="op-card-actions">
-      <button type="button" id="btn-probe-comet" class="light-button">Test Comet Pipeline 🛰️</button>
-    </div>
-    <div class="op-console">
-      <div class="op-console-header"><span>comet · delay attribution</span><span class="code-dot">● ● ●</span></div>
-      <pre id="comet-probe-output" aria-live="polite">Not run yet.</pre>
-    </div>
-  </div>
-
-  <div class="op-card">
-    <div class="op-card-header">
-      <div class="op-card-title-group">
         <span class="op-badge">HARDWARE</span>
         <h3>Profile recommendation</h3>
       </div>
@@ -603,7 +585,7 @@
   </div>
   <div class="log-dialog-toolbar">
     <label for="logs-container-select">Service</label>
-    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="comet">Comet (Scraper)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
+    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
     <button type="button" id="btn-fetch-logs" class="text-button">Refresh</button>
     <button type="button" id="copy-service-logs" class="text-button" disabled>Copy logs</button>
   </div>

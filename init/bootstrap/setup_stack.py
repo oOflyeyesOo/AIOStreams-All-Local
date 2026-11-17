@@ -3,11 +3,11 @@
 AIOStreams All-Local Unified Stack Bootstrapper & Auto-Provisioner
 Automates zero-touch configuration across all stack services upon launch:
 1. Prowlarr: Registers FlareSolverr Cloudflare bypass and auto-seeds top public torrent trackers.
-3. Comet & InfiniDysk: Validates connectivity and internal routing.
-4. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
-   template (Comet, Torrentio, AIOMetadata, SubSense, InfiniDysk,
-   and Debrid Search) with Premiumize & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
-6. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
+2. InfiniDysk: Validates connectivity and provisions master admin credentials.
+3. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
+   template (Prowlarr, Knaben, Torrentio, AIOMetadata, SubSense, InfiniDysk,
+   and StremThru Store) with Debrid & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
+4. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
 """
 import os
 import sys
@@ -131,8 +131,6 @@ def resolve_path(relative_path, default_path):
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
-COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
-COMET_AIOSTREAMS_TIMEOUT = int(os.environ.get("COMET_AIOSTREAMS_TIMEOUT") or os.environ.get("AIOSTREAMS_COMET_TIMEOUT") or 20000)
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
@@ -187,6 +185,7 @@ OFFCLOUD_API_KEY = os.environ.get("OFFCLOUD_API_KEY", "")
 SEEDR_API_KEY = os.environ.get("SEEDR_API_KEY", "")
 EASYNEWS_USER = os.environ.get("EASYNEWS_USER", "")
 EASYNEWS_PASSWORD = os.environ.get("EASYNEWS_PASSWORD", "")
+USENET_ENABLED = os.environ.get("USENET_ENABLED", "false").lower() == "true"
 USENET_HOST = os.environ.get("USENET_HOST", "")
 USENET_PORT = os.environ.get("USENET_PORT", "563")
 USENET_USER = os.environ.get("USENET_USER", "")
@@ -519,20 +518,8 @@ def setup_usenet_indexer():
 
 
 # ==============================================================================
-# 2. COMET & INFINIDYSK STATUS
+# 2. INFINIDYSK STATUS & ADMIN SETUP
 # ==============================================================================
-def wait_for_comet(max_attempts=15, interval=2):
-    print(f"[Comet Setup] Checking Comet status at {COMET_URL}...", flush=True)
-    for attempt in range(1, max_attempts + 1):
-        res = make_request(f"{COMET_URL}/manifest.json")
-        if isinstance(res, dict) and ("id" in res or "name" in res):
-            print(f"[Comet Setup] ✓ Comet is online with auto-proxying and Prowlarr/Zilean integrations! (attempt {attempt})", flush=True)
-            return True
-        time.sleep(interval)
-    print("[Comet Setup] Note: Comet is booting up in background.", flush=True)
-    return False
-
-
 def ensure_infinidysk_admin(addon_password=ADDON_PASSWORD):
     """
     Ensures InfiniDysk has an administrator account provisioned with ADDON_PASSWORD.
@@ -1052,28 +1039,29 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
 
     presets = base_config.get("presets", [
         {
-            "type": "comet",
-            "instanceId": "comet-local",
+            "type": "prowlarr",
+            "instanceId": "prowlarr-scraper",
             "enabled": True,
             "options": {
-                "name": "Comet (Local)",
-                "url": "http://comet:8000",
-                "timeout": COMET_AIOSTREAMS_TIMEOUT,
+                "name": "Prowlarr Torrents",
+                "url": "http://prowlarr:9696",
+                "prowlarrUrl": "http://prowlarr:9696",
+                "prowlarrApiKey": PROWLARR_API_KEY,
+                "sources": ["torrent"],
+                "timeout": 10000,
                 "resources": ["stream"],
-                "includeP2P": False,
-                "removeTrash": True,
                 "mediaTypes": []
             }
         },
         {
             "type": "knaben",
             "instanceId": "knaben-scraper",
-            "enabled": False,
+            "enabled": True,
             "options": {
-                "name": "Knaben (Built-in)",
+                "name": "Knaben (Anime)",
                 "timeout": 8000,
                 "resources": ["stream"],
-                "mediaTypes": [],
+                "mediaTypes": ["anime"],
                 "useMultipleInstances": False
             }
         },
@@ -1160,20 +1148,27 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     ])
 
 
-    # Ensure knaben is present but disabled by default to prevent slow public tracker debrid cache timeouts
+    # Ensure knaben is present and enabled for anime
     if not any(p.get("type") == "knaben" for p in presets):
         presets.insert(2, {
             "type": "knaben",
             "instanceId": "knaben-scraper",
-            "enabled": False,
+            "enabled": True,
             "options": {
-                "name": "Knaben (Built-in)",
-                "timeout": 7000,
+                "name": "Knaben (Anime)",
+                "timeout": 8000,
                 "resources": ["stream"],
-                "mediaTypes": [],
+                "mediaTypes": ["anime"],
                 "useMultipleInstances": False
             }
         })
+    else:
+        for p in presets:
+            if p.get("type") == "knaben":
+                p["enabled"] = True
+                opts = p.setdefault("options", {})
+                opts["name"] = "Knaben (Anime)"
+                opts["mediaTypes"] = ["anime"]
 
     # Ensure anime & usenet presets are guaranteed to be present
     anime_and_usenet = [
@@ -1298,20 +1293,42 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             enable_t = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
             p["enabled"] = enable_t
             validated_presets.append(p)
-        elif ptype == "comet":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
-                continue
-            curr_timeout = int(opts.get("timeout") or COMET_AIOSTREAMS_TIMEOUT)
-            # Allow the live scrape deadline plus metadata/debrid response overhead.
-            # Never overwrite configured timeouts down to 8s; ensure at least 20000ms.
-            opts["timeout"] = max(curr_timeout, COMET_AIOSTREAMS_TIMEOUT, 20000)
-            manifest_url = opts.get("manifestUrl", f"{COMET_URL}/manifest.json")
-            if reachable(manifest_url, timeout=1.0):
+        elif ptype == "prowlarr":
+            sources = opts.get("sources", [])
+            if "torrent" in sources:
+                if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                    continue
+                opts.setdefault("name", "Prowlarr Torrents")
+                opts.setdefault("url", "http://prowlarr:9696")
+                opts.setdefault("prowlarrUrl", "http://prowlarr:9696")
+                opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
+                opts["timeout"] = int(opts.get("timeout") or 10000)
                 p["enabled"] = True
-                print("[AIOStreams Setup] ✓ Comet (Local) is online and active.", flush=True)
+                print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
+                validated_presets.append(p)
+            elif "usenet" in sources:
+                p["enabled"] = os.environ.get("USENET_ENABLED", "false").lower() == "true" or bool(USENET_ENABLED)
+                opts.setdefault("name", "Usenet (Prowlarr → InfiniDysk)")
+                opts.setdefault("prowlarrUrl", "http://prowlarr:9696")
+                opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
+                opts.setdefault("services", ["nzbdav"])
+                opts.setdefault("sources", ["usenet"])
+                opts["timeout"] = int(opts.get("timeout") or 8000)
                 validated_presets.append(p)
             else:
-                print("[AIOStreams Setup] ℹ️ Comet is unreachable; preset omitted. Check its container and Docker network.", flush=True)
+                validated_presets.append(p)
+        elif ptype == "knaben":
+            p["enabled"] = True
+            opts["name"] = "Knaben (Anime)"
+            opts["mediaTypes"] = ["anime"]
+            opts["timeout"] = int(opts.get("timeout") or 8000)
+            validated_presets.append(p)
+        elif ptype == "stremthruTorz":
+            p["enabled"] = False
+            curr_timeout = int(opts.get("timeout") or 7000)
+            if curr_timeout < 18000:
+                opts["timeout"] = 18000
+            validated_presets.append(p)
         elif ptype == "stremthruStore":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
@@ -1326,12 +1343,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 p["enabled"] = False
                 print("[AIOStreams Setup] ℹ️ StremThru Store is unreachable; preset omitted. Check its container and Docker network.", flush=True)
                 validated_presets.append(p)
-        elif ptype in ("knaben", "stremthruTorz"):
-            p["enabled"] = False
-            curr_timeout = int(opts.get("timeout") or 7000)
-            if curr_timeout < 18000:
-                opts["timeout"] = 18000
-            validated_presets.append(p)
         elif ptype == "easynews-search":
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
             # Direct EasyNews delivery owns this account.
@@ -1415,7 +1426,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             validated_presets.append(p)
 
     config = dict(base_config)
-    # Configure BuiltinProxy so internal Docker scraper streams (Comet)
+    # Configure BuiltinProxy so internal Docker scraper streams
     # resolve and stream properly through AIOStreams over the single public port (3001)
     existing_proxy = base_config.get("proxy") if isinstance(base_config.get("proxy"), dict) else {}
     proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
@@ -1852,12 +1863,11 @@ def main():
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)
 
-    # 2. Comet & InfiniDysk
+    # 2. InfiniDysk Admin Setup
     try:
-        wait_for_comet()
         ensure_infinidysk_admin()
     except Exception as e:
-        print(f"[Scraper Checks] Note: {e}", flush=True)
+        print(f"[InfiniDysk Setup] Note: {e}", flush=True)
 
     # 4. Posters+ & AIOMetadata (Tamtaro + Posters+)
     aiometadata_manifest = None

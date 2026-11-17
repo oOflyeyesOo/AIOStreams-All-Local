@@ -9,10 +9,8 @@ import urllib.request
 from init.service_inventory import TCP_PORTS
 
 HTTP_CHECKS = {
-    "search-broker": ("http://search-broker:8091/healthz", False),
     "portal": ("http://portal:8088/healthz", False),
     "aiostreams": ("http://aiostreams:3000/api/v1/status", False),
-    "comet": ("http://comet:8000/manifest.json", True),
     "anime-kitsu": ("http://anime-kitsu:7000/manifest.json", True),
     "aiometadata": ("http://aiometadata:4005/health/live", False),
     "infinidysk": ("http://infinidysk:3000/healthz", False),

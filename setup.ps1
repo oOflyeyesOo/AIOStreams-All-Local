@@ -55,7 +55,6 @@ function Ensure-Directories {
     Write-Info "Ensuring data and configuration directory structures..."
     $dirs = @(
         "data/aiostreams",
-        "data/comet",
         "data/prowlarr",
         "data/subsense",
         "data/redis",
@@ -110,7 +109,6 @@ function Test-SystemPrerequisites {
     Write-Info "Checking target port availability..."
     $portsToCheck = @(
         @{ Port = 3001; Service = "AIOStreams" },
-        @{ Port = 8000; Service = "Comet" },
         @{ Port = 8181; Service = "Zilean (DMM Cache)" },
         @{ Port = 9696; Service = "Prowlarr" },
         @{ Port = 8191; Service = "FlareSolverr" },
@@ -381,7 +379,6 @@ function Show-StremioLinks {
     Write-Host "  • AIOMetadata:           http://localhost:4005"
     Write-Host "  • SubSense Subtitles:    http://localhost:3100"
     Write-Host "  • InfiniDysk Usenet:     http://localhost:3005"
-    Write-Host "  • Comet Scraper:         http://localhost:8000"
     Write-Host "  • Anime Kitsu:           http://localhost:7005"
     Write-Host "  • Prowlarr Indexers:     http://localhost:9696"
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"

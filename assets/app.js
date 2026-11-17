@@ -1781,41 +1781,6 @@ async function runOperations() {
     }
   });
 
-  document.getElementById('btn-probe-comet')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const out = output('comet-probe-output');
-    if (out) out.textContent = 'Executing timed Comet scrape & dependency breakdown (up to 25s)…';
-    btn.disabled = true;
-    try {
-      const res = await api('/api/comet-check');
-      const lines = [];
-      lines.push(`Comet Scraper Status: ${res.healthy ? 'HEALTHY' : 'ATTENTION'}`);
-      lines.push(`Delay Attribution: ${res.attribution || 'Unknown'}\n`);
-      if (res.comet) {
-        lines.push(`• Comet Direct Scrape: ${res.comet.latency_ms !== null && res.comet.latency_ms !== undefined ? `${res.comet.latency_ms} ms` : 'N/A'} (${res.comet.status}) - ${res.comet.stream_count ?? 0} streams found`);
-        if (res.comet.error) lines.push(`  Error: ${res.comet.error}`);
-      }
-      if (res.prowlarr) {
-        lines.push(`• Prowlarr Indexer Search: ${res.prowlarr.latency_ms !== null && res.prowlarr.latency_ms !== undefined ? `${res.prowlarr.latency_ms} ms` : 'N/A'} (${res.prowlarr.status}) - ${res.prowlarr.result_count ?? 0} results`);
-        if (res.prowlarr.error) lines.push(`  Detail: ${res.prowlarr.error}`);
-      }
-      if (res.zilean) {
-        lines.push(`• Zilean DMM Hash Cache: ${res.zilean.latency_ms !== null && res.zilean.latency_ms !== undefined ? `${res.zilean.latency_ms} ms` : 'N/A'} (${res.zilean.status}) - ${res.zilean.hash_count ?? 0} hashes`);
-        if (res.zilean.error) lines.push(`  Detail: ${res.zilean.error}`);
-      }
-      if (res.debrid) {
-        const provName = res.debrid.provider || 'Debrid';
-        lines.push(`• ${provName} API Check: ${res.debrid.latency_ms !== null && res.debrid.latency_ms !== undefined ? `${res.debrid.latency_ms} ms` : 'N/A'} (${res.debrid.status})`);
-        if (res.debrid.error) lines.push(`  Detail: ${res.debrid.error}`);
-      }
-      if (out) out.textContent = lines.join('\n');
-    } catch (err) {
-      if (out) out.textContent = `Comet diagnostic failed: ${err.message}`;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
   document.getElementById('btn-test-aniskip')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     const resBox = document.getElementById('aniskip-test-results');

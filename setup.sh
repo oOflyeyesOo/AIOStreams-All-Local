@@ -22,7 +22,6 @@ write_header() {
 ensure_directories() {
     echo -e "${CYAN}[i] Ensuring directory structures exist...${NC}"
     mkdir -p data/aiostreams \
-             data/comet \
              data/prowlarr \
              data/subsense \
              data/redis \
@@ -164,7 +163,6 @@ show_links() {
     echo -e "  • AIOMetadata:           http://localhost:4005"
     echo -e "  • SubSense Subtitles:    http://localhost:3100"
     echo -e "  • InfiniDysk Usenet:     http://localhost:3005"
-    echo -e "  • Comet Scraper:         http://localhost:8000"
     echo -e "  • Anime Kitsu:           http://localhost:7005"
     echo -e "  • Prowlarr Indexers:     http://localhost:9696"
     echo -e "  • Zilean Hash Cache:     http://localhost:8181"

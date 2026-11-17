@@ -51,7 +51,6 @@ def get_service_endpoints() -> list:
         return [
             {"service": "aiostreams", "container": "aiostreams", "url": "http://aiostreams:3000/manifest.json", "expected_code": 200, "critical": True},
             {"service": "aiometadata", "container": "aiometadata", "url": "http://aiometadata:4005/manifest.json", "expected_code": [200, 404], "critical": True},
-            {"service": "comet", "container": "comet", "url": "http://comet:8000/", "expected_code": 200, "critical": True},
             {"service": "subsense", "container": "stremio-subsense", "url": "http://subsense:3100/", "expected_code": 200, "critical": False},
             {"service": "infinidysk", "container": "infinidysk", "url": "http://infinidysk:3000/", "expected_code": 200, "critical": False},
             {"service": "anime-kitsu", "container": "anime-kitsu", "url": "http://anime-kitsu:7000/", "expected_code": 200, "critical": False},
@@ -63,7 +62,6 @@ def get_service_endpoints() -> list:
         return [
             {"service": "aiostreams", "container": "aiostreams", "url": "http://127.0.0.1:3001/manifest.json", "expected_code": 200, "critical": True},
             {"service": "aiometadata", "container": "aiometadata", "url": "http://127.0.0.1:4005/manifest.json", "expected_code": [200, 404], "critical": True},
-            {"service": "comet", "container": "comet", "url": "http://127.0.0.1:8000/", "expected_code": 200, "critical": True},
             {"service": "subsense", "container": "stremio-subsense", "url": "http://127.0.0.1:3100/", "expected_code": 200, "critical": False},
             {"service": "infinidysk", "container": "infinidysk", "url": "http://127.0.0.1:3005/", "expected_code": 200, "critical": False},
             {"service": "anime-kitsu", "container": "anime-kitsu", "url": "http://127.0.0.1:7005/", "expected_code": 200, "critical": False},
