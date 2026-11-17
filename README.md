@@ -49,6 +49,12 @@ Import **`compose.manager.yml`** as a new stack. Set environment variables in th
   <img src="assets/integrations.png" alt="AIO Local integration status" width="100%">
 </p>
 
+### Responsive Mobile Setup
+
+<p align="center">
+  <img src="assets/setup-mobile.png" alt="AIO Local mobile setup" width="45%">
+</p>
+
 ---
 
 ## 🔒 Remote Playback & Dual Subdomain Architecture
