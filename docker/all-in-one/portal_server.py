@@ -122,13 +122,15 @@ def launch_setup():
 HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
-    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "lumiere-db": 8000
+    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "lumiere-db": 8000,
+    "bitmagnet": 3333, "jikan-api": 8001
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/stremio/configure", "aiometadata": "/configure",
     "prowlarr": "/", "infinidysk": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
-    "anime-kitsu": "/",
+    "anime-kitsu": "/", "bitmagnet": "/", "lumiere-db": "/stats",
+    "jikan-api": "/v4",
 }
 
 INTERNAL_SERVICE_TARGETS = {
@@ -145,6 +147,8 @@ INTERNAL_SERVICE_TARGETS = {
     "anime-kitsu": ("anime-kitsu", 7000, 7005),
     "infinidysk": ("infinidysk", 3000, 3005),
     "lumiere-db": ("lumiere-db", 8000, 8000),
+    "bitmagnet": ("bitmagnet", 3333, 3333),
+    "jikan-api": ("jikan-api", 80, 8001),
 }
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -1284,6 +1288,9 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", "0"))
         except (ValueError, TypeError):
             content_length = 0
+        if content_length > 32 * 1024 * 1024:
+            self.send_error(413, "Request body too large")
+            return
         body = self.rfile.read(content_length) if content_length > 0 else None
 
         hop_by_hop = {
@@ -2106,8 +2113,7 @@ button:hover {{ background: #0369a1; }}
             self.handle_api_backups_prune()
             return
         elif path == "/api/lumiere/rebuild":
-            if self.auth_enabled and not self.is_authenticated():
-                self.send_auth_required()
+            if not self.authorize():
                 return
             try:
                 res = subprocess.run(
@@ -2413,7 +2419,8 @@ button:hover {{ background: #0369a1; }}
             "aiostreams", "portal", "controller", "flaresolverr",
             "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
             "postersplus", "anime-kitsu", "subsense",
-            "stremthru", "aiometadata", "lumiere-db", "setup"
+            "stremthru", "aiometadata", "lumiere-db", "setup",
+            "bitmagnet", "jikan-api"
         }
 
         if container:
@@ -2807,7 +2814,10 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"success": True, "query": "", "latencyMs": 0, "count": 0, "items": []})
                 return
 
-            limit = min(max(int((query_params.get("limit") or ["10"])[0] or 10), 1), 50)
+            try:
+                limit = min(max(int((query_params.get("limit") or ["10"])[0] or 10), 1), 50)
+            except (ValueError, TypeError):
+                limit = 10
             encoded_query = urllib.parse.quote(q)
             endpoints = [
                 f"http://lumiere-db:8000/search?query={encoded_query}&limit={limit}",

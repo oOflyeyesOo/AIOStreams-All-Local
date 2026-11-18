@@ -129,6 +129,7 @@ def resolve_path(relative_path, default_path):
     return default_path
 
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
+ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
 INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
@@ -245,7 +246,7 @@ TARGET_INDEXERS = [
     "tokyotosho"
 ]
 
-def make_request(url, method="GET", data=None, headers=None, timeout=12):
+def make_request(url, method="GET", data=None, headers=None, timeout=12, max_redirects=5):
     default_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json"
@@ -259,9 +260,9 @@ def make_request(url, method="GET", data=None, headers=None, timeout=12):
             content = resp.read().decode("utf-8", errors="ignore")
             return json.loads(content) if content.strip().startswith(("{", "[")) else {"status": resp.status, "text": content}
     except urllib.error.HTTPError as e:
-        if e.code in (301, 302, 307, 308) and e.headers.get("Location"):
+        if e.code in (301, 302, 307, 308) and e.headers.get("Location") and max_redirects > 0:
             redirect_url = urllib.parse.urljoin(url, e.headers.get("Location"))
-            return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout)
+            return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects - 1)
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"error": e.code, "message": err_msg}
     except Exception as e:
@@ -440,7 +441,7 @@ def setup_prowlarr_indexers():
             z_payload["appProfileId"] = 1
             for f in z_payload.get("fields", []):
                 if f.get("name") == "baseUrl":
-                    f["value"] = "http://zilean:8181/torznab"
+                    f["value"] = f"{ZILEAN_URL}/torznab"
                 elif f.get("name") == "apiPath":
                     f["value"] = "/api"
                 elif f.get("name") == "apiKey":
@@ -876,7 +877,7 @@ def setup_aiometadata_tamtaro():
     # Configure Posters+ Rating Poster Provider with multi-shape support
     config["usePosterProxy"] = True
     config["posterRatingProvider"] = "customArt"
-    poster_key = os.environ.get("POSTERSPLUS_ACCESS_KEY", "")
+    poster_key = os.environ.get("POSTERSPLUS_ACCESS_KEY") or os.environ.get("ADDON_PASSWORD") or "admin"
     poster_url = f"{POSTERSPLUS_URL}/poster?stremio_id={{id}}&type={{type}}&shape={{shape}}"
     if poster_key:
         poster_url += '&access_key=' + urllib.parse.quote(poster_key, safe='')
@@ -1129,8 +1130,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Prowlarr Torrents",
-                "url": "http://prowlarr:9696",
-                "prowlarrUrl": "http://prowlarr:9696",
+                "url": PROWLARR_URL,
+                "prowlarrUrl": PROWLARR_URL,
                 "prowlarrApiKey": PROWLARR_API_KEY,
                 "sources": ["torrent"],
                 "timeout": 10000,
@@ -1335,7 +1336,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "enabled": os.environ.get("ENABLE_DMM", "true").lower() != "false",
                 "options": {
                     "name": "Zilean DMM (Local)",
-                    "url": "http://zilean:8181",
+                    "url": ZILEAN_URL,
                     "timeout": 5000,
                     "resources": ["stream"],
                     "mediaTypes": [],
@@ -1402,8 +1403,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                     continue
                 opts.setdefault("name", "Prowlarr Torrents")
-                opts.setdefault("url", "http://prowlarr:9696")
-                opts.setdefault("prowlarrUrl", "http://prowlarr:9696")
+                opts.setdefault("url", PROWLARR_URL)
+                opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
                 opts["timeout"] = int(opts.get("timeout") or 10000)
                 p["enabled"] = True
@@ -1412,7 +1413,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             elif "usenet" in sources:
                 p["enabled"] = os.environ.get("USENET_ENABLED", "false").lower() == "true" or bool(USENET_ENABLED)
                 opts.setdefault("name", "Usenet (Prowlarr → InfiniDysk)")
-                opts.setdefault("prowlarrUrl", "http://prowlarr:9696")
+                opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
                 opts.setdefault("services", ["nzbdav"])
                 opts.setdefault("sources", ["usenet"])
@@ -1476,10 +1477,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         elif ptype == "zilean":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
                 continue
-            opts["url"] = "http://zilean:8181"
+            opts["url"] = ZILEAN_URL
             opts["timeout"] = int(opts.get("timeout") or 5000)
             dmm_enabled = os.environ.get("ENABLE_DMM", "true").lower() != "false"
-            if dmm_enabled and (not probe_services or reachable("http://zilean:8181/dmm/filtered?query=ping", timeout=1.0)):
+            if dmm_enabled and (not probe_services or reachable(f"{ZILEAN_URL}/dmm/filtered?query=ping", timeout=1.0)):
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ Zilean DMM (Local) is online and active.", flush=True)
             else:

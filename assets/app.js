@@ -404,10 +404,14 @@ async function loadManifest() {
   const webdavDisplay = document.getElementById('webdav-url');
   if (webdavDisplay) webdavDisplay.textContent = `${aioBase}/webdav`;
   const customization = document.getElementById('addon-customization');
-  if (customization && info.aiostreamsConfigure && info.aiostreamsDashboard && info.aiometadataConfigure) {
-    document.getElementById('configure-aiostreams').href = info.aiostreamsConfigure;
-    document.getElementById('configure-aiometadata').href = info.aiometadataConfigure;
-    document.getElementById('aiostreams-dashboard').href = info.aiostreamsDashboard;
+  const cfgAio = document.getElementById('configure-aiostreams');
+  const dashAio = document.getElementById('aiostreams-dashboard');
+  const cfgAiom = document.getElementById('configure-aiometadata');
+
+  if (cfgAio && info.aiostreamsConfigure) cfgAio.href = info.aiostreamsConfigure;
+  if (dashAio && info.aiostreamsDashboard) dashAio.href = info.aiostreamsDashboard;
+  if (cfgAiom && info.aiometadataConfigure) cfgAiom.href = info.aiometadataConfigure;
+  if (customization && (info.aiostreamsConfigure || info.aiometadataConfigure)) {
     customization.hidden = false;
   }
   if (info.directManifest) {
@@ -1016,7 +1020,7 @@ async function refreshServices() {
   const signInHelp = document.getElementById('player-sign-in-help');
   if (signInHelp) signInHelp.hidden = !enabled;
   const qcLink = document.getElementById('open-jellyfin-quickconnect');
-  if (qcLink && enabled) qcLink.href = info.aiostreamsConfigure;
+  if (qcLink && enabled) qcLink.href = info.jellyfinQuickConnect || `${info.baseUrl || ''}/jellyfin/quickconnect`;
   const hosted = document.getElementById('install-aiostreams-web');
   if (hosted) {
     hosted.hidden = !enabled || !info.baseUrl.startsWith('https://');
@@ -2199,6 +2203,28 @@ async function runOperations() {
       if (resBox) resBox.textContent = `Error querying AniSkip: ${err.message}`;
     } finally {
       btn.disabled = false;
+    }
+  });
+
+  document.getElementById('test-webhook-btn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const urlInput = document.getElementById('discord-webhook-url');
+    const webhookUrl = urlInput ? urlInput.value.trim() : '';
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    try {
+      const res = await api('/api/webhook-test', 'POST', { url: webhookUrl });
+      if (res && res.success) {
+        showToast('✓ Webhook test notification sent successfully!');
+      } else {
+        showToast('Webhook test failed: ' + (res?.error || res?.message || 'Unknown error'));
+      }
+    } catch (err) {
+      showToast('Webhook test error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = origText;
     }
   });
 

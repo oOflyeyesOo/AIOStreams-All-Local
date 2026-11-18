@@ -10,6 +10,7 @@
 <header class="topbar" role="banner">
   <a class="brand" href="/" aria-label="AIO Local home"><span class="brand-icon">a<span>i</span>o</span><span>AIO<span class="muted"> / LOCAL</span></span></a>
   <nav class="topbar-nav" aria-label="Main Navigation">
+    <a href="#manifest" class="topbar-nav-link">Addons</a>
     <a href="#setup" class="topbar-nav-link">Setup</a>
     <a href="#integrations" class="topbar-nav-link">Services</a>
     <a href="#telemetry" class="topbar-nav-link">Health</a>
@@ -28,6 +29,7 @@
     <p id="startup-message">Checking services and setup progress.</p>
   </div>
   <div class="stack-actions" id="stack-next-actions">
+    <a class="text-button" id="open-stack-manifest" href="#manifest">Addon hub</a>
     <a class="text-button" id="open-stack-settings" href="#setup">Stack settings</a>
     <a class="text-button" id="open-stack-password" href="#stack-admin-password">Set admin password</a>
     <a class="text-button" href="#integrations">Manage services</a>
@@ -74,8 +76,8 @@
           <button type="button" id="copy-manifest" class="primary-button hub-btn-copy" disabled><span>Copy manifest</span> <span>⧉</span></button>
           <a id="install-stremio" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Open in Stremio</span> <span>↗</span></a>
           <a id="hub-open-web-player" class="light-button" href="#" target="_blank" rel="noopener noreferrer" style="display:none;"><span>Open Web Player</span> <span>▶</span></a>
-          <a id="configure-aiostreams" class="light-button" target="_blank" rel="noopener noreferrer"><span>Configure</span> <span>↗</span></a>
-          <a id="aiostreams-dashboard" class="subtle-link" target="_blank" rel="noopener noreferrer">Dashboard ↗</a>
+          <a id="configure-aiostreams" class="light-button" href="#" target="_blank" rel="noopener noreferrer"><span>Configure</span> <span>↗</span></a>
+          <a id="aiostreams-dashboard" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer">Dashboard ↗</a>
           <a class="subtle-link" href="/api/export-manifest" download>Download manifest JSON ↓</a>
         </div>
       </div>
@@ -99,7 +101,7 @@
         <div class="hub-card-actions">
           <button type="button" id="copy-aiometa-manifest" class="light-button hub-btn-copy" disabled><span>Copy manifest</span> <span>⧉</span></button>
           <a id="install-aiometa-stremio" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Open in Stremio</span> <span>↗</span></a>
-          <a id="configure-aiometadata" class="light-button" target="_blank" rel="noopener noreferrer"><span>Configure profile</span> <span>↗</span></a>
+          <a id="configure-aiometadata" class="light-button" href="#" target="_blank" rel="noopener noreferrer"><span>Configure profile</span> <span>↗</span></a>
           <a id="connect-tracking" class="subtle-link disabled" href="#" target="_blank" rel="noopener noreferrer">Tracking accounts ↗</a>
         </div>
       </div>
