@@ -444,6 +444,61 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(knaben_p['options']['mediaTypes'], ['anime'])
             self.assertEqual(knaben_p['options']['name'], 'Knaben (Anime)')
 
+    def test_bento_anime_preset_with_service_wrap(self):
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'valid-mock-key'), \
+             patch.object(bootstrap, 'is_url_reachable', return_value=True):
+            config = bootstrap.build_default_config(probe_services=False)
+            bento = next((p for p in config.get('presets', []) if p.get('instanceId') == 'bento-anime'), None)
+            self.assertIsNotNone(bento)
+            self.assertTrue(bento['enabled'])
+            self.assertEqual(bento['type'], 'custom')
+            self.assertFalse(bento['options']['resultPassthrough'])
+            self.assertIn('stream', bento['options']['resources'])
+            self.assertIn('bento.tweakapps.uk', bento['options']['manifestUrl'])
+
+    def test_bento_preset_requires_debrid_service(self):
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', ''), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'TORBOX_API_KEY', ''), \
+             patch.object(bootstrap, 'ALLDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'DEBRIDLINK_API_KEY', ''), \
+             patch.object(bootstrap, 'EASYDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'OFFCLOUD_API_KEY', ''), \
+             patch.object(bootstrap, 'SEEDR_API_KEY', ''), \
+             patch.object(bootstrap, 'is_url_reachable', return_value=True):
+            config = bootstrap.build_default_config(probe_services=False)
+            bento = next((p for p in config.get('presets', []) if p.get('instanceId') == 'bento-anime'), None)
+            self.assertIsNone(bento)
+
+    def test_prowlarr_provisions_anime_trackers_when_schemas_available(self):
+        schemas = [
+            {"definitionName": "nyaasi", "name": "Nyaa (si)"},
+            {"definitionName": "tokyotosho", "name": "Tokyo Toshokan"},
+            {"definitionName": "subsplease", "name": "SubsPlease"},
+            {"definitionName": "animetosho-xyz", "name": "AnimeTosho"},
+            {"definitionName": "anibt", "name": "AniBT"},
+        ]
+        requests = []
+        def request(url, method="GET", data=None, headers=None, timeout=12):
+            if url.endswith("/api/v1/indexer") and method == "GET":
+                return []
+            if url.endswith("/api/v1/indexer/schema"):
+                return schemas
+            if method == "POST":
+                requests.append((url, data))
+                return {"id": len(requests)}
+            return {}
+
+        with patch.object(bootstrap, "make_request", side_effect=request):
+            bootstrap.setup_prowlarr_indexers()
+
+        provisioned_defs = [d.get("definitionName") for u, d in requests]
+        self.assertIn("nyaasi", provisioned_defs)
+        self.assertIn("tokyotosho", provisioned_defs)
+        self.assertIn("subsplease", provisioned_defs)
+        self.assertIn("animetosho-xyz", provisioned_defs)
+        self.assertIn("anibt", provisioned_defs)
+
     def test_ensure_infinidysk_admin_provisions_and_skips_wizard(self):
         called_urls = []
         def mock_urlopen(req, timeout=None):

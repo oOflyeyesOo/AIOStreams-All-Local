@@ -1,7 +1,7 @@
 {
   "metadata": {
     "name": "Tamtaro Anime Only (SeaDex & Pure Anime Scrapers)",
-    "description": "Stripped-down, ultra-fast anime pipeline routing through Anime Kitsu, TsukiHime, AnimeTosho, nekoBT, Comet and SeaDex.",
+    "description": "Stripped-down, ultra-fast anime pipeline routing through Bento, Anime Kitsu, TsukiHime, AnimeTosho, nekoBT, and SeaDex.",
     "version": "2.0.0",
     "author": "Tamtaro & AIO Local Team"
   },
@@ -20,19 +20,16 @@
     ],
     "presets": [
       {
-        "type": "comet",
-        "instanceId": "comet-local",
+        "type": "custom",
+        "instanceId": "bento-anime",
         "enabled": true,
         "options": {
-          "name": "Comet (Local)",
-          "url": "http://comet:8000",
-          "timeout": 20000,
-          "resources": [
-            "stream"
-          ],
-          "includeP2P": false,
-          "removeTrash": true,
-          "mediaTypes": []
+          "name": "Bento (Unified Anime)",
+          "manifestUrl": "https://bento.tweakapps.uk/eyJzb3VyY2VzIjp7Im55YWEiOnRydWUsImFuaWJ0Ijp0cnVlLCJhbmltZXRvc2hvIjpmYWxzZSwiYW5pcmVuYSI6ZmFsc2UsInNlYWRleCI6dHJ1ZSwidHN1a2loaW1lIjpmYWxzZSwidG9ycmVudGNsYXciOmZhbHNlLCJ0b2t5b3Rvc2hvIjpmYWxzZSwic3Vic3BsZWFzZSI6dHJ1ZSwibmVrb2J0IjpmYWxzZSwia25hYmVuIjp0cnVlLCJtaWthbiI6ZmFsc2UsImhpdmVpbmRleCI6dHJ1ZX19/manifest.json",
+          "libraryAddon": false,
+          "resultPassthrough": false,
+          "forceToTop": false,
+          "timeout": 10000
         }
       },
       {

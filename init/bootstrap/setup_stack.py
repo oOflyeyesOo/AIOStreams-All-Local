@@ -391,9 +391,24 @@ def setup_prowlarr_indexers():
         if extra.lower() not in [t.lower() for t in target_list]:
             target_list.append(extra)
 
+    # Top anime trackers to register and seed if available in Prowlarr schemas
+    anime_targets = [
+        "subsplease",
+        "animetosho-xyz",
+        "anibt",
+        "mikan",
+        "nekobt",
+        "dmhy",
+        "shana-project",
+    ]
+    for at in anime_targets:
+        if at.lower() not in [t.lower() for t in target_list]:
+            target_list.append(at)
+
     indexer_aliases = {
         "animetosho": "animetosho-xyz",
         "anime tosho": "animetosho-xyz",
+        "animetosho-xyz": "animetosho-xyz",
         "tokyotoshokan": "tokyotosho",
         "tokyo toshokan": "tokyotosho",
         "thepiratebay": "thepiratebay",
@@ -401,6 +416,17 @@ def setup_prowlarr_indexers():
         "tpb": "thepiratebay",
         "nyaa": "nyaasi",
         "nyaa.si": "nyaasi",
+        "subsplease": "subsplease",
+        "subs please": "subsplease",
+        "anibt": "anibt",
+        "ani bt": "anibt",
+        "mikan": "mikan",
+        "mikanani": "mikan",
+        "nekobt": "nekobt",
+        "neko bt": "nekobt",
+        "dmhy": "dmhy",
+        "shana-project": "shana-project",
+        "shana project": "shana-project",
     }
 
     for target in target_list:
@@ -486,6 +512,7 @@ def tune_prowlarr_indexers():
         "zilean": 1,
         "bitmagnet": 2,
         "animetosho": 5,
+        "animetosho-xyz": 5,
         "althub": 5,
         "the pirate bay": 10,
         "thepiratebay": 10,
@@ -500,6 +527,7 @@ def tune_prowlarr_indexers():
         "subsplease": 15,
         "mikan": 15,
         "shana project": 15,
+        "shana-project": 15,
         "limetorrents": 20,
         "nekobt": 20,
         "anibt": 20,
@@ -513,7 +541,7 @@ def tune_prowlarr_indexers():
             if idx.get("enable"):
                 idx["enable"] = False
                 updated = True
-        elif not idx.get("enable") and any(essential in name_lower for essential in ["limetorrents", "tokyo tosho", "nyaa", "1337x", "pirate bay", "yts", "eztv", "animetosho"]):
+        elif not idx.get("enable") and any(essential in name_lower for essential in ["limetorrents", "tokyo tosho", "nyaa", "1337x", "pirate bay", "yts", "eztv", "animetosho", "subsplease", "anibt", "mikan"]):
             idx["enable"] = True
             updated = True
         new_pri = 25
@@ -1250,6 +1278,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "forceToTop": False,
                 "timeout": 8000
             }
+        },
+        {
+            "type": "custom",
+            "instanceId": "bento-anime",
+            "enabled": True,
+            "options": {
+                "name": "Bento (Unified Anime)",
+                "manifestUrl": os.environ.get("BENTO_MANIFEST_URL", "https://bento.tweakapps.uk/eyJzb3VyY2VzIjp7Im55YWEiOnRydWUsImFuaWJ0Ijp0cnVlLCJhbmltZXRvc2hvIjpmYWxzZSwiYW5pcmVuYSI6ZmFsc2UsInNlYWRleCI6dHJ1ZSwidHN1a2loaW1lIjpmYWxzZSwidG9ycmVudGNsYXciOmZhbHNlLCJ0b2t5b3Rvc2hvIjpmYWxzZSwic3Vic3BsZWFzZSI6dHJ1ZSwibmVrb2J0IjpmYWxzZSwia25hYmVuIjp0cnVlLCJtaWthbiI6ZmFsc2UsImhpdmVpbmRleCI6dHJ1ZX19/manifest.json"),
+                "libraryAddon": False,
+                "resultPassthrough": False,
+                "forceToTop": False,
+                "timeout": 10000
+            }
         }
     ])
 
@@ -1344,6 +1385,40 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     for target in anime_and_usenet:
         if not any(p.get("type") == target["type"] for p in presets):
             presets.append(target)
+
+    # Ensure Anime Kitsu is present for local Kitsu ID mapping
+    if not any(p.get("instanceId") == "anime-kitsu-local" for p in presets):
+        presets.append({
+            "type": "custom",
+            "instanceId": "anime-kitsu-local",
+            "enabled": True,
+            "options": {
+                "name": "Anime Kitsu (Local)",
+                "manifestUrl": "http://anime-kitsu:7000/manifest.json",
+                "libraryAddon": False,
+                "resultPassthrough": False,
+                "forceToTop": False,
+                "timeout": 8000
+            }
+        })
+
+    # Ensure Bento (Unified Anime) preset is present
+    bento_manifest_default = "https://bento.tweakapps.uk/eyJzb3VyY2VzIjp7Im55YWEiOnRydWUsImFuaWJ0Ijp0cnVlLCJhbmltZXRvc2hvIjpmYWxzZSwiYW5pcmVuYSI6ZmFsc2UsInNlYWRleCI6dHJ1ZSwidHN1a2loaW1lIjpmYWxzZSwidG9ycmVudGNsYXciOmZhbHNlLCJ0b2t5b3Rvc2hvIjpmYWxzZSwic3Vic3BsZWFzZSI6dHJ1ZSwibmVrb2J0IjpmYWxzZSwia25hYmVuIjp0cnVlLCJtaWthbiI6ZmFsc2UsImhpdmVpbmRleCI6dHJ1ZX19/manifest.json"
+    bento_manifest = os.environ.get("BENTO_MANIFEST_URL", bento_manifest_default)
+    if not any(p.get("instanceId") == "bento-anime" for p in presets):
+        presets.append({
+            "type": "custom",
+            "instanceId": "bento-anime",
+            "enabled": True,
+            "options": {
+                "name": "Bento (Unified Anime)",
+                "manifestUrl": bento_manifest,
+                "libraryAddon": False,
+                "resultPassthrough": False,
+                "forceToTop": False,
+                "timeout": 10000
+            }
+        })
 
     if any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
         if not any(p.get("type") == "stremthruStore" for p in presets):
@@ -1590,6 +1665,23 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     validated_presets.append(p)
                 else:
                     print(f"[AIOStreams Setup] ℹ️ Anime Kitsu not reachable; omitting from active presets.", flush=True)
+            elif pid == "bento-anime" or "bento" in pid:
+                murl = opts.get("manifestUrl") or bento_manifest
+                opts["manifestUrl"] = murl
+                opts["resources"] = ["stream"]
+                opts["resultPassthrough"] = False
+                enable_bento = os.environ.get("ENABLE_BENTO", "true").lower() != "false"
+                has_debrid = any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services)
+                if not enable_bento:
+                    print(f"[AIOStreams Setup] ℹ️ Bento Anime Indexer disabled via configuration.", flush=True)
+                elif not has_debrid:
+                    print(f"[AIOStreams Setup] ℹ️ Bento Anime Indexer requires debrid services; omitting preset.", flush=True)
+                elif reachable(murl, timeout=2.0):
+                    p["enabled"] = True
+                    print(f"[AIOStreams Setup] ✓ Bento Anime Indexer is online and active.", flush=True)
+                    validated_presets.append(p)
+                else:
+                    print(f"[AIOStreams Setup] ℹ️ Bento Anime Indexer manifest unreachable ({murl}); omitting from active presets.", flush=True)
             else:
                 murl = opts.get("manifestUrl")
                 if murl and reachable(murl, timeout=1.0):
