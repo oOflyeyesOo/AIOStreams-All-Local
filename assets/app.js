@@ -1860,13 +1860,13 @@ async function runOperations() {
   });
   const proxyUrlInput = document.getElementById('proxy-url');
   if (proxyUrlInput && !proxyUrlInput.value) {
-    proxyUrlInput.value = document.getElementById('base-url')?.value || window.location.origin;
+    proxyUrlInput.value = document.getElementById('base-url')?.value || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
   }
 
   document.getElementById('generate-proxy')?.addEventListener('click', async () => {
     try {
       const format = document.getElementById('proxy-format').value;
-      const targetUrl = document.getElementById('proxy-url')?.value?.trim() || document.getElementById('base-url')?.value?.trim() || window.location.origin;
+      const targetUrl = document.getElementById('proxy-url')?.value?.trim() || document.getElementById('base-url')?.value?.trim() || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
       const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(targetUrl)}`);
       output('proxy-output').textContent = response.ok ? await response.text() : `Server returned ${response.status}`;
     } catch (error) { output('proxy-output').textContent = error.message; }
@@ -1876,9 +1876,9 @@ async function runOperations() {
     const text = document.getElementById('proxy-output')?.textContent;
     if (!text || text === 'Not generated yet.') return;
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
-      } else {
+      } else if (typeof document !== 'undefined') {
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.position = 'fixed';
@@ -1888,9 +1888,9 @@ async function runOperations() {
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      showToast('Proxy configuration copied to clipboard.');
+      notify('Proxy configuration copied to clipboard.');
     } catch (err) {
-      showToast('Failed to copy config: ' + err.message, true);
+      notify('Failed to copy config: ' + err.message, true);
     }
   });
 
@@ -1905,10 +1905,10 @@ async function runOperations() {
       const blob = new Blob([JSON.stringify(response, null, 2)], {type:'application/json'});
       const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-config-redacted.json'; link.click(); URL.revokeObjectURL(link.href);
       output('config-output').textContent = 'Configuration JSON exported.';
-      showToast('Configuration exported successfully.');
+      notify('Configuration exported successfully.');
     } catch (error) {
       output('config-output').textContent = error.message;
-      showToast('Export failed: ' + error.message, true);
+      notify('Export failed: ' + error.message, true);
     }
   };
   document.getElementById('export-config')?.addEventListener('click', handleExportConfig);
@@ -1935,7 +1935,7 @@ async function runOperations() {
 
   const handleImportConfig = async (event) => {
     const file = event.target.files?.[0]; if (!file) return;
-    if (!window.confirm('Importing this configuration will overwrite existing settings. Do you want to proceed?')) {
+    if (!confirm('Importing this configuration will overwrite existing settings. Do you want to proceed?')) {
       event.target.value = '';
       return;
     }
@@ -1954,11 +1954,11 @@ async function runOperations() {
       const result = await api('/api/config-import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({format:'aio-local-config-v1', values})});
       const updatedCount = result.updated ? result.updated.length : 0;
       output('config-output').textContent = `Imported ${updatedCount} supported settings.`;
-      showToast(`Configuration imported successfully (${updatedCount} settings updated).`);
+      notify(`Configuration imported successfully (${updatedCount} settings updated).`);
       await loadSettings();
     } catch (error) {
       output('config-output').textContent = error.message;
-      showToast('Import failed: ' + error.message, true);
+      notify('Import failed: ' + error.message, true);
     } finally {
       event.target.value = '';
     }
