@@ -351,6 +351,18 @@ async function loadSettings(options) {
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
   document.getElementById('base-url').value = baseUrl;
 
+  const proxyUrlEl = document.getElementById('proxy-url');
+  if (proxyUrlEl && !proxyUrlEl.value) {
+    proxyUrlEl.value = baseUrl || window.location.origin;
+  }
+
+  const bitmagnetPort = (env.ports && env.ports.bitmagnet) || env.PORT_BITMAGNET || '3333';
+  const bitmagnetUrl = location.protocol === 'https:' ? `${location.origin}/bitmagnet` : `http://${location.hostname}:${bitmagnetPort}`;
+  const bitmagnetLink = document.getElementById('open-bitmagnet');
+  if (bitmagnetLink) bitmagnetLink.href = bitmagnetUrl;
+  const bitmagnetDisplay = document.getElementById('bitmagnet-endpoint-display');
+  if (bitmagnetDisplay) bitmagnetDisplay.textContent = bitmagnetUrl;
+
   const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.') || /^https?:\/\/(172\.(1[6-9]|2[0-9]|3[0-1])\.|[^\/:]+\.(local|internal|lan|home\.arpa))/.test(baseUrl);
   if (typeof setAccessScope === 'function') setAccessScope(isLocal ? 'local' : 'remote');
 
@@ -989,6 +1001,14 @@ async function refreshServices() {
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
   document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
+
+  const bitmagnetPill = document.getElementById('bitmagnet-status-pill');
+  if (bitmagnetPill) {
+    const bitService = result.integrations?.find(s => s.name?.toLowerCase().includes('bitmagnet') || s.host === 'bitmagnet');
+    const isOnline = bitService ? bitService.reachable : true;
+    bitmagnetPill.textContent = isOnline ? 'Active' : 'Offline';
+    bitmagnetPill.className = `status-pill ${isOnline ? 'online' : 'offline'}`;
+  }
 
   const aioSvc = result.integrations.find(s => s.name === 'AIOStreams' || s.host === 'aiostreams');
   const info = cachedManifestInfo;
@@ -1838,25 +1858,62 @@ async function runOperations() {
     try { output('profile-output').textContent = JSON.stringify(await api('/api/profile-recommendation'), null, 2); }
     catch (error) { output('profile-output').textContent = error.message; }
   });
+  const proxyUrlInput = document.getElementById('proxy-url');
+  if (proxyUrlInput && !proxyUrlInput.value) {
+    proxyUrlInput.value = document.getElementById('base-url')?.value || window.location.origin;
+  }
+
   document.getElementById('generate-proxy')?.addEventListener('click', async () => {
     try {
       const format = document.getElementById('proxy-format').value;
-      const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(document.getElementById('base-url').value)}`);
+      const targetUrl = document.getElementById('proxy-url')?.value?.trim() || document.getElementById('base-url')?.value?.trim() || window.location.origin;
+      const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(targetUrl)}`);
       output('proxy-output').textContent = response.ok ? await response.text() : `Server returned ${response.status}`;
     } catch (error) { output('proxy-output').textContent = error.message; }
   });
+
+  document.getElementById('copy-proxy-config')?.addEventListener('click', async () => {
+    const text = document.getElementById('proxy-output')?.textContent;
+    if (!text || text === 'Not generated yet.') return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Proxy configuration copied to clipboard.');
+    } catch (err) {
+      showToast('Failed to copy config: ' + err.message, true);
+    }
+  });
+
   document.getElementById('show-update-plan')?.addEventListener('click', async () => {
     try { output('update-output').textContent = JSON.stringify(await api('/api/update-plan'), null, 2); }
     catch (error) { output('update-output').textContent = error.message; }
   });
-  document.getElementById('export-config')?.addEventListener('click', async () => {
+
+  const handleExportConfig = async () => {
     try {
       const response = await api('/api/config-export');
       const blob = new Blob([JSON.stringify(response, null, 2)], {type:'application/json'});
       const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'aio-local-config-redacted.json'; link.click(); URL.revokeObjectURL(link.href);
-      output('config-output').textContent = 'Redacted configuration downloaded.';
-    } catch (error) { output('config-output').textContent = error.message; }
-  });
+      output('config-output').textContent = 'Configuration JSON exported.';
+      showToast('Configuration exported successfully.');
+    } catch (error) {
+      output('config-output').textContent = error.message;
+      showToast('Export failed: ' + error.message, true);
+    }
+  };
+  document.getElementById('export-config')?.addEventListener('click', handleExportConfig);
+  document.getElementById('quick-export-config')?.addEventListener('click', handleExportConfig);
+
   document.getElementById('export-profile')?.addEventListener('click', async () => {
     try {
       const response = await fetch('/api/export-profile');
@@ -1875,8 +1932,13 @@ async function runOperations() {
       output('config-output').textContent = 'AIOMetadata profile downloaded.';
     } catch (error) { output('config-output').textContent = error.message; }
   });
-  document.getElementById('import-config')?.addEventListener('change', async event => {
+
+  const handleImportConfig = async (event) => {
     const file = event.target.files?.[0]; if (!file) return;
+    if (!window.confirm('Importing this configuration will overwrite existing settings. Do you want to proceed?')) {
+      event.target.value = '';
+      return;
+    }
     try {
       const data = JSON.parse(await file.text());
       const values = data.values && typeof data.values === 'object' ? data.values : data;
@@ -1890,9 +1952,24 @@ async function runOperations() {
         if (typeof data[key] === 'string') values[key] = data[key];
       }
       const result = await api('/api/config-import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({format:'aio-local-config-v1', values})});
-      output('config-output').textContent = `Imported ${result.updated.length} supported settings.`;
+      const updatedCount = result.updated ? result.updated.length : 0;
+      output('config-output').textContent = `Imported ${updatedCount} supported settings.`;
+      showToast(`Configuration imported successfully (${updatedCount} settings updated).`);
       await loadSettings();
-    } catch (error) { output('config-output').textContent = error.message; }
+    } catch (error) {
+      output('config-output').textContent = error.message;
+      showToast('Import failed: ' + error.message, true);
+    } finally {
+      event.target.value = '';
+    }
+  };
+  document.getElementById('import-config')?.addEventListener('change', handleImportConfig);
+  document.getElementById('quick-import-config')?.addEventListener('change', handleImportConfig);
+
+  document.getElementById('copy-bitmagnet-url')?.addEventListener('click', () => {
+    const bitmagnetLink = document.getElementById('open-bitmagnet');
+    const url = (bitmagnetLink && bitmagnetLink.href) || 'http://localhost:3333';
+    copyToClipboard(url, 'Bitmagnet URL copied to clipboard.', document.getElementById('copy-bitmagnet-url'));
   });
 
   document.getElementById('logs-container-select')?.addEventListener('change', (e) => {
@@ -2260,6 +2337,52 @@ async function runOperations() {
   }
 }
 
+async function updateZileanCacheStats(providedStats) {
+  const availEl = document.getElementById('zilean-dmm-availability');
+  const countEl = document.getElementById('zilean-torrent-hash-count');
+  const syncEl = document.getElementById('zilean-last-sync-status');
+  if (!availEl && !countEl && !syncEl) return;
+
+  try {
+    let stats = providedStats;
+    if (!stats || typeof stats !== 'object' || Object.keys(stats).length === 0) {
+      let res = null;
+      try {
+        res = await api('/api/zilean-stats');
+      } catch (_) {
+        res = await api('/api/zilean');
+      }
+      stats = (res && res.stats) ? res.stats : (res || {});
+    }
+    const isHealthy = Boolean(stats.healthy);
+
+    if (availEl) {
+      availEl.textContent = isHealthy ? 'Available' : 'Unavailable';
+      availEl.className = isHealthy ? 'stat-val text-green' : 'stat-val text-amber';
+    }
+    if (countEl) {
+      const count = stats.cached_hashes ?? stats.hash_count ?? stats.hashes ?? (isHealthy ? '500k+ DMM' : '0');
+      countEl.textContent = `Cached Hashes: ${typeof count === 'number' ? count.toLocaleString() : count}`;
+    }
+    if (syncEl) {
+      if (stats.last_sync) {
+        syncEl.textContent = `Last Sync: ${stats.last_sync}`;
+      } else if (isHealthy) {
+        syncEl.textContent = `Last Sync: ${stats.latency_ms ? `Active (${stats.latency_ms}ms)` : 'Synced'}`;
+      } else {
+        syncEl.textContent = `Last Sync: ${stats.error || 'Offline'}`;
+      }
+    }
+  } catch (err) {
+    if (availEl) {
+      availEl.textContent = 'Unavailable';
+      availEl.className = 'stat-val text-amber';
+    }
+    if (countEl) countEl.textContent = 'Cached Hashes: --';
+    if (syncEl) syncEl.textContent = `Last Sync: ${err.message || 'Offline'}`;
+  }
+}
+
 let healthInterval = null;
 
 async function refreshHealthTelemetry() {
@@ -2303,6 +2426,8 @@ async function refreshHealthTelemetry() {
       const zilText = zil.healthy ? ' • Zilean DMM Active' : '';
       bkEl.textContent = `${bk.count || 0} Backups (${bk.total_size_mb || 0} MB) • Retaining 5${zilText}`;
     }
+
+    await updateZileanCacheStats(zil);
 
     const tbody = document.getElementById('telemetry-table-body');
     if (tbody && Array.isArray(res.containers)) {

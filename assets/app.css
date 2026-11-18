@@ -1721,6 +1721,15 @@ input::placeholder {
   transform: translateY(-1px);
 }
 
+details.op-card summary.op-card-header {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+details.op-card summary.op-card-header::-webkit-details-marker {
+  display: none;
+}
+
 .op-card-wide {
   grid-column: 1 / -1;
 }
@@ -1945,6 +1954,8 @@ input::placeholder {
 
 .telemetry-table-wrapper {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);
   background: #090d12;
@@ -1952,6 +1963,7 @@ input::placeholder {
 
 .telemetry-table {
   width: 100%;
+  min-width: 580px;
   border-collapse: collapse;
   font-size: 13.5px;
   text-align: left;
@@ -2490,6 +2502,22 @@ footer {
   }
 }
 
+@media (max-width: 600px) {
+  .service-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .telemetry-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+  }
+  .telemetry-table {
+    min-width: 540px;
+    width: 100%;
+  }
+}
+
 /* Callouts, Notices & Fleet Telemetry Helpers */
 .notice-callout {
   margin: 10px 0 14px;
@@ -2761,6 +2789,11 @@ a.disabled, button.disabled {
   border: 1px solid rgba(168, 85, 247, 0.35);
   box-shadow: 0 0 14px rgba(168, 85, 247, 0.18);
 }
+.icon-bitmagnet {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.18);
+}
 .hub-card-title-group h3 {
   margin: 0;
   font-size: 15.5px;
@@ -2792,6 +2825,33 @@ a.disabled, button.disabled {
   background: rgba(168, 85, 247, 0.14);
   color: #c084fc;
   border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.badge-bitmagnet {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2.5px 8.5px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.status-pill.online {
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.status-pill.offline {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.35);
 }
 .hub-card-desc {
   margin: 0;
