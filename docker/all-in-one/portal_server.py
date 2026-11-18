@@ -138,8 +138,6 @@ INTERNAL_SERVICE_TARGETS = {
     "aiometadata": ("aiometadata", 4005, 4005),
     "prowlarr": ("prowlarr", 9696, 9696),
     "zilean": ("zilean", 8181, 8181),
-    "stremio-web": ("stremio-web", 8080, 8082),
-    "nuvio": ("nuvio-web", 3000, 8085),
     "flaresolverr": ("flaresolverr", 8191, 8191),
     "postersplus": ("postersplus", 8000, 9039),
     "subsense": ("stremio-subsense", 3100, 3100),
@@ -726,10 +724,8 @@ def optimized_profile_export():
     aiostreams_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
     candidates = [
         os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
-        os.path.join(WEB_ROOT, "data", "stremio-web", "aiostreams_install.json"),
         os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
         "/data/aiostreams/aiostreams_install.json",
-        "/data/stremio-web/aiostreams_install.json",
         "/data/aiostreams_install.json",
     ]
     install_uuid = None
@@ -2308,10 +2304,8 @@ button:hover {{ background: #0369a1; }}
         install_info = {}
         candidates = [
             os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
-            os.path.join(WEB_ROOT, "data", "stremio-web", "aiostreams_install.json"),
             os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
             "/data/aiostreams/aiostreams_install.json",
-            "/data/stremio-web/aiostreams_install.json",
             "/data/aiostreams_install.json"
         ]
         for c in candidates:

@@ -591,12 +591,30 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(preset["type"], "torznab")
             self.assertTrue(preset["enabled"])
             self.assertEqual(preset["options"]["url"], "http://bitmagnet:3333/torznab")
+            self.assertEqual(preset["options"]["api"]["url"], "http://bitmagnet:3333/torznab")
+
+    def test_bitmagnet_aiostreams_preset_omitted_when_unreachable(self):
+        base = {
+            "presets": [
+                {"type": "torznab", "instanceId": "bitmagnet-local", "options": {"url": "http://bitmagnet:3333/torznab"}}
+            ]
+        }
+        with patch.dict(os.environ, {"BITMAGNET_URL": "http://bitmagnet:3333"}), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', 'rd_test'), \
+             patch.object(bootstrap, "is_url_reachable", return_value=False):
+            config = bootstrap.build_default_config(probe_services=True, base_config=base)
+            preset = next((p for p in config.get("presets", []) if p.get("instanceId") == "bitmagnet-local"), None)
+            self.assertIsNone(preset)
 
     def test_deprecated_presets_removal(self):
         base = {
             "presets": [
                 {"type": "comet", "instanceId": "comet-preset", "options": {}},
                 {"type": "sootio", "instanceId": "sootio-preset", "options": {}},
+                {"type": "nuvio", "instanceId": "nuvio-preset", "options": {}},
+                {"type": "custom", "instanceId": "mediaflow-custom", "options": {"name": "MediaFlow"}},
+                {"type": "custom", "instanceId": "slicksync-custom", "options": {"name": "SlickSync"}},
+                {"type": "custom", "instanceId": "stremio-web-custom", "options": {"url": "http://stremio-web:8080"}},
                 {"type": "custom", "instanceId": "custom-debrid-search", "options": {"name": "DS"}},
                 {"type": "custom", "instanceId": "clean-custom-1", "options": {"url": "http://comet:8000"}},
                 {"type": "custom", "instanceId": "clean-custom-2", "options": {"manifestUrl": "http://sootio:55771/manifest.json"}},
@@ -611,6 +629,10 @@ class BootstrapTests(unittest.TestCase):
         preset_types = [p.get("type") for p in config["presets"]]
         self.assertNotIn("comet-preset", preset_ids)
         self.assertNotIn("sootio-preset", preset_ids)
+        self.assertNotIn("nuvio-preset", preset_ids)
+        self.assertNotIn("mediaflow-custom", preset_ids)
+        self.assertNotIn("slicksync-custom", preset_ids)
+        self.assertNotIn("stremio-web-custom", preset_ids)
         self.assertNotIn("custom-debrid-search", preset_ids)
         self.assertNotIn("clean-custom-1", preset_ids)
         self.assertNotIn("clean-custom-2", preset_ids)

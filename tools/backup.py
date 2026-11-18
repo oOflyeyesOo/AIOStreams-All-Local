@@ -193,8 +193,6 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("prowlarr/config.xml", False),
             ("prowlarr/prowlarr.db", False),
             ("infinidysk", True),
-            ("stremio-web/localStorage.json", False),
-            ("stremio-web/aiostreams_install.json", False),
             ("postersplus", True),
             ("subsense", True)
         ]

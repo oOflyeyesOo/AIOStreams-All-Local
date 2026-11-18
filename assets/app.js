@@ -1219,7 +1219,7 @@ const copyAniskipApi = document.getElementById('copy-aniskip-api');
 if (copyAniskipApi) {
   copyAniskipApi.addEventListener('click', e => {
     const endpoint = `${location.protocol}//${location.host}/api/aniskip`;
-    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into Nuvio or outside player.', e.currentTarget);
+    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into MPV or outside player.', e.currentTarget);
   });
 }
 
@@ -1227,7 +1227,7 @@ const copyAniskipBtn = document.getElementById('copy-aniskip-endpoint-btn');
 if (copyAniskipBtn) {
   copyAniskipBtn.addEventListener('click', e => {
     const endpoint = `${location.protocol}//${location.host}/api/aniskip`;
-    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into Nuvio or outside player.', e.currentTarget);
+    copyToClipboard(endpoint, 'AniSkip API URL copied. Paste into MPV or outside player.', e.currentTarget);
   });
 }
 

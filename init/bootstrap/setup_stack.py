@@ -201,7 +201,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SIMKL_CLIENT_ID = os.environ.get("SIMKL_CLIENT_ID", "")
 ANILIST_TOKEN = os.environ.get("ANILIST_TOKEN", "")
 
-DATA_STREMIO_WEB = resolve_path("data/stremio-web", "/data/stremio-web")
 DATA_AIOSTREAMS = resolve_path("data/aiostreams", "/data/aiostreams")
 DATA_ROOT = resolve_path("data", "/data")
 TEMPLATE_PATH = resolve_path("templates/builtin/all-local-selfhosted.json", "/templates/builtin/all-local-selfhosted.json")
@@ -1007,7 +1006,9 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams. Provisioning is blocked; check the container and Docker network before retrying.", flush=True)
     return False
 
-DEPRECATED_PRESET_TARGETS = ("comet", "sootio", "debrid-search")
+DEPRECATED_PRESET_TARGETS = (
+    "comet", "sootio", "debrid-search", "mediaflow", "mediafusion", "slicksync", "nuvio", "stremio-web"
+)
 
 def is_deprecated_preset(preset):
     """Detect whether a preset belongs to a deprecated or removed scraper/addon."""
@@ -1378,14 +1379,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
         if not any(p.get("instanceId") == "bitmagnet-local" for p in presets):
             bitmagnet_reachable = reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0)
-            if bitmagnet_reachable or os.environ.get("BITMAGNET_URL"):
+            if bitmagnet_reachable or (os.environ.get("BITMAGNET_URL") and not probe_services):
                 presets.append({
                     "type": "torznab",
                     "instanceId": "bitmagnet-local",
                     "enabled": True,
                     "options": {
                         "name": "Bitmagnet (Local)",
+                        "api": {
+                            "url": f"{bitmagnet_url}/torznab",
+                            "apiKey": os.environ.get("BITMAGNET_API_KEY", "")
+                        },
                         "url": f"{bitmagnet_url}/torznab",
+                        "torznabUrl": f"{bitmagnet_url}/torznab",
                         "apiKey": os.environ.get("BITMAGNET_API_KEY", ""),
                         "timeout": 8000,
                         "resources": ["stream"],
@@ -1531,13 +1537,24 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 continue
             opts["timeout"] = int(opts.get("timeout") or 8000)
             bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
-            opts["url"] = opts.get("url") or f"{bitmagnet_url}/torznab"
-            if not probe_services or reachable(opts["url"], timeout=1.0) or reachable(bitmagnet_url, timeout=1.0):
-                p["enabled"] = True
-                print("[AIOStreams Setup] ✓ Bitmagnet Torznab (Local) is online and active.", flush=True)
-            else:
-                p["enabled"] = False
-                print("[AIOStreams Setup] ℹ️ Bitmagnet is unreachable; preset disabled.", flush=True)
+            api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
+            torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
+            api_key = api_sub.get("apiKey") or opts.get("apiKey") or os.environ.get("BITMAGNET_API_KEY", "")
+            opts["api"] = {
+                "url": torznab_url,
+                "apiKey": api_key,
+            }
+            opts["url"] = torznab_url
+            opts["torznabUrl"] = torznab_url
+
+            if probe_services and not (reachable(torznab_url, timeout=1.0) or reachable(bitmagnet_url, timeout=1.0)):
+                print(f"[AIOStreams Setup] ℹ️ Bitmagnet is unreachable; preset omitted.", flush=True)
+                if pid:
+                    removed_preset_ids.add(pid)
+                continue
+
+            p["enabled"] = True
+            print("[AIOStreams Setup] ✓ Bitmagnet Torznab (Local) is online and active.", flush=True)
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.
@@ -1813,7 +1830,6 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
     # Check candidates for existing install info
     for candidate in [
         os.path.join(DATA_AIOSTREAMS, "aiostreams_install.json"),
-        os.path.join(DATA_STREMIO_WEB, "aiostreams_install.json"),
         "/data/aiostreams_install.json",
         "/data/aiostreams/aiostreams_install.json"
     ]:
