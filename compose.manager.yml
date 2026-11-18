@@ -729,7 +729,8 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - curl -fsSL http://localhost:80/v4/anime/1 > /dev/null 2>&1 || curl -fsSL http://localhost/v4/seasons/now > /dev/null 2>&1 || exit 1
+      - curl -fsSL http://localhost:80/v4/anime/1 > /dev/null 2>&1 || curl -fsSL http://localhost/v4/seasons/now > /dev/null
+        2>&1 || exit 1
       interval: 15s
       timeout: 5s
       retries: 3
