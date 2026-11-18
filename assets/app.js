@@ -878,7 +878,7 @@ async function refreshServices() {
       const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
       const aioOrigin = service.uiUrl ? new URL(service.uiUrl, location.origin).origin : `http://${location.hostname}:${aioPort}`;
       const playerUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web`;
-      const playerEmbedUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || '/service-proxy/aiostreams/jellyfin/web/' || playerUrl;
+      const playerEmbedUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || '/jellyfin/web/' || playerUrl;
 
       const playerEmbedBtn = document.createElement('button');
       playerEmbedBtn.type = 'button';
@@ -1068,6 +1068,13 @@ async function pollSetup() {
       if (progressPanel) progressPanel.hidden = false;
       if (setupDetails) setupDetails.open = false;
       await Promise.allSettled([loadManifest().finally(refreshServices)]);
+      if (lastJobStatus === 'running') {
+        notify('✓ Stack connected successfully! Manifest & Web Player ready.', false);
+        const readiness = document.getElementById('startup-readiness') || document.getElementById('progress-panel');
+        if (readiness) {
+          readiness.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
     }
     lastJobStatus = job.status;
     renderPlaybackReadiness();

@@ -361,6 +361,12 @@ def validate_provider(provider, key=None):
             valid = False
         return {"status": "valid" if valid else "rejected", "detail": "Provider accepted the credentials." if valid else "Provider rejected the credentials."}
     except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            return {"status": "rejected", "detail": f"Provider credentials rejected (HTTP {error.code})."}
+        if error.code == 429:
+            return {"status": "rate_limited", "detail": "Provider rate limit reached (HTTP 429). Please wait a moment."}
+        if error.code >= 500:
+            return {"status": "unavailable", "detail": f"Provider API temporarily unavailable (HTTP {error.code})."}
         return {"status": "rejected", "detail": f"Provider returned HTTP {error.code}."}
     except (OSError, ValueError, json.JSONDecodeError):
         return {"status": "unavailable", "detail": "Provider could not be reached for validation."}
@@ -810,11 +816,13 @@ def save_env_updates(updates):
             else:
                 result.append(line)
         result.extend(f"{key}={value}" for key, value in updates.items() if key not in found)
-        descriptor, temporary = tempfile.mkstemp(prefix=".env-", dir=os.path.dirname(ENV_PATH))
+        target_path = os.path.realpath(ENV_PATH)
+        target_dir = os.path.dirname(target_path) or os.path.dirname(ENV_PATH)
+        descriptor, temporary = tempfile.mkstemp(prefix=".env-", dir=target_dir)
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as output:
                 output.write("\n".join(result) + "\n")
-            os.replace(temporary, ENV_PATH)
+            os.replace(temporary, target_path)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
@@ -2359,8 +2367,8 @@ button:hover {{ background: #0369a1; }}
         jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
         jellyfin_server = f"{base_url}/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else f"{base_url}/jellyfin"
         jellyfin_web_player = f"{base_url}/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else f"{base_url}/jellyfin/web"
-        jellyfin_web_player_proxy = f"/service-proxy/aiostreams/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else "/service-proxy/aiostreams/jellyfin/web/"
-        jellyfin_server_proxy = f"/service-proxy/aiostreams/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else "/service-proxy/aiostreams/jellyfin"
+        jellyfin_web_player_proxy = f"/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else "/jellyfin/web/"
+        jellyfin_server_proxy = f"/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else "/jellyfin"
         resp = {
             "success": True,
             "uuid": uuid,
