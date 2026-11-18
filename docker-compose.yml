@@ -569,7 +569,7 @@ services:
       - PORT=7000
       - NODE_OPTIONS=--max-old-space-size=128
       - FANART_APIKEY=${FANART_API_KEY:-}
-      - JIKAN_API_BASE=${JIKAN_API_BASE:-http://jikan-api:80/v4}
+      - JIKAN_API_BASE=${JIKAN_API_BASE:-http://jikan-api:8080/v4}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     networks:
@@ -695,9 +695,9 @@ services:
     restart: unless-stopped
     logging: *default-logging
     ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:80"
+      - "${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_JIKAN_API:-8001}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL http://localhost:80/ > /dev/null 2>&1 || curl -fsSL http://localhost:80/v4 > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl --fail http://localhost:2114/health?plugin=http > /dev/null 2>&1 || curl -fsSL http://localhost:8080/v4 > /dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

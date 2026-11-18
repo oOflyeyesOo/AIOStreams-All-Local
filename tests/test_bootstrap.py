@@ -646,7 +646,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(bootstrap.resolve_jikan_api_base("https://custom.jikan.moe/v4", probe_services=False), "https://custom.jikan.moe/v4")
         # When local jikan is reachable, seamlessly select it
         with patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "jikan-api" in url):
-            self.assertEqual(bootstrap.resolve_jikan_api_base("", probe_services=True), "http://jikan-api:80/v4")
+            self.assertEqual(bootstrap.resolve_jikan_api_base("", probe_services=True), "http://jikan-api:8080/v4")
 
     def test_bitmagnet_prowlarr_registration_when_reachable(self):
         schemas = [

@@ -278,14 +278,14 @@ def is_url_reachable(url, timeout=2.0):
         return False
 
 DEFAULT_JIKAN_URL = "https://api.tenrai.org/v4"
-LOCAL_JIKAN_URL = "http://jikan-api:80/v4"
+LOCAL_JIKAN_URL = "http://jikan-api:8080/v4"
 
 def resolve_jikan_api_base(configured_url="", probe_services=True):
     explicit = (configured_url or os.environ.get("JIKAN_API_BASE") or "").strip()
     if explicit and explicit != DEFAULT_JIKAN_URL:
         return explicit.rstrip("/")
     if probe_services:
-        for candidate in (LOCAL_JIKAN_URL, "http://jikan-api/v4"):
+        for candidate in (LOCAL_JIKAN_URL, "http://jikan-api:80/v4", "http://jikan-api/v4"):
             if is_url_reachable(candidate, timeout=1.0) or is_url_reachable(f"{candidate}/seasons/now", timeout=1.0):
                 return candidate
     return explicit or DEFAULT_JIKAN_URL

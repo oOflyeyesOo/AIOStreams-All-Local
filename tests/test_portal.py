@@ -902,7 +902,7 @@ class PortalTests(unittest.TestCase):
                 ("bitmagnet", 3333, "Indexers"),
                 ("flaresolverr", 8191, "Indexers"),
                 ("anime-kitsu", 7000, "Metadata"),
-                ("jikan-api", 80, "Metadata"),
+                ("jikan-api", 8080, "Metadata"),
             ]:
                 result = portal.probe_integration((service.title(), service, port, group))
                 self.assertFalse(result["enabled"])
@@ -911,7 +911,7 @@ class PortalTests(unittest.TestCase):
         with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core,anime-db"}), patch("socket.create_connection"):
             result = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
             self.assertTrue(result["enabled"])
-            result = portal.probe_integration(("Jikan API", "jikan-api", 80, "Metadata"))
+            result = portal.probe_integration(("Jikan API", "jikan-api", 8080, "Metadata"))
             self.assertTrue(result["enabled"])
             result = portal.probe_integration(("Bitmagnet", "bitmagnet", 3333, "Indexers"))
             self.assertFalse(result["enabled"])

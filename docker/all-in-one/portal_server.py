@@ -146,7 +146,7 @@ INTERNAL_SERVICE_TARGETS = {
     "infinidysk": ("infinidysk", 3000, 3005),
     "lumiere-db": ("lumiere-db", 8000, 8000),
     "bitmagnet": ("bitmagnet", 3333, 3333),
-    "jikan-api": ("jikan-api", 80, 8001),
+    "jikan-api": ("jikan-api", 8080, 8001),
 }
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
