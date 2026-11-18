@@ -117,46 +117,41 @@
             </div>
           </div>
         </div>
-        <p class="hub-card-desc">Native Jellyfin server endpoint and virtual WebDAV streaming mounts for external clients &amp; smart TVs.</p>
+        <p class="hub-card-desc">Jellyfin server &amp; WebDAV virtual share for external players &amp; TVs.</p>
 
-        <div class="hub-share-block">
-          <div class="hub-share-header">
-            <span class="hub-share-title">Jellyfin Server URL</span>
-            <span class="hub-share-tag">CLIENT APPS</span>
+        <div class="hub-compact-share-stack">
+          <div class="hub-compact-share-item">
+            <div class="manifest-preview hub-endpoint-preview">
+              <div class="code-label"><span>jellyfin · endpoint</span></div>
+              <code id="jellyfin-server-url-display">http://localhost:3001/jellyfin</code>
+            </div>
+            <div class="hub-card-actions hub-share-actions compact">
+              <button type="button" id="copy-jellyfin-server-url" class="light-button mini-btn" title="Copy Jellyfin server endpoint"><span>Copy URL</span> <span>⧉</span></button>
+              <a id="open-jellyfin-quickconnect" class="light-button mini-btn" href="#" target="_blank" rel="noopener noreferrer" title="Pair Device"><span>Pair</span> <span>↗</span></a>
+            </div>
           </div>
-          <div class="manifest-preview hub-endpoint-preview">
-            <div class="code-label"><span>jellyfin · endpoint</span></div>
-            <code id="jellyfin-server-url-display">http://localhost:3001/jellyfin</code>
-          </div>
-          <div class="hub-card-actions hub-share-actions">
-            <button type="button" id="copy-jellyfin-server-url" class="light-button" title="Copy Jellyfin server endpoint for client apps"><span>Copy Server URL</span> <span>⧉</span></button>
-            <a id="open-jellyfin-quickconnect" class="light-button" href="#" target="_blank" rel="noopener noreferrer" title="Open AIOStreams settings, then Save &amp; Install to pair a device"><span>Pair Device</span> <span>↗</span></a>
-            <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy player username ⧉</button>
-            <button type="button" id="copy-jellyfin-password" class="subtle-link mini-action-btn">Copy player password ⧉</button>
-            <a id="install-aiostreams-web" class="subtle-link mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player" hidden>Hosted Web App ↗</a>
-          </div>
-          <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
-            <span class="quickconnect-label">Device Pairing:</span>
-            <span class="quickconnect-sub">Pair your smart TV or client app with your stack admin credentials.</span>
-          </div>
-          <p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
-        </div>
 
-        <div class="hub-share-block hub-share-divider">
-          <div class="hub-share-header">
-            <span class="hub-share-title">WebDAV Virtual Share</span>
-            <span class="hub-share-tag">INFUSE · KODI · VLC</span>
-          </div>
-          <div class="hub-share-inline-row">
+          <div class="hub-compact-share-item">
             <div class="manifest-preview hub-endpoint-preview">
               <div class="code-label"><span>webdav · stream share</span></div>
               <code id="webdav-url">http://localhost:3001/webdav</code>
             </div>
-            <div class="hub-card-actions hub-share-actions">
-              <button type="button" id="copy-webdav-url" class="light-button" title="Copy WebDAV URL for Infuse, Kodi, or VLC"><span>Copy WebDAV URL</span> <span>⧉</span></button>
+            <div class="hub-card-actions hub-share-actions compact">
+              <button type="button" id="copy-webdav-url" class="light-button mini-btn" title="Copy WebDAV URL for Infuse, Kodi, or VLC"><span>Copy URL</span> <span>⧉</span></button>
             </div>
           </div>
         </div>
+
+        <div class="hub-card-actions hub-credentials-row">
+          <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy username ⧉</button>
+          <button type="button" id="copy-jellyfin-password" class="subtle-link mini-action-btn">Copy password ⧉</button>
+          <a id="install-aiostreams-web" class="subtle-link mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player" hidden>Hosted Web App ↗</a>
+        </div>
+        <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
+          <span class="quickconnect-label">Device Pairing:</span>
+          <span class="quickconnect-sub">Pair your smart TV or client app with your stack admin credentials.</span>
+        </div>
+        <p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
       </div>
 
       <!-- Card 4: Bitmagnet -->

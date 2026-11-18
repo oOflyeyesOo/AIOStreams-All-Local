@@ -168,7 +168,7 @@ def probe_integration(item):
         "bitmagnet": {"scrapers", "all"},
         "zilean": {"scrapers", "all"},
         "flaresolverr": {"scrapers", "all"},
-        "anime-kitsu": {"anime-db", "all"},
+        "anime-kitsu": {"scrapers", "anime-db", "all"},
         "jikan-api": {"anime-db", "all"},
     }
     enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))

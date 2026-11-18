@@ -1570,7 +1570,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
                 validated_presets.append(p)
             elif "usenet" in sources:
-                p["enabled"] = os.environ.get("USENET_ENABLED", "false").lower() == "true" or bool(USENET_ENABLED)
+                is_u_enabled = os.environ.get("USENET_ENABLED", "false").lower() == "true" or bool(USENET_ENABLED)
+                if not is_u_enabled:
+                    if pid:
+                        removed_preset_ids.add(pid)
+                    continue
+                p["enabled"] = True
                 opts.setdefault("name", "Usenet (Prowlarr → InfiniDysk)")
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
@@ -1582,24 +1587,25 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 validated_presets.append(p)
         elif ptype == "knaben":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                if pid:
+                    removed_preset_ids.add(pid)
                 continue
             p["enabled"] = True
             opts["name"] = "Knaben (Anime)"
             opts["mediaTypes"] = ["anime"]
-            opts["timeout"] = int(opts.get("timeout") or 8000)
+            opts["timeout"] = int(opts.get("timeout") or 6000)
             validated_presets.append(p)
         elif ptype == "stremthruTorz":
-            p["enabled"] = False
-            curr_timeout = int(opts.get("timeout") or 7000)
-            if curr_timeout < 18000:
-                opts["timeout"] = 18000
-            validated_presets.append(p)
+            if pid:
+                removed_preset_ids.add(pid)
+            continue
         elif ptype == "stremthruStore":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                if pid:
+                    removed_preset_ids.add(pid)
                 continue
-            curr_timeout = int(opts.get("timeout") or 8000)
-            if curr_timeout > 8000 or curr_timeout < 5000:
-                opts["timeout"] = 8000
+            curr_timeout = int(opts.get("timeout") or 5000)
+            opts["timeout"] = min(max(curr_timeout, 3000), 5000)
             if reachable(f"{STREMTHRU_URL}/stremio/store/manifest.json", timeout=1.0):
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ StremThru Store (Debrid Cloud Library) is online and active.", flush=True)
@@ -1607,14 +1613,15 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             else:
                 p["enabled"] = False
                 print("[AIOStreams Setup] ℹ️ StremThru Store is unreachable; preset omitted. Check its container and Docker network.", flush=True)
-                validated_presets.append(p)
+                if pid:
+                    removed_preset_ids.add(pid)
         elif ptype == "easynews-search":
             p["enabled"] = bool(EASYNEWS_USER and EASYNEWS_PASSWORD)
             # Direct EasyNews delivery owns this account.
             opts['services']=['easynews']
             opts['useMultipleInstances']=False
             opts['paginate']=False
-            curr_timeout = int(opts.get("timeout") or 15000)
+            curr_timeout = int(opts.get("timeout") or 8000)
             opts["timeout"] = 8000
             opts["services"] = ["easynews"]
             if p["enabled"]:
@@ -1626,39 +1633,45 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             compatible={'alldebrid','debrider','debridlink','easydebrid','offcloud','premiumize','pikpak','realdebrid','torbox','torrin'}
             if ptype=='tsukihime':compatible.add('nzbdav')
             selected=[s['id'] for s in services if s.get('enabled') and s['id'] in compatible]
-            anime_flag = os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
+            anime_flag = (
+                os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
+                or 'anime' in (os.environ.get('AIOMETADATA_TEMPLATE') or '').lower()
+                or is_anime_variant
+            )
             anime_enabled = (
                 anime_flag
-                or (not is_usenet_only and (
-                    'anime' in (os.environ.get('AIOMETADATA_TEMPLATE') or '').lower()
-                    or is_anime_variant
-                    or bool(p.get("enabled", False))
-                ))
+                or (not is_usenet_only and bool(p.get("enabled", False)))
             )
             p["enabled"] = bool(anime_enabled and selected)
             opts['services']=selected
             opts['mediaTypes']=['anime']
             opts['useMultipleInstances']=False
-            curr_timeout = int(opts.get("timeout") or 15000)
-            opts["timeout"] = 8000
+            curr_timeout = int(opts.get("timeout") or 6000)
+            opts["timeout"] = 4000
             validated_presets.append(p)
         elif ptype == "zilean":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                if pid:
+                    removed_preset_ids.add(pid)
                 continue
             opts["url"] = ZILEAN_URL
-            opts["timeout"] = int(opts.get("timeout") or 5000)
+            opts["timeout"] = int(opts.get("timeout") or 3000)
             dmm_enabled = os.environ.get("ENABLE_DMM", "true").lower() != "false"
             if dmm_enabled and (not probe_services or reachable(f"{ZILEAN_URL}/dmm/filtered?query=ping", timeout=1.0)):
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ Zilean DMM (Local) is online and active.", flush=True)
+                validated_presets.append(p)
             else:
                 p["enabled"] = False
-                print("[AIOStreams Setup] ℹ️ Zilean is unreachable or DMM disabled; preset disabled.", flush=True)
-            validated_presets.append(p)
+                print("[AIOStreams Setup] ℹ️ Zilean is unreachable or DMM disabled; preset omitted.", flush=True)
+                if pid:
+                    removed_preset_ids.add(pid)
         elif ptype == "torznab":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                if pid:
+                    removed_preset_ids.add(pid)
                 continue
-            opts["timeout"] = int(opts.get("timeout") or 8000)
+            opts["timeout"] = int(opts.get("timeout") or 4000)
             bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
             api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
             torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
