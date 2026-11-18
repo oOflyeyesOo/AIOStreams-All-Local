@@ -33,6 +33,40 @@
         }
       },
       {
+        "type": "prowlarr",
+        "instanceId": "prowlarr-scraper",
+        "enabled": true,
+        "options": {
+          "name": "Prowlarr Torrents",
+          "prowlarrUrl": "http://prowlarr:9696",
+          "prowlarrApiKey": "prowlarr_internal_secret_key_99",
+          "sources": [
+            "torrent"
+          ],
+          "resources": [
+            "stream"
+          ],
+          "timeout": 10000,
+          "mediaTypes": []
+        }
+      },
+      {
+        "type": "knaben",
+        "instanceId": "knaben-scraper",
+        "enabled": true,
+        "options": {
+          "name": "Knaben (Anime)",
+          "timeout": 8000,
+          "resources": [
+            "stream"
+          ],
+          "mediaTypes": [
+            "anime"
+          ],
+          "useMultipleInstances": false
+        }
+      },
+      {
         "type": "anime-tosho-new",
         "instanceId": "anime-tosho-new",
         "enabled": true,

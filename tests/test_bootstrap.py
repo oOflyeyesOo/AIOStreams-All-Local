@@ -1,4 +1,5 @@
 import os
+import json
 os.environ["AIO_SKIP_ENV_FILE"] = "true"
 import importlib.util
 from pathlib import Path
@@ -382,6 +383,42 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(sources['anime-tosho-new']['enabled']);self.assertFalse(sources['neko-bt']['enabled'])
         self.assertTrue(sources['tsukihime']['enabled']);self.assertEqual(sources['tsukihime']['options']['services'],['nzbdav'])
 
+    def test_anime_sources_auto_enabled_via_template_and_env(self):
+        # 1. Auto-enable when AIOMETADATA_TEMPLATE contains 'anime'
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'fixture-provider-key'), \
+             patch.dict(bootstrap.os.environ, {'ENABLE_ANIME_SOURCES': 'false', 'AIOMETADATA_TEMPLATE': 'tamtaro-aiometadata-with-anime.json'}):
+            config = bootstrap.build_default_config(probe_services=False)
+        sources = [p for p in config['presets'] if p['type'] in ('anime-tosho-new', 'neko-bt', 'tsukihime')]
+        for s in sources:
+            self.assertTrue(s['enabled'])
+
+        # 2. Auto-enable when active template is an anime variant
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'fixture-provider-key'), \
+             patch.dict(bootstrap.os.environ, {'ENABLE_ANIME_SOURCES': 'false', 'AIOMETADATA_TEMPLATE': ''}):
+            template_path = bootstrap.resolve_path("templates/setup-templates/tamtaro-anime-only.json", "/templates/setup-templates/tamtaro-anime-only.json")
+            with open(template_path, "r", encoding="utf-8") as f:
+                tmpl_data = json.load(f)
+            config = bootstrap.build_default_config(probe_services=False, base_config=tmpl_data.get("config"))
+        sources = [p for p in config['presets'] if p['type'] in ('anime-tosho-new', 'neko-bt', 'tsukihime')]
+        for s in sources:
+            self.assertTrue(s['enabled'])
+
+    def test_anime_only_template_includes_prowlarr_and_knaben(self):
+        template_path = bootstrap.resolve_path("templates/setup-templates/tamtaro-anime-only.json", "/templates/setup-templates/tamtaro-anime-only.json")
+        with open(template_path, "r", encoding="utf-8") as f:
+            tmpl_data = json.load(f)
+        presets = tmpl_data.get("config", {}).get("presets", [])
+        types = [p.get("type") for p in presets]
+        self.assertIn("prowlarr", types)
+        self.assertIn("knaben", types)
+        prowlarr_preset = next(p for p in presets if p.get("type") == "prowlarr")
+        self.assertEqual(prowlarr_preset.get("instanceId"), "prowlarr-scraper")
+        self.assertTrue(prowlarr_preset.get("enabled"))
+        knaben_preset = next(p for p in presets if p.get("type") == "knaben")
+        self.assertEqual(knaben_preset.get("instanceId"), "knaben-scraper")
+        self.assertTrue(knaben_preset.get("enabled"))
+        self.assertEqual(knaben_preset.get("options", {}).get("mediaTypes"), ["anime"])
+
     def test_easynews_has_one_direct_owner_and_does_not_enable_torrent_routes(self):
         with patch.object(bootstrap,'PREMIUMIZE_API_KEY',''),patch.object(bootstrap,'EASYNEWS_USER','fixture-easynews-user'),patch.object(bootstrap,'EASYNEWS_PASSWORD','fixture-easynews-pass'):
             config=bootstrap.build_default_config(probe_services=False)
@@ -477,6 +514,8 @@ class BootstrapTests(unittest.TestCase):
             {"definitionName": "subsplease", "name": "SubsPlease"},
             {"definitionName": "animetosho-xyz", "name": "AnimeTosho"},
             {"definitionName": "anibt", "name": "AniBT"},
+            {"definitionName": "anirena", "name": "Anirena"},
+            {"definitionName": "bakabt", "name": "BakaBT"},
         ]
         requests = []
         def request(url, method="GET", data=None, headers=None, timeout=12):
@@ -498,6 +537,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("subsplease", provisioned_defs)
         self.assertIn("animetosho-xyz", provisioned_defs)
         self.assertIn("anibt", provisioned_defs)
+        self.assertIn("anirena", provisioned_defs)
+        self.assertIn("bakabt", provisioned_defs)
 
     def test_ensure_infinidysk_admin_provisions_and_skips_wizard(self):
         called_urls = []
