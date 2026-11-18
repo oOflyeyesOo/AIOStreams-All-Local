@@ -1053,12 +1053,13 @@ def is_deprecated_preset(preset):
     ptype = str(preset.get("type") or "").lower()
     pid = str(preset.get("instanceId") or "").lower()
     opts = preset.get("options") if isinstance(preset.get("options"), dict) else {}
+    name = str(opts.get("name") or "").lower()
     url = str(opts.get("url") or "").lower()
     manifest_url = str(opts.get("manifestUrl") or "").lower()
     torznab_url = str(opts.get("torznabUrl") or "").lower()
 
     for target in DEPRECATED_PRESET_TARGETS:
-        if (target in ptype or target in pid or target in url or
+        if (target in ptype or target in pid or target in name or target in url or
                 target in manifest_url or target in torznab_url):
             return True
     return False
@@ -1069,12 +1070,14 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     usenet_active = (os.environ.get('USENET_ENABLED', 'true') != 'false' and os.environ.get('USENET_HOST')
                      and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
                      and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
+    has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
+    streaming_mode = os.environ.get("STREAMING_MODE", "").lower()
+    is_usenet_only = streaming_mode == "usenet" or (usenet_active and not has_debrid) or os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json")
+
     if base_config is None:
         template_data = {}
         chosen_template_path = TEMPLATE_PATH
-        has_debrid = any(k for k in (REALDEBRID_API_KEY, PREMIUMIZE_API_KEY, TORBOX_API_KEY, ALLDEBRID_API_KEY, DEBRIDLINK_API_KEY, EASYDEBRID_API_KEY, OFFCLOUD_API_KEY, SEEDR_API_KEY))
-        streaming_mode = os.environ.get("STREAMING_MODE", "").lower()
-        if streaming_mode == "usenet" or os.environ.get("AIOMETADATA_TEMPLATE") in ("usenet-only.json", "usenet-only", "tamtaro-usenet-only.json") or (usenet_active and not has_debrid):
+        if is_usenet_only:
             u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
             if os.path.exists(u_cand):
                 chosen_template_path = u_cand
@@ -1110,12 +1113,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         active_template_str += " " + str(base_config.get("addonName", ""))
         active_template_str += " " + str(base_config.get("metadata", {}).get("name", ""))
         active_template_str += " " + str(base_config.get("metadata", {}).get("id", ""))
-    is_anime_variant = "anime" in active_template_str.lower() or (
+    is_anime_variant = not is_usenet_only and ("anime" in active_template_str.lower() or (
         isinstance(base_config, dict) and any(
             p.get("type") in ("anime-tosho-new", "tsukihime", "neko-bt") and p.get("enabled")
             for p in base_config.get("presets", [])
         )
-    )
+    ))
 
     # Ensure services are populated with InfiniDysk nzbdav and any provided Debrid keys
     nzbdav_key = SECRET_KEY if SECRET_KEY else "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09"
@@ -1489,7 +1492,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             })
         bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
         if not any(p.get("instanceId") == "bitmagnet-local" for p in presets):
-            bitmagnet_reachable = reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0)
+            bitmagnet_reachable = reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or reachable(f"{bitmagnet_url}/torznab/api", timeout=1.0)
             if bitmagnet_reachable or (os.environ.get("BITMAGNET_URL") and not probe_services):
                 presets.append({
                     "type": "torznab",
@@ -1623,11 +1626,14 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             compatible={'alldebrid','debrider','debridlink','easydebrid','offcloud','premiumize','pikpak','realdebrid','torbox','torrin'}
             if ptype=='tsukihime':compatible.add('nzbdav')
             selected=[s['id'] for s in services if s.get('enabled') and s['id'] in compatible]
+            anime_flag = os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
             anime_enabled = (
-                os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
-                or 'anime' in (os.environ.get('AIOMETADATA_TEMPLATE') or '').lower()
-                or is_anime_variant
-                or bool(p.get("enabled", False))
+                anime_flag
+                or (not is_usenet_only and (
+                    'anime' in (os.environ.get('AIOMETADATA_TEMPLATE') or '').lower()
+                    or is_anime_variant
+                    or bool(p.get("enabled", False))
+                ))
             )
             p["enabled"] = bool(anime_enabled and selected)
             opts['services']=selected
@@ -1664,7 +1670,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts["url"] = torznab_url
             opts["torznabUrl"] = torznab_url
 
-            if probe_services and not (reachable(torznab_url, timeout=1.0) or reachable(bitmagnet_url, timeout=1.0)):
+            if probe_services and not (reachable(torznab_url, timeout=1.0) or reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0)):
                 print(f"[AIOStreams Setup] ℹ️ Bitmagnet is unreachable; preset omitted.", flush=True)
                 if pid:
                     removed_preset_ids.add(pid)

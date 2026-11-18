@@ -16,7 +16,7 @@ done
 
 echo "[init-postgres] shared-postgres is ready! Verifying and provisioning application databases..."
 
-for db in zilean aiometadata; do
+for db in zilean aiometadata bitmagnet; do
   echo "[init-postgres] Checking database '$db'..."
   exists=$(psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db';")
   if [ "$exists" != "1" ]; then
@@ -28,8 +28,10 @@ for db in zilean aiometadata; do
   fi
 done
 
-echo "[init-postgres] Ensuring user 'aio' exists for bitmagnet..."
+echo "[init-postgres] Ensuring user 'aio' exists with proper permissions..."
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER DATABASE bitmagnet OWNER TO aio;" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE bitmagnet TO aio;" 2>/dev/null || true
 
 echo "[init-postgres] All application databases successfully verified and ready!"
 exit 0

@@ -276,7 +276,8 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - curl -fsSL http://localhost:3333/torznab > /dev/null 2>&1 || exit 1
+      - curl -fsSL http://localhost:3333/ > /dev/null 2>&1 || curl -fsSL http://localhost:3333/torznab/api > /dev/null 2>&1
+        || exit 1
       interval: 15s
       timeout: 5s
       retries: 3
@@ -286,7 +287,7 @@ services:
     - POSTGRES_PORT=5432
     - POSTGRES_USER=aio
     - POSTGRES_PASSWORD=aio_local_secret
-    - POSTGRES_DB=postgres
+    - POSTGRES_DB=bitmagnet
     - POSTGRES_SSLMODE=disable
     - REDIS_ADDR=shared-redis:6379
     - REDIS_HOST=shared-redis:6379
@@ -729,8 +730,7 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - curl -fsSL http://localhost:80/v4/anime/1 > /dev/null 2>&1 || curl -fsSL http://localhost/v4/seasons/now > /dev/null
-        2>&1 || exit 1
+      - curl -fsSL http://localhost:80/ > /dev/null 2>&1 || curl -fsSL http://localhost:80/v4 > /dev/null 2>&1 || exit 1
       interval: 15s
       timeout: 5s
       retries: 3
@@ -849,10 +849,12 @@ services:
     - -c
     - "if [ -f /init-databases.sh ]; then\n  exec sh /init-databases.sh\nelse\n  echo \"[init-postgres] Waiting for shared-postgres...\"\
       \n  until psql -h shared-postgres -U postgres -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; do sleep 1; done\n  for\
-      \ db in zilean aiometadata; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE $$db;\" 2>/dev/null\
-      \ || true\n  done\n  psql -h shared-postgres -U postgres -d postgres -c \"DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM\
-      \ pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \\$\\\
-      $;\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
+      \ db in zilean aiometadata bitmagnet; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE $$db;\"\
+      \ 2>/dev/null || true\n  done\n  psql -h shared-postgres -U postgres -d postgres -c \"DO \\$\\$ BEGIN IF NOT EXISTS\
+      \ (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END\
+      \ IF; END \\$\\$;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"ALTER DATABASE bitmagnet\
+      \ OWNER TO aio;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"GRANT ALL PRIVILEGES ON\
+      \ DATABASE bitmagnet TO aio;\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
     networks:
     - stremio-net
   shared-postgres:

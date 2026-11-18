@@ -178,7 +178,7 @@ def main():
     except Exception as e:
         print(f"[Prowlarr Setup] Warning configuring indexers: {e}", flush=True)
 
-    print("[Prowlarr Setup] All services fully provisioned and ready for Comet / AIOStreams!", flush=True)
+    print("[Prowlarr Setup] All services fully provisioned and ready for AIOStreams!", flush=True)
 
 if __name__ == "__main__":
     main()
