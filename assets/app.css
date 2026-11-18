@@ -316,8 +316,8 @@ main {
    Startup Readiness Hero Banner
    ========================================================================== */
 .startup-readiness {
-  margin: 28px 0 24px;
-  padding: 24px 28px;
+  margin: 16px 0 18px;
+  padding: 14px 20px;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #141c26 0%, #0f151e 100%);
@@ -341,17 +341,17 @@ main {
 
 .startup-readiness h1 {
   margin: 0;
-  font-size: clamp(22px, 3.2vw, 32px);
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--text-main);
 }
 
 .startup-readiness p {
-  margin: 8px 0 0;
-  font-size: 15px;
-  line-height: 1.55;
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
   color: var(--text-sub);
 }
 
@@ -451,9 +451,9 @@ main {
 
 /* Checklist Accordion inside Hero */
 .startup-checklist {
-  margin-top: 18px;
+  margin-top: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding-top: 8px;
 }
 
 .startup-checklist summary {
@@ -2598,28 +2598,28 @@ main { max-width: 1600px; }
 #provider-fields, #metadata-fields, #extra-fields, #tracking-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .service-picker { grid-column: 1 / -1; max-width: 400px; padding: 12px; font-size: 16px; }
 .field-grid > label[hidden] { display: none; }
-.startup-readiness { padding: 22px 26px; margin-bottom: 24px; }
-#startup-title { font-size: 24px; }
+.startup-readiness { padding: 14px 20px; margin-bottom: 18px; }
+#startup-title { font-size: 20px; }
 .player-showcase-bar { margin: 0; padding: 0; }
 
 /* Startup readiness grid layout */
-#startup-readiness { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 24px; }
-#startup-readiness .stack-status p { margin: 6px 0 0; }
+#startup-readiness { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 18px; }
+#startup-readiness .stack-status p { margin: 4px 0 0; font-size: 13.5px; }
 #startup-readiness #ready-actions,
 #startup-readiness #manifest,
 #startup-readiness > .startup-checklist,
 #startup-readiness > #progress-panel,
 #startup-readiness > #playback-test-card { grid-column: 1 / -1; min-width: 0; }
-#startup-readiness #stack-next-actions { align-self: start; margin: 0; }
+#startup-readiness #stack-next-actions { align-self: start; margin: 0; gap: 6px; }
 #ready-actions[hidden] { display: none; }
 .ready-banner-bar {
   border-top: 1px solid var(--line);
-  padding-top: 14px;
-  margin-top: 4px;
+  padding-top: 10px;
+  margin-top: 2px;
 }
-.playback-actions { justify-content: flex-start; align-items: center; gap: 12px; margin: 0; }
+.playback-actions { justify-content: flex-start; align-items: center; gap: 10px; margin: 0; }
 .playback-actions > #deployment-players { display: contents; }
-.playback-actions .primary-button, .playback-actions .light-button { width: auto; min-height: 42px; margin: 0; padding: 10px 18px; }
+.playback-actions .primary-button, .playback-actions .light-button { width: auto; min-height: 36px; margin: 0; padding: 7px 14px; font-size: 13px; }
 
 /* Disabled state helper */
 a.disabled, button.disabled {
@@ -2634,15 +2634,15 @@ a.disabled, button.disabled {
 #manifest.addon-hub-hero {
   position: relative;
   overflow: hidden;
-  margin: 12px 0 8px;
-  padding: 24px;
+  margin: 8px 0 4px;
+  padding: 16px 18px;
   background: linear-gradient(180deg, rgba(17, 24, 34, 0.95) 0%, rgba(10, 14, 20, 0.98) 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
   box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 #manifest.addon-hub-hero::before {
   content: "";
@@ -2660,20 +2660,20 @@ a.disabled, button.disabled {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  padding-bottom: 16px;
+  gap: 8px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
 }
 .addon-hub-title-group .eyebrow {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--accent-cyan);
   text-transform: uppercase;
 }
 .addon-hub-title-group h2 {
-  margin: 4px 0 0;
-  font-size: 22px;
+  margin: 2px 0 0;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
@@ -2681,12 +2681,12 @@ a.disabled, button.disabled {
 .addon-hub-creds-hint {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: 6px;
+  padding: 5px 12px;
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.22);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 12px;
   color: #fde68a;
   line-height: 1.4;
 }
@@ -2698,7 +2698,8 @@ a.disabled, button.disabled {
 .addon-hub-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
+  align-items: stretch;
 }
 @media (max-width: 1080px) {
   .addon-hub-cards {
@@ -2710,10 +2711,10 @@ a.disabled, button.disabled {
   background: rgba(21, 30, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   backdrop-filter: blur(8px);
@@ -2721,28 +2722,28 @@ a.disabled, button.disabled {
 .addon-hub-card:hover {
   border-color: rgba(255, 255, 255, 0.16);
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .hub-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
 .hub-card-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .hub-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 17px;
   flex-shrink: 0;
 }
 .icon-aiostreams {
@@ -2762,20 +2763,20 @@ a.disabled, button.disabled {
 }
 .hub-card-title-group h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 15.5px;
   font-weight: 700;
   color: var(--text-main);
-  line-height: 1.25;
+  line-height: 1.2;
 }
 .hub-badge {
   display: inline-block;
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 2px 8px;
+  padding: 1.5px 6px;
   border-radius: 9999px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .badge-streams {
   background: rgba(245, 158, 11, 0.14);
@@ -2794,8 +2795,8 @@ a.disabled, button.disabled {
 }
 .hub-card-desc {
   margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--text-muted);
 }
 
@@ -2804,28 +2805,34 @@ a.disabled, button.disabled {
   background: #080c10;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.addon-hub-card .code-label {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .addon-hub-card .manifest-preview code {
-  padding: 10px 12px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-all;
-  min-height: 58px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  min-height: auto;
   color: #7dd3fc;
 }
 
 .hub-share-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 .hub-share-divider {
   border-top: 1px solid var(--line);
-  margin-top: 8px;
-  padding-top: 10px;
+  margin-top: 5px;
+  padding-top: 6px;
 }
 .hub-share-header {
   display: flex;
@@ -2833,48 +2840,76 @@ a.disabled, button.disabled {
   align-items: center;
 }
 .hub-share-title {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-main);
 }
 .hub-share-tag {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
+  padding: 1.5px 5px;
   border-radius: 4px;
 }
 .hub-endpoint-preview {
   margin: 0;
 }
+.hub-endpoint-preview .code-label {
+  padding: 2px 8px;
+  font-size: 10px;
+}
 .hub-endpoint-preview code {
   min-height: auto !important;
-  padding: 8px 12px !important;
-  font-size: 12px;
-  color: #c084fc;
+  padding: 5px 8px !important;
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+  color: #c084fc !important;
+}
+
+.hub-share-inline-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.hub-share-inline-row .manifest-preview {
+  flex: 1;
+  min-width: 0;
+}
+.hub-share-inline-row .hub-card-actions {
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+.hub-share-inline-row .hub-card-actions .light-button {
+  height: 100%;
+  white-space: nowrap;
 }
 
 .hub-card-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 .hub-card-actions .primary-button {
-  padding: 8px 16px;
-  font-size: 13px;
-  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 32px;
   width: auto;
   margin: 0;
 }
 .hub-card-actions .light-button {
-  padding: 8px 14px;
-  font-size: 13px;
-  min-height: 36px;
+  padding: 6px 11px;
+  font-size: 12px;
+  min-height: 32px;
   width: auto;
   margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2884,7 +2919,7 @@ a.disabled, button.disabled {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -2894,9 +2929,9 @@ a.disabled, button.disabled {
   transform: translateY(-1px);
 }
 .hub-card-actions .subtle-link {
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--accent-cyan);
-  padding: 4px 6px;
+  padding: 3px 5px;
   margin: 0;
   text-decoration: none;
 }
@@ -2905,14 +2940,29 @@ a.disabled, button.disabled {
   text-decoration: underline;
 }
 
+.hub-share-actions {
+  margin-top: 0;
+  padding-top: 2px;
+  gap: 4px 6px;
+}
+.hub-share-actions .light-button {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  min-height: 28px;
+}
+.hub-share-actions .mini-action-btn {
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
 /* Quick Downloads & Tools Toolbar */
 .addon-hub-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
-  padding: 12px 18px;
+  gap: 10px;
+  padding: 8px 14px;
   background: rgba(11, 15, 21, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);
@@ -2921,24 +2971,24 @@ a.disabled, button.disabled {
 .hub-toolbar-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
+  gap: 6px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-main);
 }
 .hub-toolbar-icon {
-  font-size: 17px;
+  font-size: 15px;
 }
 .hub-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .hub-tool-btn {
-  font-size: 12.5px;
-  padding: 7px 14px;
-  min-height: 34px;
+  font-size: 12px;
+  padding: 5px 12px;
+  min-height: 30px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);

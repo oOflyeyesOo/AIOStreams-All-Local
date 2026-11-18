@@ -591,3 +591,74 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(preset["type"], "torznab")
             self.assertTrue(preset["enabled"])
             self.assertEqual(preset["options"]["url"], "http://bitmagnet:3333/torznab")
+
+    def test_deprecated_presets_removal(self):
+        base = {
+            "presets": [
+                {"type": "comet", "instanceId": "comet-preset", "options": {}},
+                {"type": "sootio", "instanceId": "sootio-preset", "options": {}},
+                {"type": "custom", "instanceId": "custom-debrid-search", "options": {"name": "DS"}},
+                {"type": "custom", "instanceId": "clean-custom-1", "options": {"url": "http://comet:8000"}},
+                {"type": "custom", "instanceId": "clean-custom-2", "options": {"manifestUrl": "http://sootio:55771/manifest.json"}},
+                {"type": "custom", "instanceId": "clean-custom-3", "options": {"url": "http://debrid-search:5000/api"}},
+                {"type": "prowlarr", "instanceId": "prowlarr-scraper", "options": {"sources": ["torrent"]}},
+            ]
+        }
+        with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "key"):
+            config = bootstrap.build_default_config(probe_services=False, base_config=base)
+
+        preset_ids = [p.get("instanceId") for p in config["presets"]]
+        preset_types = [p.get("type") for p in config["presets"]]
+        self.assertNotIn("comet-preset", preset_ids)
+        self.assertNotIn("sootio-preset", preset_ids)
+        self.assertNotIn("custom-debrid-search", preset_ids)
+        self.assertNotIn("clean-custom-1", preset_ids)
+        self.assertNotIn("clean-custom-2", preset_ids)
+        self.assertNotIn("clean-custom-3", preset_ids)
+        self.assertNotIn("comet", preset_types)
+        self.assertNotIn("sootio", preset_types)
+        self.assertIn("prowlarr-scraper", preset_ids)
+
+    def test_groups_strip_removed_presets_and_disable_when_empty(self):
+        base = {
+            "presets": [
+                {"type": "sootio", "instanceId": "sootio-local", "options": {}},
+                {"type": "custom", "instanceId": "comet-local", "options": {"url": "http://comet:8000"}},
+            ],
+            "groups": {
+                "enabled": True,
+                "behaviour": "sequential",
+                "onConditionFailure": "stop",
+                "groupings": [
+                    {"addons": ["sootio-local"], "condition": "true"},
+                    {"addons": ["comet-local", "debrid-search-scraper"], "condition": "count(cached(totalStreams)) == 0"}
+                ]
+            }
+        }
+        config = bootstrap.build_default_config(probe_services=False, base_config=base)
+        self.assertIn("groups", config)
+        self.assertFalse(config["groups"]["enabled"])
+        self.assertEqual(config["groups"]["groupings"], [])
+
+    def test_groups_preserve_valid_addons_and_strip_deprecated(self):
+        base = {
+            "presets": [
+                {"type": "prowlarr", "instanceId": "prowlarr-scraper", "options": {"sources": ["torrent"]}},
+                {"type": "sootio", "instanceId": "sootio-local", "options": {}},
+            ],
+            "groups": {
+                "enabled": True,
+                "behaviour": "sequential",
+                "onConditionFailure": "stop",
+                "groupings": [
+                    {"addons": ["prowlarr-scraper", "sootio-local"], "condition": "true"},
+                    {"addons": ["sootio-local"], "condition": "count(cached(totalStreams)) == 0"}
+                ]
+            }
+        }
+        with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "key"):
+            config = bootstrap.build_default_config(probe_services=False, base_config=base)
+
+        self.assertTrue(config["groups"]["enabled"])
+        self.assertEqual(len(config["groups"]["groupings"]), 1)
+        self.assertEqual(config["groups"]["groupings"][0]["addons"], ["prowlarr-scraper"])

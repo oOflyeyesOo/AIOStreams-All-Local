@@ -1007,6 +1007,25 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     print("[AIOStreams Setup] ⚠️ Timed out waiting for AIOStreams. Provisioning is blocked; check the container and Docker network before retrying.", flush=True)
     return False
 
+DEPRECATED_PRESET_TARGETS = ("comet", "sootio", "debrid-search")
+
+def is_deprecated_preset(preset):
+    """Detect whether a preset belongs to a deprecated or removed scraper/addon."""
+    if not isinstance(preset, dict):
+        return False
+    ptype = str(preset.get("type") or "").lower()
+    pid = str(preset.get("instanceId") or "").lower()
+    opts = preset.get("options") if isinstance(preset.get("options"), dict) else {}
+    url = str(opts.get("url") or "").lower()
+    manifest_url = str(opts.get("manifestUrl") or "").lower()
+    torznab_url = str(opts.get("torznabUrl") or "").lower()
+
+    for target in DEPRECATED_PRESET_TARGETS:
+        if (target in ptype or target in pid or target in url or
+                target in manifest_url or target in torznab_url):
+            return True
+    return False
+
 def build_default_config(aiometadata_manifest=None, *, probe_services=True, base_config=None):
     """Builds our comprehensive Tamtaro All-Local Self-Hosted configuration dictionary."""
     reachable = is_url_reachable if probe_services else lambda *args, **kwargs: True
@@ -1233,6 +1252,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         }
     ])
 
+    removed_preset_ids = set()
+    cleaned_presets = []
+    for p in presets:
+        if is_deprecated_preset(p):
+            if isinstance(p, dict):
+                if p.get("instanceId"):
+                    removed_preset_ids.add(p["instanceId"])
+                if p.get("type"):
+                    removed_preset_ids.add(p["type"])
+        else:
+            cleaned_presets.append(p)
+    presets = cleaned_presets
+
 
     # Ensure knaben is present and enabled for anime
     if not any(p.get("type") == "knaben" for p in presets):
@@ -1382,6 +1414,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     # AIOStreams from rejecting the profile with USER_INVALID_CONFIG on partial/core profiles.
     validated_presets = []
     for p in presets:
+        if is_deprecated_preset(p):
+            if isinstance(p, dict):
+                if p.get("instanceId"):
+                    removed_preset_ids.add(p["instanceId"])
+                if p.get("type"):
+                    removed_preset_ids.add(p["type"])
+            continue
         ptype = p.get("type")
         pid = p.get("instanceId", "")
         opts = p.setdefault("options", {})
@@ -1544,6 +1583,17 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         else:
             validated_presets.append(p)
 
+    for p in presets:
+        if p not in validated_presets and isinstance(p, dict):
+            if p.get("instanceId"):
+                removed_preset_ids.add(p["instanceId"])
+            if p.get("type"):
+                removed_preset_ids.add(p["type"])
+
+    validated_presets = [p for p in validated_presets if not is_deprecated_preset(p)]
+    valid_preset_ids = {p.get("instanceId") for p in validated_presets if isinstance(p, dict) and p.get("instanceId")}
+    valid_preset_types = {p.get("type") for p in validated_presets if isinstance(p, dict) and p.get("type")}
+
     config = dict(base_config)
     # Configure BuiltinProxy so internal Docker scraper streams
     # resolve and stream properly through AIOStreams over the single public port (3001)
@@ -1569,7 +1619,47 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     config["addonDescription"] = "Unified all-in-one local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers."
     config["services"] = services
     config["presets"] = validated_presets
-    config.pop("groups", None)
+
+    # Clean and sanitize groups in user configuration
+    if "groups" in config and isinstance(config["groups"], dict):
+        groupings = config["groups"].get("groupings")
+        if isinstance(groupings, list):
+            def is_removed_addon(addon):
+                if not addon:
+                    return True
+                addon_str = str(addon)
+                addon_lower = addon_str.lower()
+                for target in DEPRECATED_PRESET_TARGETS:
+                    if target in addon_lower:
+                        return True
+                if addon_str in removed_preset_ids:
+                    return True
+                if valid_preset_ids and (addon_str not in valid_preset_ids and addon_str not in valid_preset_types):
+                    return True
+                return False
+
+            updated_groupings = []
+            for g in groupings:
+                if not isinstance(g, dict):
+                    continue
+                addons = g.get("addons")
+                if isinstance(addons, list):
+                    filtered_addons = [a for a in addons if not is_removed_addon(a)]
+                    g["addons"] = filtered_addons
+                    if not filtered_addons:
+                        continue
+                else:
+                    continue
+                updated_groupings.append(g)
+
+            config["groups"]["groupings"] = updated_groupings
+            if not updated_groupings:
+                config["groups"]["enabled"] = False
+        else:
+            config["groups"]["groupings"] = []
+            config["groups"]["enabled"] = False
+    elif "groups" in config and not isinstance(config["groups"], dict):
+        config.pop("groups", None)
 
     # Sanitize formatter to ensure compliance with AIOStreams schema
     if "formatter" in config and isinstance(config["formatter"], dict):
