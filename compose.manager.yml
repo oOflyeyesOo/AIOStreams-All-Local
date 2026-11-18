@@ -273,6 +273,14 @@ services:
         max-file: '3'
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_BITMAGNET:-3333}:3333
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsSL http://localhost:3333/torznab > /dev/null 2>&1 || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     environment:
     - POSTGRES_HOST=shared-postgres
     - POSTGRES_PORT=5432
@@ -581,6 +589,9 @@ services:
     - PORT=7000
     - NODE_OPTIONS=--max-old-space-size=128
     - FANART_APIKEY=${FANART_API_KEY:-}
+    - JIKAN_API_BASE=${JIKAN_API_BASE:-http://jikan-api:80/v4}
+    - ANILIST_TOKEN=${ANILIST_TOKEN:-}
+    - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     networks:
     - stremio-net
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-kitsu:${AIO_IMAGE_TAG:-latest}
@@ -691,6 +702,16 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - mongosh
+      - --eval
+      - db.adminCommand('ping')
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
     - jikan-mongo-data:/data/db
     networks:
@@ -705,16 +726,29 @@ services:
         max-file: '3'
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_JIKAN_API:-8001}:80
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsSL http://localhost:80/v4/anime/1 > /dev/null 2>&1 || curl -fsSL http://localhost/v4/seasons/now > /dev/null 2>&1 || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     environment:
     - DB_CONNECTION=mongodb
     - DB_HOST=jikan-mongo
     - DB_PORT=27017
     - DB_DATABASE=jikan
     - APP_ENV=production
+    - JIKAN_RATE_LIMIT_DURATION=${JIKAN_RATE_LIMIT_DURATION:-1}
+    - JIKAN_RATE_LIMIT_REQUESTS=${JIKAN_RATE_LIMIT_REQUESTS:-60}
+    - JIKAN_MICRO_CACHING_ENABLED=${JIKAN_MICRO_CACHING_ENABLED:-true}
+    - JIKAN_MICRO_CACHING_DURATION=${JIKAN_MICRO_CACHING_DURATION:-10}
     networks:
     - stremio-net
     depends_on:
-    - jikan-mongo
+      jikan-mongo:
+        condition: service_healthy
     volumes: []
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
@@ -766,6 +800,8 @@ services:
     - LOG_LEVEL=info
     - OPENSUBTITLES_API_KEY=${OPENSUBTITLES_API_KEY:-}
     - SUBDL_API_KEY=${SUBDL_API_KEY:-}
+    - SUBSOURCE_API_KEY=${SUBSOURCE_API_KEY:-}
+    - WYZIE_API_KEY=${WYZIE_API_KEY:-}
     volumes:
     - subsense-data:/app/data
     networks:
