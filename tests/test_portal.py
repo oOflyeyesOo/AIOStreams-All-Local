@@ -897,9 +897,24 @@ class PortalTests(unittest.TestCase):
 
     def test_core_profile_marks_excluded_services_off(self):
         with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch("socket.create_connection") as connect:
-            result = portal.probe_integration(("Zilean", "zilean", 8181, "Indexers"))
-            self.assertFalse(result["enabled"])
+            for service, port, group in [
+                ("zilean", 8181, "Indexers"),
+                ("bitmagnet", 3333, "Indexers"),
+                ("flaresolverr", 8191, "Indexers"),
+                ("anime-kitsu", 7000, "Metadata"),
+                ("jikan-api", 80, "Metadata"),
+            ]:
+                result = portal.probe_integration((service.title(), service, port, group))
+                self.assertFalse(result["enabled"])
             connect.assert_not_called()
+
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core,anime-db"}), patch("socket.create_connection"):
+            result = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
+            self.assertTrue(result["enabled"])
+            result = portal.probe_integration(("Jikan API", "jikan-api", 80, "Metadata"))
+            self.assertTrue(result["enabled"])
+            result = portal.probe_integration(("Bitmagnet", "bitmagnet", 3333, "Indexers"))
+            self.assertFalse(result["enabled"])
 
     @patch.object(portal, "playback_readiness", return_value={"ready": True})
     def test_test_playback_endpoint(self, _readiness):

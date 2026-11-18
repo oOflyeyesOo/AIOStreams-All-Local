@@ -165,6 +165,11 @@ def probe_integration(item):
         "postersplus": {"core", "scrapers", "all"},
         "subsense": {"core", "scrapers", "all"},
         "lumiere-db": {"core", "scrapers", "all"},
+        "bitmagnet": {"scrapers", "all"},
+        "zilean": {"scrapers", "all"},
+        "flaresolverr": {"scrapers", "all"},
+        "anime-kitsu": {"anime-db", "all"},
+        "jikan-api": {"anime-db", "all"},
     }
     enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))
     if host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE", "debrid") == "debrid":

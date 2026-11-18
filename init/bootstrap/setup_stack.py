@@ -400,6 +400,8 @@ def setup_prowlarr_indexers():
         "nekobt",
         "dmhy",
         "shana-project",
+        "anirena",
+        "bakabt",
     ]
     for at in anime_targets:
         if at.lower() not in [t.lower() for t in target_list]:
@@ -427,6 +429,10 @@ def setup_prowlarr_indexers():
         "dmhy": "dmhy",
         "shana-project": "shana-project",
         "shana project": "shana-project",
+        "anirena": "anirena",
+        "ani rena": "anirena",
+        "bakabt": "bakabt",
+        "baka bt": "bakabt",
     }
 
     for target in target_list:
@@ -532,6 +538,8 @@ def tune_prowlarr_indexers():
         "nekobt": 20,
         "anibt": 20,
         "dmhy": 20,
+        "anirena": 20,
+        "bakabt": 20,
         "torrentdownload": 30,
     }
     for idx in active_indexers:
@@ -541,7 +549,7 @@ def tune_prowlarr_indexers():
             if idx.get("enable"):
                 idx["enable"] = False
                 updated = True
-        elif not idx.get("enable") and any(essential in name_lower for essential in ["limetorrents", "tokyo tosho", "nyaa", "1337x", "pirate bay", "yts", "eztv", "animetosho", "subsplease", "anibt", "mikan"]):
+        elif not idx.get("enable") and any(essential in name_lower for essential in ["limetorrents", "tokyo tosho", "nyaa", "1337x", "pirate bay", "yts", "eztv", "animetosho", "subsplease", "anibt", "mikan", "anirena", "bakabt"]):
             idx["enable"] = True
             updated = True
         new_pri = 25
@@ -1070,6 +1078,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             u_cand = resolve_path("templates/builtin/usenet-only.json", "/templates/builtin/usenet-only.json")
             if os.path.exists(u_cand):
                 chosen_template_path = u_cand
+        elif streaming_mode in ("anime", "anime-only") or (os.environ.get("AIOMETADATA_TEMPLATE") or "").lower() in ("anime-only", "anime-only.json", "tamtaro-anime-only.json"):
+            a_cand = resolve_path("templates/setup-templates/tamtaro-anime-only.json", "/templates/setup-templates/tamtaro-anime-only.json")
+            if not os.path.exists(a_cand):
+                a_cand = resolve_path("templates/builtin/tamtaro-anime-only.json", "/templates/builtin/tamtaro-anime-only.json")
+            if os.path.exists(a_cand):
+                chosen_template_path = a_cand
         if os.path.exists(chosen_template_path):
             try:
                 with open(chosen_template_path, "r", encoding="utf-8") as f:
@@ -1079,7 +1093,29 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
 
         base_config = template_data.get("config", {})
     else:
+        template_data = {}
+        chosen_template_path = None
         base_config = copy.deepcopy(base_config)
+
+    active_template_str = ""
+    if chosen_template_path:
+        active_template_str += " " + os.path.basename(chosen_template_path)
+    if template_data:
+        active_template_str += " " + str(template_data.get("metadata", {}).get("name", ""))
+        active_template_str += " " + str(template_data.get("metadata", {}).get("id", ""))
+        active_template_str += " " + str(template_data.get("name", ""))
+    if isinstance(base_config, dict):
+        active_template_str += " " + str(base_config.get("name", ""))
+        active_template_str += " " + str(base_config.get("id", ""))
+        active_template_str += " " + str(base_config.get("addonName", ""))
+        active_template_str += " " + str(base_config.get("metadata", {}).get("name", ""))
+        active_template_str += " " + str(base_config.get("metadata", {}).get("id", ""))
+    is_anime_variant = "anime" in active_template_str.lower() or (
+        isinstance(base_config, dict) and any(
+            p.get("type") in ("anime-tosho-new", "tsukihime", "neko-bt") and p.get("enabled")
+            for p in base_config.get("presets", [])
+        )
+    )
 
     # Ensure services are populated with InfiniDysk nzbdav and any provided Debrid keys
     nzbdav_key = SECRET_KEY if SECRET_KEY else "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09"
@@ -1587,7 +1623,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             compatible={'alldebrid','debrider','debridlink','easydebrid','offcloud','premiumize','pikpak','realdebrid','torbox','torrin'}
             if ptype=='tsukihime':compatible.add('nzbdav')
             selected=[s['id'] for s in services if s.get('enabled') and s['id'] in compatible]
-            p["enabled"] = os.environ.get('ENABLE_ANIME_SOURCES','false')=='true' and bool(selected)
+            anime_enabled = (
+                os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
+                or 'anime' in (os.environ.get('AIOMETADATA_TEMPLATE') or '').lower()
+                or is_anime_variant
+                or bool(p.get("enabled", False))
+            )
+            p["enabled"] = bool(anime_enabled and selected)
             opts['services']=selected
             opts['mediaTypes']=['anime']
             opts['useMultipleInstances']=False
