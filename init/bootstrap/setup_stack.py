@@ -1632,7 +1632,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"
-    config["accessKey"] = ADDON_PASSWORD
+    config["accessKey"] = os.environ.get("CONFIG_ACCESS_KEY") or ADDON_PASSWORD
     config["addonDescription"] = "Unified all-in-one local scraper & debrid super-addon powered by Tamtaro SEL sorting, Vidhin regexes, Seadex, Posters+, and local containers."
     config["services"] = services
     config["presets"] = validated_presets
@@ -1868,7 +1868,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
             "password": profile_password
         }
 
-        res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload)
+        res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload, headers=auth_headers)
         if isinstance(res, dict) and res.get("success") and "data" in res:
             uuid = res["data"].get("uuid")
             encrypted_password = res["data"].get("encryptedPassword") or res["data"].get("encrypted_password")
@@ -1879,7 +1879,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
             print(f"[AIOStreams Setup] Note registering default user: {err}. Attempting fallback registration with standard tamtaro formatter...", flush=True)
             config["formatter"] = {"id": "tamtaro"}
             create_payload["config"] = config
-            res2 = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload)
+            res2 = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload, headers=auth_headers)
             if isinstance(res2, dict) and res2.get("success") and "data" in res2:
                 uuid = res2["data"].get("uuid")
                 encrypted_password = res2["data"].get("encryptedPassword") or res2["data"].get("encrypted_password")
