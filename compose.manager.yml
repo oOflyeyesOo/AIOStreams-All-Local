@@ -178,7 +178,7 @@ services:
     - REMUXDB_ENABLED=${ENABLE_REMUXDB:-true}
     - REMUXDB_BASE_URL=${REMUXDB_BASE_URL:-https://remuxdb.1632022.xyz}
     - MEDIA_INFO_PROBE=${MEDIA_INFO_PROBE:-true}
-    - MEDIA_INFO_PROBE_ON=stremio,jellyfin,library
+    - MEDIA_INFO_PROBE_ON=playback,library
     - MEDIA_INFO_BACKFILL=stremthru,remuxdb
     - BUILTIN_PROWLARR_URL=http://prowlarr:9696
     - BUILTIN_PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
@@ -190,7 +190,7 @@ services:
     - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
     - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
     - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
-    - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-300}
+    - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-1800}
     - PIPELINE_CACHE_TTL=${PIPELINE_CACHE_TTL:-300}
     - ENCRYPT_STREMTHRU_URLS=false
     - TMDB_API_KEY=${TMDB_API_KEY:-}
@@ -271,6 +271,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+    mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_BITMAGNET:-3333}:3333
     healthcheck:
@@ -373,8 +374,10 @@ services:
         max-size: 10m
         max-file: '3'
     depends_on:
-    - aiostreams
-    - controller
+      aiostreams:
+        condition: service_healthy
+      controller:
+        condition: service_started
     volumes:
     - aiostreams-data:/data/aiostreams
     - aio-config:/app
@@ -655,9 +658,9 @@ services:
     - stremio-net
     depends_on:
       shared-redis:
-        condition: service_started
+        condition: service_healthy
       shared-postgres:
-        condition: service_started
+        condition: service_healthy
       init-postgres:
         condition: service_completed_successfully
       init-configs:
@@ -703,6 +706,8 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+    mem_limit: ${JIKAN_MONGO_MEM_LIMIT:-512m}
+    command: mongod --wiredTigerCacheSizeGB 0.25
     healthcheck:
       test:
       - CMD
@@ -819,6 +824,7 @@ services:
         max-size: 10m
         max-file: '3'
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
     - redis-data:/data
     healthcheck:
@@ -868,6 +874,7 @@ services:
         max-file: '3'
     mem_limit: ${POSTGRES_MEM_LIMIT:-1024m}
     shm_size: 512mb
+    command: postgres -c shared_buffers=256MB -c work_mem=16MB -c random_page_cost=1.1 -c synchronous_commit=off
     environment:
     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
     - POSTGRES_HOST_AUTH_METHOD=trust

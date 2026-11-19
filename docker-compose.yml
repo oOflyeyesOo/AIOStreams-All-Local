@@ -152,7 +152,7 @@ services:
       - REMUXDB_ENABLED=${ENABLE_REMUXDB:-true}
       - REMUXDB_BASE_URL=${REMUXDB_BASE_URL:-https://remuxdb.1632022.xyz}
       - MEDIA_INFO_PROBE=${MEDIA_INFO_PROBE:-true}
-      - MEDIA_INFO_PROBE_ON=stremio,jellyfin,library
+      - MEDIA_INFO_PROBE_ON=playback,library
       - MEDIA_INFO_BACKFILL=stremthru,remuxdb
 
       # --- Internal Tracker Integrations ---
@@ -168,7 +168,7 @@ services:
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
       - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
-      - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-300}
+      - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-1800}
       - PIPELINE_CACHE_TTL=${PIPELINE_CACHE_TTL:-300}
       - ENCRYPT_STREMTHRU_URLS=false
 
@@ -252,6 +252,7 @@ services:
     profiles: ["scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
     ports:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:3333:3333"
     healthcheck:
@@ -356,7 +357,8 @@ services:
     restart: "no"
     logging: *default-logging
     depends_on:
-      - aiostreams
+      aiostreams:
+        condition: service_healthy
     volumes:
       - ./init/bootstrap:/init:ro
       - ./data/aiostreams:/data/aiostreams
@@ -630,9 +632,9 @@ services:
       - stremio-net
     depends_on:
       shared-redis:
-        condition: service_started
+        condition: service_healthy
       shared-postgres:
-        condition: service_started
+        condition: service_healthy
       init-postgres:
         condition: service_completed_successfully
       init-configs:
@@ -677,6 +679,8 @@ services:
     profiles: ["anime-db", "all"]
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: ${JIKAN_MONGO_MEM_LIMIT:-512m}
+    command: mongod --wiredTigerCacheSizeGB 0.25
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -785,6 +789,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
       - ./data/redis:/data
     healthcheck:
@@ -836,6 +841,7 @@ services:
     logging: *default-logging
     mem_limit: ${POSTGRES_MEM_LIMIT:-1024m}
     shm_size: 512mb
+    command: postgres -c shared_buffers=256MB -c work_mem=16MB -c random_page_cost=1.1 -c synchronous_commit=off
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
       - POSTGRES_HOST_AUTH_METHOD=trust

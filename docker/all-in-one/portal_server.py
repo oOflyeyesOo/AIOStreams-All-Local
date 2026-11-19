@@ -1196,10 +1196,14 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return False
 
     def authorize(self):
-        auth_required = (os.environ.get("PORTAL_AUTH_REQUIRED") or read_saved_env().get("PORTAL_AUTH_REQUIRED", "false")).lower() in ("true", "1", "yes")
+        auth_required = (os.environ.get("PORTAL_AUTH_REQUIRED") or read_saved_env().get("PORTAL_AUTH_REQUIRED", "true")).lower() in ("true", "1", "yes")
         if not auth_required:
             return True
-        password = read_saved_env().get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
+        password = read_saved_env().get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD")
+        if not password:
+             # If auth is required but no password is set, fail.
+             self.send_error(401, "No authentication password configured.")
+             return False
         client = self.client_address[0]
         now = time.monotonic()
         if len(AUTH_FAILURES) > 100:
@@ -1263,7 +1267,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return None
         return super().send_head()
 
-    def proxy_to_service(self, service, subpath, query="", is_alias=False):
+    def proxy_to_service(self, service, subpath, query="", is_alias=False, watch_base=None):
         if service not in INTERNAL_SERVICE_TARGETS:
             self.send_error(404, f"Service '{service}' not found")
             return
@@ -1420,7 +1424,10 @@ button:hover {{ background: #0369a1; }}
                     encoding = match.group(1)
                 html_text = response_data.decode(encoding, errors="replace")
                 if is_alias:
-                    base_href = "/jellyfin/web/" if "/web" in normalized_subpath else "/jellyfin/"
+                    if watch_base:
+                        base_href = watch_base
+                    else:
+                        base_href = "/jellyfin/web/" if "/web" in normalized_subpath else "/jellyfin/"
                 else:
                     base_href = f"/service-proxy/{service}/"
 
@@ -1557,9 +1564,138 @@ button:hover {{ background: #0369a1; }}
         self.send_response(200)
         self.end_headers()
 
+    def _get_jellyfin_credentials(self):
+        """Return (uuid, encrypted_password) from install data or env, or (None, None)."""
+        install_info = {}
+        candidates = [
+            os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
+            "/data/aiostreams/aiostreams_install.json",
+            "/data/aiostreams_install.json",
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                try:
+                    with open(c, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    enc_cand = data.get("encrypted_password") or data.get("encryptedPassword")
+                    if data.get("uuid") and enc_cand:
+                        install_info = data
+                        break
+                    elif not install_info:
+                        install_info = data
+                except Exception:
+                    pass
+        env_vars = read_saved_env()
+        raw_uuid = install_info.get("uuid") or env_vars.get("DEFAULT_AIO_UUID")
+        raw_enc = (install_info.get("encrypted_password") or install_info.get("encryptedPassword")
+                   or env_vars.get("DEFAULT_AIO_ENCRYPTED_PASSWORD"))
+        uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() not in ("null", "None", "") else None
+        enc = str(raw_enc).strip() if raw_enc and str(raw_enc).strip() not in ("null", "None", "") else None
+        return uuid, enc
+
+    def handle_watch_route(self, subpath, query):
+        """Serve /watch[/...] as a credential-free alias for the Jellyfin web player.
+
+        The browser address bar stays at /watch/... throughout; the uid and
+        encrypted password are resolved internally and never appear in any
+        redirected URL or base-href injected into HTML responses.
+        """
+        jellyfin_enabled = (
+            read_saved_env().get("JELLYFIN_ENABLED") or
+            os.environ.get("JELLYFIN_ENABLED", "true")
+        ).lower() not in ("false", "0", "no")
+
+        if not jellyfin_enabled:
+            body = (
+                b"<!DOCTYPE html><html lang=en><head><meta charset=utf-8>"
+                b"<meta name=viewport content='width=device-width,initial-scale=1.0'>"
+                b"<title>Media Player Offline</title><style>"
+                b"body{background:#0b0f17;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1.5rem;box-sizing:border-box;}"
+                b".card{background:#151e2a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:2.5rem;max-width:480px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.5);}"
+                b"h2{margin:0 0 1rem;color:#f8fafc;font-size:1.4rem;}"
+                b"p{color:#94a3b8;font-size:0.95rem;line-height:1.5;margin:0 0 1.75rem;}"
+                b"a.btn{display:inline-block;background:#3b82f6;color:#fff;padding:0.7rem 1.4rem;border-radius:8px;text-decoration:none;font-weight:500;font-size:0.95rem;transition:background 0.2s;}"
+                b"a.btn:hover{background:#2563eb;}"
+                b"</style></head><body><div class=card>"
+                b"<h2>Media Player Disabled</h2>"
+                b"<p>The integrated media player is currently disabled in your AIO stack settings. Enable Jellyfin in the portal settings to activate it.</p>"
+                b"<a href='/' class=btn>Return to Portal &rarr;</a>"
+                b"</div></body></html>"
+            )
+            self.send_response(503)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        uuid, encrypted_password = self._get_jellyfin_credentials()
+
+        if not uuid or not encrypted_password:
+            # Credentials not ready yet — stack may not be set up
+            body = (
+                b"<!DOCTYPE html><html lang=en><head><meta charset=utf-8>"
+                b"<meta name=viewport content='width=device-width,initial-scale=1.0'>"
+                b"<title>Media Player Setup Required</title><style>"
+                b"body{background:#0b0f17;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1.5rem;box-sizing:border-box;}"
+                b".card{background:#151e2a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:2.5rem;max-width:480px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.5);}"
+                b"h2{margin:0 0 1rem;color:#f8fafc;font-size:1.4rem;}"
+                b"p{color:#94a3b8;font-size:0.95rem;line-height:1.5;margin:0 0 1.75rem;}"
+                b"a.btn{display:inline-block;background:#3b82f6;color:#fff;padding:0.7rem 1.4rem;border-radius:8px;text-decoration:none;font-weight:500;font-size:0.95rem;transition:background 0.2s;}"
+                b"a.btn:hover{background:#2563eb;}"
+                b"</style></head><body><div class=card>"
+                b"<h2>Stack Setup Not Complete</h2>"
+                b"<p>Initial stack setup has not been finalized yet. Complete your setup in the AIO portal to provision your media credentials.</p>"
+                b"<a href='/' class=btn>Open Setup Portal &rarr;</a>"
+                b"</div></body></html>"
+            )
+            self.send_response(503)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # Map /watch[/rest] → /jellyfin/<uid>/<enc>/web[/rest]
+        # If subpath is empty or just "/", send to the web player root
+        if not subpath or subpath == "/":
+            internal_path = f"/jellyfin/{uuid}/{encrypted_password}/web/"
+        else:
+            # Strip a leading /web prefix if the browser already followed a rewrite
+            stripped = re.sub(r"^/web(?=/|$)", "", subpath)
+            internal_path = f"/jellyfin/{uuid}/{encrypted_password}/web{stripped}"
+
+        # Temporarily swap the path so proxy_to_service sees the credential path,
+        # then restore it after so Location rewrites stay on /watch/
+        original_path = self.path
+        self.path = internal_path + (f"?{query}" if query else "")
+
+        # Delegate to the existing aiostreams proxy, treating this as an alias
+        # so Location and base-href rewrites are applied.  We override the
+        # base_href injection below via the is_watch flag.
+        try:
+            self._watch_base = "/watch/"  # signal to proxy_to_service rewriter
+            self.proxy_to_service("aiostreams", internal_path, query, is_alias=True,
+                                  watch_base="/watch/")
+        finally:
+            self.path = original_path
+            self._watch_base = None
+
     def do_GET(self):
         url_parts = urllib.parse.urlparse(self.path)
         path = url_parts.path
+
+        # /watch — credential-free Jellyfin web player alias
+        if path == "/watch":
+            qs = f"?{url_parts.query}" if url_parts.query else ""
+            self.send_response(302)
+            self.send_header("Location", f"/watch/{qs}")
+            self.end_headers()
+            return
+        if path.startswith("/watch/"):
+            subpath = path[len("/watch"):]  # e.g. "/" or "/Items/..."
+            self.handle_watch_route(subpath or "/", url_parts.query)
+            return
 
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
             self.handle_proxy_route(path, url_parts.query)
@@ -2383,6 +2519,7 @@ button:hover {{ background: #0369a1; }}
             "aliasManifest": alias_manifest,
             "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/stremio/configure",
             "aiostreamsDashboard": f"{base_url}/dashboard",
+            "watchUrl": "/watch/",
             "jellyfinServer": jellyfin_server,
             "jellyfinWebPlayer": jellyfin_web_player,
             "jellyfinWebPlayerProxy": jellyfin_web_player_proxy,

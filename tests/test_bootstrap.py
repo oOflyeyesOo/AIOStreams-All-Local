@@ -244,7 +244,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(config['yearMatching']['enabled'])
         self.assertFalse(config['precacheNextEpisode'])
         self.assertFalse(config['failover']['precacheFailover'])
-        self.assertEqual(config['failover']['parallel'],1)
+        self.assertEqual(config['failover']['parallel'],2)
         with patch.object(bootstrap,'TMDB_API_KEY','fixture-metadata-key'):
             configured=bootstrap.build_default_config(probe_services=False)
         self.assertTrue(configured['titleMatching']['enabled'])

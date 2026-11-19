@@ -97,7 +97,7 @@ def setup_flaresolverr():
         "tags": [],
         "fields": [
             {"name": "host", "value": FLARESOLVERR_URL},
-            {"name": "requestTimeout", "value": 60}
+            {"name": "requestTimeout", "value": 15}
         ]
     }
     res = make_request("/api/v1/indexerproxy", method="POST", data=payload)

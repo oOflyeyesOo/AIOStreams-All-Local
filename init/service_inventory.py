@@ -11,6 +11,7 @@ INTEGRATIONS = (
     ("SubSense", "subsense", 3100, "Subtitles"),
     ("InfiniDysk", "infinidysk", 3000, "Usenet"),
     ("StremThru", "stremthru", 8080, "Proxies"),
+    ("Bitmagnet", "bitmagnet", 3333, "Indexers"),
     ("LumiereDB", "lumiere-db", 8000, "Metadata"),
 )
 

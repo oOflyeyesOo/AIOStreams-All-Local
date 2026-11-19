@@ -85,6 +85,7 @@ start_stack() {
     if [ ! -f .env ] && [ -f .env.example ]; then
         echo -e "${YELLOW}[!] .env not found. Copying .env.example and generating unique security keys...${NC}"
         cp .env.example .env
+        chmod 600 .env
         RAND_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || od -vN 32 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_ADDON=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')
         RAND_PG=$(openssl rand -hex 16 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(16))" 2>/dev/null || od -vN 16 -An -tx1 /dev/urandom | tr -d ' \n')

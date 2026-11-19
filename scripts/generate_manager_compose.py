@@ -81,7 +81,13 @@ def generate(source):
     controller = source['services']['controller']
     controller['environment'].append('AIO_COMPOSE_FILE=compose.manager.yml')
     controller['depends_on'] = {'portal': {'condition': 'service_healthy'}}
-    source['services']['stack-bootstrap']['depends_on'].append('controller')
+    bootstrap_deps = source['services']['stack-bootstrap'].get('depends_on')
+    if isinstance(bootstrap_deps, list):
+        bootstrap_deps.append('controller')
+    elif isinstance(bootstrap_deps, dict):
+        bootstrap_deps['controller'] = {'condition': 'service_started'}
+    else:
+        source['services']['stack-bootstrap']['depends_on'] = ['controller']
     source['volumes'] = volumes
     return source
 

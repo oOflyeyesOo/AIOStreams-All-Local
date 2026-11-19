@@ -197,23 +197,6 @@ async function api(path, options, attempt=0) {
   }
 }
 function notify(message, isError = false) {
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = message;
-    toast.hidden = false;
-    if (isError) {
-      toast.style.borderColor = 'rgba(244, 63, 94, 0.4)';
-      toast.style.background = '#2a1215';
-      toast.style.color = '#fecdd3';
-    } else {
-      toast.style.borderColor = '';
-      toast.style.background = '';
-      toast.style.color = '';
-    }
-    clearTimeout(notify.timer);
-    notify.timer = setTimeout(() => { toast.hidden = true; }, 5000);
-  }
-
   // Modern Toast Stack (Roadmap §9)
   const container = document.getElementById('toast-container');
   if (container) {
@@ -438,7 +421,7 @@ async function loadManifest() {
     if (installAioWeb) {
       installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
     }
-    const playerUrl = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer || `${aioBase}/jellyfin/web`;
+    const playerUrl = info.watchUrl || info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer || '/watch/';
     const aioPlayer = document.getElementById('aiostreams-player-action');
     if (aioPlayer) {
       aioPlayer.href = playerUrl;
@@ -889,8 +872,8 @@ async function refreshServices() {
     if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
       const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
       const aioOrigin = service.uiUrl ? new URL(service.uiUrl, location.origin).origin : `http://${location.hostname}:${aioPort}`;
-      const playerUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web`;
-      const playerEmbedUrl = cachedManifestInfo?.jellyfinWebPlayerProxy || '/jellyfin/web/' || playerUrl;
+      const playerUrl = cachedManifestInfo?.watchUrl || cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || '/watch/';
+      const playerEmbedUrl = cachedManifestInfo?.watchUrl || '/watch/';
 
       const playerEmbedBtn = document.createElement('button');
       playerEmbedBtn.type = 'button';
@@ -1000,7 +983,17 @@ async function refreshServices() {
     grid.append(card);
   }
   const active=result.integrations.filter(item=>item.enabled!==false);
-  document.getElementById('services-summary').textContent = `${active.filter(item=>item.reachable).length} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
+  const reachableCount = active.filter(item=>item.reachable).length;
+  document.getElementById('services-summary').textContent = `${reachableCount} of ${active.length} enabled services reachable · ${result.integrations.length-active.length} optional off`;
+
+  const topbarHealth = document.getElementById('topbar-health-text');
+  const topbarDot = document.getElementById('topbar-status-dot');
+  if (topbarHealth) {
+    topbarHealth.textContent = `${reachableCount}/${active.length} Online`;
+  }
+  if (topbarDot) {
+    topbarDot.style.background = reachableCount === active.length ? 'var(--accent-green, #10b981)' : (reachableCount > 0 ? 'var(--accent-gold, #f59e0b)' : 'var(--accent-red, #ef4444)');
+  }
 
   const bitmagnetPill = document.getElementById('bitmagnet-status-pill');
   if (bitmagnetPill) {
@@ -2181,6 +2174,11 @@ async function runOperations() {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
+      if (hash === '#telemetry' || hash === '#fleet-details' || hash === '#health') {
+        if (typeof refreshHealth === 'function') {
+          refreshHealth();
+        }
+      }
     } catch (_) {}
   }
 
@@ -2195,8 +2193,15 @@ async function runOperations() {
     });
   }
 
-  if (typeof window !== 'undefined' && window.location && window.location.hash) {
-    setTimeout(() => revealAndScroll(window.location.hash), 150);
+  if (typeof window !== 'undefined') {
+    if (window.location && window.location.hash) {
+      setTimeout(() => revealAndScroll(window.location.hash), 150);
+    }
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('hashchange', () => {
+        revealAndScroll(window.location.hash);
+      });
+    }
   }
 
   document.getElementById('service-frame-reload')?.addEventListener('click', () => {

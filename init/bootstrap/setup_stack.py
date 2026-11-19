@@ -355,7 +355,7 @@ def setup_prowlarr_flaresolverr():
         "tags": [],
         "fields": [
             {"name": "host", "value": FLARESOLVERR_URL},
-            {"name": "requestTimeout", "value": 60}
+            {"name": "requestTimeout", "value": 15}
         ]
     }
     res = make_request(f"{PROWLARR_URL}/api/v1/indexerproxy", method="POST", data=payload, headers=headers)
@@ -1221,7 +1221,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "prowlarrUrl": PROWLARR_URL,
                 "prowlarrApiKey": PROWLARR_API_KEY,
                 "sources": ["torrent"],
-                "timeout": 10000,
+                "timeout": 6000,
                 "resources": ["stream"],
                 "mediaTypes": []
             }
@@ -1232,7 +1232,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Knaben (Anime)",
-                "timeout": 8000,
+                "timeout": 6000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -1245,7 +1245,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "options": {
                 "name": "StremThru Torz (Local)",
                 "url": f"{STREMTHRU_URL}/stremio/torz/",
-                "timeout": 8000,
+                "timeout": 5000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "includeP2P": False,
@@ -1259,7 +1259,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "options": {
                 "name": "StremThru Store (Local)",
                 "url": f"{STREMTHRU_URL}/stremio/store/",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["catalog", "meta", "stream"],
                 "mediaTypes": [],
                 "hideStreams": False,
@@ -1273,7 +1273,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Torrentio",
-                "timeout": 8000,
+                "timeout": 5000,
                 "resources": ["stream"],
                 "providers": [],
                 "useMultipleInstances": False
@@ -1548,7 +1548,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
                 continue
             opts["name"] = "Torrentio"
-            opts["timeout"] = 8000
+            opts["timeout"] = 5000
             custom_url = os.environ.get("TORRENTIO_URL") or os.environ.get("KNIGHTCRAWLER_URL", "")
             if custom_url:
                 opts["url"] = custom_url
@@ -1565,7 +1565,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("url", PROWLARR_URL)
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
-                opts["timeout"] = int(opts.get("timeout") or 10000)
+                opts["timeout"] = int(opts.get("timeout") or 6000)
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
                 validated_presets.append(p)
@@ -1581,7 +1581,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
                 opts.setdefault("services", ["nzbdav"])
                 opts.setdefault("sources", ["usenet"])
-                opts["timeout"] = int(opts.get("timeout") or 8000)
+                opts["timeout"] = int(opts.get("timeout") or 6000)
                 validated_presets.append(p)
             else:
                 validated_presets.append(p)
@@ -1604,7 +1604,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            curr_timeout = int(opts.get("timeout") or 5000)
+            curr_timeout = int(opts.get("timeout") or 4000)
             opts["timeout"] = min(max(curr_timeout, 3000), 5000)
             if reachable(f"{STREMTHRU_URL}/stremio/store/manifest.json", timeout=1.0):
                 p["enabled"] = True
@@ -1621,8 +1621,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['services']=['easynews']
             opts['useMultipleInstances']=False
             opts['paginate']=False
-            curr_timeout = int(opts.get("timeout") or 8000)
-            opts["timeout"] = 8000
+            curr_timeout = int(opts.get("timeout") or 6000)
+            opts["timeout"] = 6000
             opts["services"] = ["easynews"]
             if p["enabled"]:
                 print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
@@ -1671,7 +1671,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            opts["timeout"] = int(opts.get("timeout") or 4000)
+            opts["timeout"] = int(opts.get("timeout") or 3000)
             bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
             api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
             torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
@@ -1915,9 +1915,9 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 config[feature]['enabled']=False
         if isinstance(config.get('bitrate'),dict):
             config['bitrate']['useMetadataRuntime']=False
-    # Failover remains sequential; prefetch must not create hidden extra calls.
+    # Probe 2 candidates concurrently on stream failover for rapid fallback recovery
     if isinstance(config.get('failover'),dict):
-        config['failover']['parallel']=1
+        config['failover']['parallel']=2
         config['failover']['precacheFailover']=False
     # TVDB is consumed by AIOMetadata. Do not make AIOStreams registration
     # depend on an optional TVDB endpoint or key being reachable.

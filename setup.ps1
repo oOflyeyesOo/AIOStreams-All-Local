@@ -108,16 +108,16 @@ function Test-SystemPrerequisites {
     # 2. Port conflict test
     Write-Info "Checking target port availability..."
     $portsToCheck = @(
-        @{ Port = 3001; Service = "AIOStreams" },
-        @{ Port = 8181; Service = "Zilean (DMM Cache)" },
-        @{ Port = 9696; Service = "Prowlarr" },
-        @{ Port = 8191; Service = "FlareSolverr" },
-        @{ Port = 8080; Service = "StremThru Proxy" },
-        @{ Port = 7005; Service = "Anime Kitsu" },
-        @{ Port = 4005; Service = "AIOMetadata" },
-        @{ Port = 3100; Service = "SubSense Subtitles" },
-        @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" },
-        @{ Port = 3011; Service = "Stremio Debrid Search (Personal Cloud)" },
+        @{ Port = 3001; Service = "AIOStreams" }
+        @{ Port = 8181; Service = "Zilean (DMM Cache)" }
+        @{ Port = 9696; Service = "Prowlarr" }
+        @{ Port = 8191; Service = "FlareSolverr" }
+        @{ Port = 8080; Service = "StremThru Proxy" }
+        @{ Port = 7005; Service = "Anime Kitsu" }
+        @{ Port = 4005; Service = "AIOMetadata" }
+        @{ Port = 3100; Service = "SubSense Subtitles" }
+        @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" }
+        @{ Port = 3333; Service = "Bitmagnet DHT Crawler" }
     )
 
     $conflicts = @()
@@ -321,8 +321,11 @@ function Start-Stack {
     }
     $envLines = Get-Content $envPath
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $keysToEnsure = @("SECRET_KEY", "POSTGRES_PASSWORD", "PROWLARR_API_KEY", "STREMTHRU_AUTH", "POSTERSPLUS_ACCESS_KEY", "ADDON_PASSWORD")
+    foreach ($key in $keysToEnsure) {
         $line = $envLines | Where-Object { $_ -match "^$key=" } | Select-Object -Last 1
         $value = if ($line) { $line.Substring($key.Length + 1) } else { "" }
+        if ([string]::IsNullOrWhiteSpace($value) -or $value -in @("admin", "postgres_supersecret_db_pass_2026", "prowlarr_internal_secret_key_99")) {
             $bytes = New-Object byte[] 24
             $rng.GetBytes($bytes)
             $generated = -join ($bytes | ForEach-Object { "{0:x2}" -f $_ })
