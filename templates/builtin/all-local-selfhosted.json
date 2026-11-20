@@ -307,11 +307,7 @@
           "library",
           "subtitles",
           "sizes",
-          "idMatched",
-          "audioTags",
-          "visualTags",
-          "codecs",
-          "releaseGroups"
+          "idMatched"
         ]
       }
     },

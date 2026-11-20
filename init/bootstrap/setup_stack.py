@@ -1889,15 +1889,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "precacheFailover": True,
         })
     if "deduplicator" in config and isinstance(config["deduplicator"], dict):
-        merge_cfg = config["deduplicator"].setdefault("merge", {
+        config["deduplicator"].setdefault("merge", {
             "enabled": True,
             "failoverVariants": True,
-            "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched", "audioTags", "visualTags", "codecs", "releaseGroups"],
+            "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched"],
         })
-        if isinstance(merge_cfg, dict) and "fields" in merge_cfg and isinstance(merge_cfg["fields"], list):
-            for extra_field in ["audioTags", "visualTags", "codecs", "releaseGroups"]:
-                if extra_field not in merge_cfg["fields"]:
-                    merge_cfg["fields"].append(extra_field)
 
     if "sortCriteria" in config and isinstance(config["sortCriteria"], dict):
         glob_sort = config["sortCriteria"].get("global", [])

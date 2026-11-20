@@ -1141,12 +1141,18 @@ def get_cached_watchdog_telemetry(max_age=3.0):
             return {"healthy_count": 0, "total_probed": 0, "services": [], "error": str(e)}
 
 PREFERENCES_FILE = os.path.join(WEB_ROOT, "data/player_preferences.json")
+_PLAYER_PREFS_MEMORY_CACHE = None
 
 def get_player_preferences():
+    global _PLAYER_PREFS_MEMORY_CACHE
+    if _PLAYER_PREFS_MEMORY_CACHE is not None:
+        return dict(_PLAYER_PREFS_MEMORY_CACHE)
     if os.path.isfile(PREFERENCES_FILE):
         try:
             with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                _PLAYER_PREFS_MEMORY_CACHE = data
+                return data
         except Exception:
             pass
     return {
@@ -1158,10 +1164,15 @@ def get_player_preferences():
     }
 
 def save_player_preferences(prefs):
-    os.makedirs(os.path.dirname(PREFERENCES_FILE), exist_ok=True)
-    with open(PREFERENCES_FILE, "w", encoding="utf-8") as f:
-        json.dump(prefs, f, indent=2)
-    return prefs
+    global _PLAYER_PREFS_MEMORY_CACHE
+    _PLAYER_PREFS_MEMORY_CACHE = dict(prefs)
+    try:
+        os.makedirs(os.path.dirname(PREFERENCES_FILE), exist_ok=True)
+        with open(PREFERENCES_FILE, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, indent=2)
+    except OSError:
+        pass
+    return dict(prefs)
 
 
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
@@ -2997,12 +3008,15 @@ button:hover {{ background: #0369a1; }}
         self.json_response(get_player_preferences())
 
     def handle_api_player_preferences_post(self):
-        body = self.read_json_body()
-        if not isinstance(body, dict):
-            self.json_response({"error": "Invalid JSON body"}, 400)
-            return
-        saved = save_player_preferences(body)
-        self.json_response({"success": True, "preferences": saved})
+        try:
+            body = self.read_json_body()
+            if not isinstance(body, dict):
+                self.json_response({"error": "Invalid JSON body"}, 400)
+                return
+            saved = save_player_preferences(body)
+            self.json_response({"success": True, "preferences": saved})
+        except Exception as e:
+            self.json_response({"error": f"Failed to save preferences: {e}"}, 500)
 
     def handle_api_zilean_stats(self):
         try:
