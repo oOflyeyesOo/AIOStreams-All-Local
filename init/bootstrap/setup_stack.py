@@ -137,7 +137,7 @@ AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstr
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3001").rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000").rstrip("/")
 
 AIOMETADATA_HOST = os.environ.get("AIOMETADATA_HOST", "").rstrip("/")
 
