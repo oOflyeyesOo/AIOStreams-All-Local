@@ -1612,6 +1612,42 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(len(captured) > 0)
             self.assertEqual(captured[0].selector, "/api/get-overview-stats")
 
+    def test_app_webmanifest(self):
+        status, body, headers = self.request("/app.webmanifest")
+        self.assertEqual(status, 200)
+        self.assertIn("application/manifest+json", headers.get("Content-Type", ""))
+        manifest = json.loads(body.decode("utf-8"))
+        self.assertEqual(manifest.get("short_name"), "AIOStreams")
+        self.assertEqual(manifest.get("display"), "standalone")
+
+    def test_player_preferences_lifecycle(self):
+        # 1. GET initial preferences
+        status, body, _ = self.request("/api/player-preferences", auth=True)
+        self.assertEqual(status, 200)
+        prefs = json.loads(body.decode("utf-8"))
+        self.assertIn("audioLanguage", prefs)
+
+        # 2. POST update preferences
+        new_prefs = {
+            "audioLanguage": "jpn",
+            "audioFallback": "eng",
+            "subtitleMode": "sdh",
+            "subtitleLanguage": "eng",
+            "fontScale": 120
+        }
+        status, body, _ = self.request("/api/player-preferences", "POST", new_prefs, auth=True, headers={"Content-Type": "application/json"})
+        self.assertEqual(status, 200)
+        res = json.loads(body.decode("utf-8"))
+        self.assertTrue(res.get("success"))
+        self.assertEqual(res.get("preferences", {}).get("audioLanguage"), "jpn")
+
+        # 3. GET verify updated preferences
+        status, body, _ = self.request("/api/player-preferences", auth=True)
+        self.assertEqual(status, 200)
+        updated = json.loads(body.decode("utf-8"))
+        self.assertEqual(updated.get("audioLanguage"), "jpn")
+        self.assertEqual(updated.get("fontScale"), 120)
+
 
 if __name__ == "__main__":
     unittest.main()

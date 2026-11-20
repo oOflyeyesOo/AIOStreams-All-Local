@@ -3,11 +3,13 @@ x-logging: &default-logging
   options:
     max-size: "10m"
     max-file: "3"
+    compress: "true"
 
 services:
   stack-check:
     profiles: ["test"]
     image: python:3.11-alpine
+    logging: *default-logging
     volumes:
       - ./init:/init:ro
       - ./tests/check_stack.py:/check_stack.py:ro
@@ -26,9 +28,7 @@ services:
     build:
       context: .
       dockerfile: docker/controller/Dockerfile
-    logging:
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
+    logging: *default-logging
     restart: unless-stopped
     network_mode: none
     read_only: true
@@ -268,6 +268,10 @@ services:
       - POSTGRES_PASSWORD=aio_local_secret
       - POSTGRES_DB=bitmagnet
       - POSTGRES_SSLMODE=disable
+      - POSTGRES_MAX_OPEN_CONNS=25
+      - POSTGRES_MAX_IDLE_CONNS=10
+      - DHT_CRAWLER_SAVE_PIECES=false
+      - LOG_LEVEL=${BITMAGNET_LOG_LEVEL:-warn}
       - REDIS_ADDR=shared-redis:6379
       - REDIS_HOST=shared-redis:6379
       - REDIS_URL=redis://shared-redis:6379
@@ -435,7 +439,7 @@ services:
       retries: 5
       start_period: 15s
     environment:
-      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-warn}
       - CAPTCHA_SOLVER=none
       - TZ=Etc/UTC
     mem_limit: ${FLARESOLVERR_MEM_LIMIT:-1024m}
@@ -827,6 +831,7 @@ services:
           psql -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
           psql -h shared-postgres -U postgres -d postgres -c "ALTER DATABASE bitmagnet OWNER TO aio;" 2>/dev/null || true
           psql -h shared-postgres -U postgres -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE bitmagnet TO aio;" 2>/dev/null || true
+          psql -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();" 2>/dev/null || true
           echo "[init-postgres] Done!"
           exit 0
         fi

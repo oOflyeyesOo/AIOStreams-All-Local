@@ -673,7 +673,8 @@ class BootstrapTests(unittest.TestCase):
 
         bitmagnet_req = next((d for u, d in requests if d.get("name") == "Bitmagnet (Torznab Local)"), None)
         self.assertIsNotNone(bitmagnet_req)
-        self.assertTrue(bitmagnet_req["enable"])
+        # Direct Torznab preset in AIOStreams queries Bitmagnet directly; Prowlarr indexer is kept disabled to prevent 2x duplicate load
+        self.assertFalse(bitmagnet_req["enable"])
         fields = {f["name"]: f["value"] for f in bitmagnet_req["fields"]}
         self.assertEqual(fields["baseUrl"], "http://bitmagnet:3333/torznab")
 

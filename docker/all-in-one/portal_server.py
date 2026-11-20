@@ -1108,7 +1108,7 @@ PORTAL_API_GET_PATHS = {
     "/api/lumiere/stats", "/api/lumiere-stats", "/api/backups",
     "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
-    "/api/aniskip",
+    "/api/aniskip", "/api/health-stream", "/api/player-preferences",
 }
 
 PORTAL_API_POST_PATHS = {
@@ -1117,8 +1117,51 @@ PORTAL_API_POST_PATHS = {
     "/api/config-import", "/api/save-env", "/api/quick-setup",
     "/api/settings", "/api/env", "/api/save", "/api/restart",
     "/api/clean-cache", "/api/watchdog", "/api/backups/prune",
-    "/api/lumiere/rebuild", "/api/aniskip",
+    "/api/lumiere/rebuild", "/api/aniskip", "/api/player-preferences",
 }
+
+_TELEMETRY_CACHE = {"data": None, "timestamp": 0.0, "lock": threading.Lock()}
+
+def get_cached_watchdog_telemetry(max_age=3.0):
+    """Retrieve cached watchdog probe results to prevent thundering herd on live SSE streams."""
+    now = time.monotonic()
+    with _TELEMETRY_CACHE["lock"]:
+        if _TELEMETRY_CACHE["data"] is not None and (now - _TELEMETRY_CACHE["timestamp"]) < max_age:
+            return _TELEMETRY_CACHE["data"]
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.watchdog as stack_watchdog
+            data = stack_watchdog.probe_all_services(auto_restart=False)
+            _TELEMETRY_CACHE["data"] = data
+            _TELEMETRY_CACHE["timestamp"] = now
+            return data
+        except Exception as e:
+            if _TELEMETRY_CACHE["data"] is not None:
+                return _TELEMETRY_CACHE["data"]
+            return {"healthy_count": 0, "total_probed": 0, "services": [], "error": str(e)}
+
+PREFERENCES_FILE = os.path.join(WEB_ROOT, "data/player_preferences.json")
+
+def get_player_preferences():
+    if os.path.isfile(PREFERENCES_FILE):
+        try:
+            with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "audioLanguage": "eng",
+        "audioFallback": "jpn",
+        "subtitleMode": "forced",
+        "subtitleLanguage": "eng",
+        "fontScale": 100
+    }
+
+def save_player_preferences(prefs):
+    os.makedirs(os.path.dirname(PREFERENCES_FILE), exist_ok=True)
+    with open(PREFERENCES_FILE, "w", encoding="utf-8") as f:
+        json.dump(prefs, f, indent=2)
+    return prefs
 
 
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
@@ -1766,6 +1809,32 @@ button:hover {{ background: #0369a1; }}
             self.wfile.write(json.dumps(resp).encode())
             return
 
+        if path == "/app.webmanifest":
+            manifest = {
+                "name": "AIOStreams Local Appliance",
+                "short_name": "AIOStreams",
+                "description": "All-In-One Local Stremio & Media Engine Hub",
+                "start_url": "/dashboard",
+                "display": "standalone",
+                "background_color": "#0b0f17",
+                "theme_color": "#1e293b",
+                "icons": [
+                    {
+                        "src": "/assets/favicon.ico",
+                        "sizes": "64x64 32x32 24x24 16x16",
+                        "type": "image/x-icon"
+                    }
+                ]
+            }
+            body = json.dumps(manifest, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if path == "/healthz":
             self.json_response({"status": "ok", "service": "portal"})
             return
@@ -2018,6 +2087,12 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/watchdog":
             self.handle_api_watchdog()
             return
+        elif path == "/api/health-stream":
+            self.handle_api_health_stream()
+            return
+        elif path == "/api/player-preferences":
+            self.handle_api_player_preferences_get()
+            return
         elif path in ("/api/zilean", "/api/zilean-stats"):
             self.handle_api_zilean_stats()
             return
@@ -2253,6 +2328,9 @@ button:hover {{ background: #0369a1; }}
             return
         elif path == "/api/watchdog":
             self.handle_api_watchdog(run_probe=True)
+            return
+        elif path == "/api/player-preferences":
+            self.handle_api_player_preferences_post()
             return
         elif path == "/api/backups/prune":
             self.handle_api_backups_prune()
@@ -2891,6 +2969,40 @@ button:hover {{ background: #0369a1; }}
                 self.json_response(telemetry)
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while querying watchdog."}, 500)
+
+    def handle_api_health_stream(self):
+        """Server-Sent Events endpoint streaming live health telemetry and per-service latencies."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        for _ in range(30):
+            try:
+                data = get_cached_watchdog_telemetry(max_age=3.0)
+                payload = f"data: {json.dumps(data)}\n\n".encode("utf-8")
+                self.wfile.write(payload)
+                self.wfile.flush()
+                time.sleep(3.0)
+                self.wfile.write(b": keep-alive\n\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                break
+            except Exception:
+                break
+
+    def handle_api_player_preferences_get(self):
+        self.json_response(get_player_preferences())
+
+    def handle_api_player_preferences_post(self):
+        body = self.read_json_body()
+        if not isinstance(body, dict):
+            self.json_response({"error": "Invalid JSON body"}, 400)
+            return
+        saved = save_player_preferences(body)
+        self.json_response({"success": True, "preferences": saved})
 
     def handle_api_zilean_stats(self):
         try:

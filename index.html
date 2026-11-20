@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AIO Local · One stack. One manifest.</title>
+<link rel="manifest" href="/app.webmanifest">
+<meta name="theme-color" content="#1e293b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="/assets/app.css"><script src="/assets/app.js" defer></script>
 </head>
 <body>
@@ -21,6 +25,8 @@
     <a id="topbar-open-player" class="btn-primary topbar-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Player ↗</a>
     <button type="button" id="topbar-copy-manifest" class="btn-secondary topbar-action-btn" style="display:none;" title="Copy primary manifest URL">Copy Manifest ⧉</button>
     <span class="host-badge" id="topbar-health-badge"><span class="status-dot" id="topbar-status-dot"></span> <span id="topbar-health-text">LOCAL</span></span>
+    <span class="host-badge latency-badge" id="topbar-latency-badge" title="Live fleet ping latency"><span class="latency-dot"></span> <span id="topbar-latency-text">-- ms</span></span>
+    <button type="button" id="btn-shortcuts-help" class="icon-button topbar-shortcut-btn" title="Keyboard Shortcuts (?)">⌨</button>
   </div>
 </header>
 <section id="startup-readiness" class="startup-readiness waiting" aria-labelledby="startup-title">
@@ -225,7 +231,10 @@
   <div id="playback-video-container" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-size:14px;font-weight:600;color:var(--green);">▶ Stream preview</span>
-      <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;">Open stream directly ↗</a>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" id="btn-launch-embedded-player" class="player-copy-btn" style="font-size:12px;padding:3px 8px;color:#38bdf8;border-color:#38bdf8;">Launch in Embedded Player ↗</button>
+        <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;">Open stream directly ↗</a>
+      </div>
     </div>
     <video id="playback-video-preview" controls preload="none"></video>
   </div>
@@ -461,6 +470,91 @@
     <div class="op-console">
       <div class="op-console-header"><span>resources · monitor</span><span class="code-dot">● ● ●</span></div>
       <pre id="resources-output" aria-live="polite">Not checked yet.</pre>
+    </div>
+  </div>
+
+  <div class="op-card" id="card-player-preferences">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">PLAYER</span>
+        <h3>Playback &amp; Language Presets</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Default audio, subtitle language, and rendering presets auto-applied in the embedded player.</p>
+    <div class="op-card-inputs">
+      <div class="op-input-group">
+        <label class="field-label" for="player-pref-audio-lang">Preferred Audio</label>
+        <select id="player-pref-audio-lang">
+          <option value="eng" selected>English (eng)</option>
+          <option value="jpn">Japanese (jpn)</option>
+          <option value="fre">French (fre)</option>
+          <option value="ger">German (ger)</option>
+          <option value="spa">Spanish (spa)</option>
+          <option value="ita">Italian (ita)</option>
+        </select>
+      </div>
+      <div class="op-input-group">
+        <label class="field-label" for="player-pref-sub-lang">Preferred Subtitle</label>
+        <select id="player-pref-sub-lang">
+          <option value="eng" selected>English (eng)</option>
+          <option value="fre">French (fre)</option>
+          <option value="ger">German (ger)</option>
+          <option value="spa">Spanish (spa)</option>
+          <option value="ita">Italian (ita)</option>
+        </select>
+      </div>
+      <div class="op-input-group">
+        <label class="field-label" for="player-pref-sub-mode">Subtitle Mode</label>
+        <select id="player-pref-sub-mode">
+          <option value="forced" selected>Forced Foreign Only</option>
+          <option value="always">Always On (Full)</option>
+          <option value="sdh">SDH / Hearing Impaired</option>
+          <option value="none">Disabled</option>
+        </select>
+      </div>
+      <div class="op-input-group">
+        <label class="field-label" for="player-pref-font-scale">Font Scaling</label>
+        <select id="player-pref-font-scale">
+          <option value="80">80% Compact</option>
+          <option value="100" selected>100% Normal</option>
+          <option value="120">120% Large</option>
+          <option value="140">140% Extra Large</option>
+        </select>
+      </div>
+    </div>
+    <div class="op-card-actions">
+      <button type="button" id="btn-save-player-prefs" class="light-button">Save Player Presets 💾</button>
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>player · presets</span><span class="code-dot">● ● ●</span></div>
+      <pre id="player-prefs-output" aria-live="polite">Defaults loaded.</pre>
+    </div>
+  </div>
+
+  <div class="op-card" id="card-encrypted-bundle">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">CRYPTO</span>
+        <h3>Encrypted Settings Bundle (v2)</h3>
+      </div>
+      <span class="op-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Zero-knowledge client-side AES-256-GCM encrypted backup of stack config, addons &amp; player preferences.</p>
+    <div class="op-card-inputs">
+      <div class="op-input-group">
+        <label class="field-label" for="bundle-passphrase">Passphrase (AES-GCM Key Derivation)</label>
+        <input type="password" id="bundle-passphrase" placeholder="Enter passphrase for encryption/decryption">
+      </div>
+    </div>
+    <div class="op-card-actions op-actions-split">
+      <button type="button" id="btn-export-encrypted-bundle" class="light-button">Export Encrypted Bundle 🔒</button>
+      <button type="button" id="btn-import-encrypted-bundle" class="light-button">Import Bundle 🔓</button>
+      <input type="file" id="bundle-file-input" accept=".json" style="display:none;">
+    </div>
+    <div class="op-console">
+      <div class="op-console-header"><span>bundle · aes-256-gcm</span><span class="code-dot">● ● ●</span></div>
+      <pre id="bundle-output" aria-live="polite">Ready for encrypted export/import.</pre>
     </div>
   </div>
 
@@ -716,6 +810,7 @@
       <h2 id="service-frame-title">Service Viewer</h2>
     </div>
     <div class="service-frame-actions">
+      <button type="button" id="btn-toggle-stats-hud" class="text-button" title="Toggle Stats for Geeks (G)" aria-label="Toggle Stats for Geeks">📊 Stats HUD</button>
       <button type="button" id="service-frame-reload" class="text-button" title="Reload frame" aria-label="Reload frame">↻ Reload</button>
       <a id="service-frame-direct" class="text-button" href="#" target="_blank" rel="noopener noreferrer" title="Open directly on host port (full WebSocket support)" aria-label="Open directly on host port" style="display:none;">↗ Direct Port</a>
       <a id="service-frame-external" class="text-button" href="#" target="_blank" rel="noopener noreferrer" title="Open in new tab" aria-label="Open in new tab">↗ Pop Out</a>
@@ -730,6 +825,28 @@
     <button type="button" class="player-copy-btn player-copy-all-btn" onclick="copyPlayerCred('both')">📋 Copy All</button>
   </div>
   <div class="service-frame-body">
+    <div id="player-stats-hud" class="player-stats-hud" style="display:none;">
+      <div class="stats-hud-header"><span>📊 Playback Diagnostics (Stats for Geeks)</span><button type="button" id="btn-close-stats-hud" class="stats-hud-close">✕</button></div>
+      <div class="stats-hud-grid">
+        <div>Resolution: <strong id="hud-stat-resolution">Auto (Direct Play)</strong></div>
+        <div>FPS / Codec: <strong id="hud-stat-codec">HEVC / Main 10</strong></div>
+        <div>Audio: <strong id="hud-stat-audio">TrueHD Atmos (Direct)</strong></div>
+        <div>Debrid CDN Latency: <strong id="hud-stat-latency">-- ms</strong></div>
+        <div>Buffer Health: <strong id="hud-stat-buffer">-- s</strong></div>
+        <div>Delivery Mode: <strong id="hud-stat-delivery">Zero-Transcode Passthrough</strong></div>
+      </div>
+    </div>
+    <div id="next-episode-overlay" class="next-episode-overlay" style="display:none;">
+      <div class="next-episode-card">
+        <div class="next-episode-eyebrow">UP NEXT</div>
+        <h4 id="next-episode-title">Next Episode</h4>
+        <p>Playing in <strong id="next-episode-seconds">10</strong>s...</p>
+        <div class="next-episode-actions">
+          <button type="button" id="btn-play-next-now" class="primary-button">Play Now ▶</button>
+          <button type="button" id="btn-cancel-next" class="text-button">Cancel ✕</button>
+        </div>
+      </div>
+    </div>
     <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="same-origin" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
   </div>
 </dialog>
@@ -755,6 +872,25 @@
       <button type="submit" id="btn-lumiere-test-search" class="btn btn-secondary" style="padding:0.4rem 0.8rem;font-size:0.82rem;white-space:nowrap;">Search ⚡</button>
     </form>
     <div id="lumiere-test-results" class="lumiere-test-results"></div>
+  </div>
+</dialog>
+<dialog id="shortcuts-modal" class="service-log-dialog" aria-labelledby="shortcuts-modal-title" aria-modal="true">
+  <div class="log-dialog-header">
+    <h2 id="shortcuts-modal-title">⌨️ Keyboard Navigation Shortcuts</h2>
+    <form method="dialog"><button type="button" id="close-shortcuts-modal" class="text-button log-dialog-close-btn" aria-label="Close shortcuts dialog">Close ✕</button></form>
+  </div>
+  <div class="shortcuts-grid" style="display:grid;grid-template-columns:auto 1fr;gap:0.75rem 1.25rem;padding:1.25rem;font-size:0.9rem;">
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">?</kbd></div><div>Show / hide this shortcuts cheat-sheet</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">Esc</kbd></div><div>Close active viewer, log modal or overlay</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">F</kbd></div><div>Toggle fullscreen on active viewer</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">G</kbd></div><div>Toggle "Stats for Geeks" diagnostics HUD</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">R</kbd></div><div>Refresh stack health and watchdog telemetry</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">1</kbd></div><div>Jump to Addon Hub (#manifest)</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">2</kbd></div><div>Jump to Stack Settings (#setup)</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">3</kbd></div><div>Jump to Services &amp; Shares (#integrations)</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">4</kbd></div><div>Jump to Health &amp; Telemetry (#telemetry)</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">5</kbd></div><div>Jump to Diagnostics &amp; Benchmarks (#operations)</div>
+    <div><kbd style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 8px;font-family:monospace;font-weight:600;">6</kbd></div><div>Jump to Maintenance &amp; Backups (#maintenance)</div>
   </div>
 </dialog>
 </main>

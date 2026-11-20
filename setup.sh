@@ -58,6 +58,18 @@ check_prerequisites() {
         echo -e "${YELLOW}[!] Docker daemon unreachable. Is the service active?${NC}"
     fi
 
+    local running_containers=$(docker ps -q 2>/dev/null | wc -l)
+    if [ "$running_containers" -gt 0 ] && [ -f "tools/doctor.py" ]; then
+        echo -e "${CYAN}[i] Active containers detected ($running_containers running). Running comprehensive stack diagnostic doctor...${NC}"
+        if command -v python3 &>/dev/null; then
+            python3 tools/doctor.py
+            return 0
+        elif command -v python &>/dev/null; then
+            python tools/doctor.py
+            return 0
+        fi
+    fi
+
     echo -e "${CYAN}[i] Testing port availability...${NC}"
     local ports=(3000 3001 3005 3100 4005 7005 8000 8080 8088 8181 9696)
     local conflicts=0

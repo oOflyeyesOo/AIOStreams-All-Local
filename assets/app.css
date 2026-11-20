@@ -3506,3 +3506,173 @@ a.disabled, button.disabled {
 .player-copy-all-btn:hover {
   background: #0369a1;
 }
+
+/* Latency Badges & Indicators */
+.latency-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  user-select: none;
+  transition: all 0.2s ease;
+}
+.latency-green {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+.latency-yellow {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+}
+.latency-red {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+
+/* Player Stats HUD */
+.player-stats-hud {
+  position: absolute;
+  top: 55px;
+  right: 18px;
+  z-index: 120;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #f8fafc;
+  font-family: monospace;
+  font-size: 0.78rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  min-width: 280px;
+}
+.stats-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 4px;
+}
+.stats-hud-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+.stats-hud-close:hover {
+  color: #f8fafc;
+}
+.stats-hud-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+.stats-hud-grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stats-hud-grid strong {
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* Next Episode Overlay */
+.next-episode-overlay {
+  position: absolute;
+  bottom: 30px;
+  right: 25px;
+  z-index: 120;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+  max-width: 320px;
+}
+.next-episode-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 1.2px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.next-episode-card h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: #f8fafc;
+  line-height: 1.3;
+}
+.next-episode-card p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+.next-episode-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.next-episode-actions .primary-button {
+  background: #0284c7;
+  color: #fff;
+  border: 1px solid #38bdf8;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.next-episode-actions .primary-button:hover {
+  background: #0369a1;
+}
+.next-episode-actions .text-button {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+.next-episode-actions .text-button:hover {
+  color: var(--text-main);
+}
+
+/* Shortcuts Cheat Sheet Modal */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem 1.25rem;
+  padding: 1.25rem;
+  font-size: 0.88rem;
+}
+.shortcuts-grid kbd {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #38bdf8;
+  box-shadow: 0 2px 0 #0f172a;
+}
+

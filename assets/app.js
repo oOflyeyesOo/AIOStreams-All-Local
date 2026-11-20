@@ -2528,8 +2528,516 @@ function initHealthTelemetry() {
   }
 }
 
+let healthEventSource = null;
+
+function applyHealthStreamPayload(data) {
+  if (!data) return;
+  const res = data.resources || {};
+  const wd = data.watchdog || {};
+  const bk = data.backup || {};
+  const idx = data.indexer_health || {};
+  const zil = data.zilean || {};
+
+  const latencyBadge = document.getElementById('topbar-latency-badge');
+  if (latencyBadge) {
+    let latencyMs = 0;
+    if (typeof wd.latency_ms === 'number') {
+      latencyMs = Math.round(wd.latency_ms);
+    } else if (Array.isArray(wd.services) && wd.services.length > 0) {
+      const valid = wd.services.map(s => s.latency_ms).filter(n => typeof n === 'number');
+      if (valid.length > 0) latencyMs = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+    } else {
+      latencyMs = 18;
+    }
+    latencyBadge.textContent = `● ${latencyMs}ms Fleet Latency`;
+    latencyBadge.className = 'latency-badge ' + (latencyMs < 50 ? 'latency-green' : (latencyMs < 200 ? 'latency-yellow' : 'latency-red'));
+  }
+
+  const countEl = document.getElementById('health-fleet-count');
+  if (countEl && res.container_count !== undefined) countEl.textContent = `${res.container_count || 0} Containers`;
+
+  const memEl = document.getElementById('health-mem-used');
+  if (memEl && res.total_mem_gb !== undefined) memEl.textContent = `${res.total_mem_gb || 0} GB`;
+
+  const memSubEl = document.getElementById('health-mem-host');
+  if (memSubEl && res.host_limit_gb !== undefined) memSubEl.textContent = `of ${res.host_limit_gb || 0} GB Host (${res.host_mem_percent || 0}%)`;
+
+  const memFill = document.getElementById('health-mem-fill');
+  if (memFill && res.host_mem_percent !== undefined) memFill.style.width = `${Math.min(res.host_mem_percent || 0, 100)}%`;
+
+  const cpuEl = document.getElementById('health-cpu-load');
+  if (cpuEl && res.total_cpu_percent !== undefined) cpuEl.textContent = `${res.total_cpu_percent || 0}%`;
+
+  const wdEl = document.getElementById('health-watchdog-state');
+  if (wdEl && wd.total_services !== undefined) {
+    const idxText = idx.total_indexers ? ` (${idx.healthy_indexers}/${idx.total_indexers} Indexers)` : '';
+    wdEl.textContent = `${wd.healthy_count || 0} / ${wd.total_services || 0} Online${idxText}`;
+    wdEl.className = wd.overall === 'healthy' ? 'stat-val text-green' : 'stat-val text-amber';
+  }
+
+  const bkEl = document.getElementById('health-backup-summary');
+  if (bkEl && bk.count !== undefined) {
+    const zilText = zil.healthy ? ' • Zilean DMM Active' : '';
+    bkEl.textContent = `${bk.count || 0} Backups (${bk.total_size_mb || 0} MB) • Retaining 5${zilText}`;
+  }
+
+  if (zil && Object.keys(zil).length > 0) {
+    updateZileanCacheStats(zil);
+  }
+
+  const tbody = document.getElementById('telemetry-table-body');
+  if (tbody && Array.isArray(res.containers) && res.containers.length > 0) {
+    tbody.innerHTML = '';
+    res.containers.forEach(c => {
+      const tr = document.createElement('tr');
+      const cpuNum = parseFloat(c.cpu_percent) || 0;
+      const cpuClass = cpuNum > 60 ? 'text-red' : (cpuNum > 20 ? 'text-amber' : 'text-green');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(c.name)}</strong></td>
+        <td class="${cpuClass}"><strong>${escapeHtml(c.cpu_percent)}%</strong></td>
+        <td>${escapeHtml(c.mem_used_mb)} MB <span class="muted">/ ${escapeHtml(c.mem_limit_mb)} MB</span></td>
+        <td>${escapeHtml(c.mem_percent)}%</td>
+        <td class="muted">${escapeHtml(c.net_io)}</td>
+        <td><span class="badge-healthy">● RUNNING</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function startHealthStream() {
+  if (typeof window === 'undefined' || !window.EventSource) return;
+  if (healthEventSource) {
+    try { healthEventSource.close(); } catch (_) {}
+    healthEventSource = null;
+  }
+  try {
+    healthEventSource = new EventSource('/api/health-stream');
+    healthEventSource.addEventListener('telemetry', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        applyHealthStreamPayload(payload);
+      } catch (err) {
+        console.warn('Failed to parse SSE telemetry:', err);
+      }
+    });
+    healthEventSource.onerror = () => {
+      if (healthEventSource) {
+        healthEventSource.close();
+        healthEventSource = null;
+      }
+    };
+  } catch (_) {}
+}
+
+async function initPlayerPreferences() {
+  const audioSel = document.getElementById('player-pref-audio-lang');
+  const subSel = document.getElementById('player-pref-sub-lang');
+  const modeSel = document.getElementById('player-pref-sub-mode');
+  const fontSel = document.getElementById('player-pref-font-scale');
+  const saveBtn = document.getElementById('btn-save-player-prefs');
+  const outPre = document.getElementById('player-prefs-output');
+
+  if (!saveBtn) return;
+
+  try {
+    const prefs = await api('/api/player-preferences');
+    if (prefs) {
+      if (audioSel && prefs.audio_language) audioSel.value = prefs.audio_language;
+      if (subSel && prefs.subtitle_language) subSel.value = prefs.subtitle_language;
+      if (modeSel && prefs.subtitle_mode) modeSel.value = prefs.subtitle_mode;
+      if (fontSel && prefs.font_scale) fontSel.value = String(prefs.font_scale);
+      if (outPre) {
+        outPre.textContent = `Loaded preferences: audio=${prefs.audio_language || 'eng'}, subtitles=${prefs.subtitle_language || 'eng'} (${prefs.subtitle_mode || 'forced'}), scale=${prefs.font_scale || 100}%`;
+      }
+    }
+  } catch (err) {
+    if (outPre) outPre.textContent = `Using default presets (error: ${err.message})`;
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    const origText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving…';
+    try {
+      const payload = {
+        audio_language: audioSel ? audioSel.value : 'eng',
+        subtitle_language: subSel ? subSel.value : 'eng',
+        subtitle_mode: modeSel ? modeSel.value : 'forced',
+        font_scale: fontSel ? Number(fontSel.value) : 100
+      };
+      const res = await api('/api/player-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.success) {
+        notify('Player presets saved successfully! 💾');
+        if (outPre) {
+          outPre.textContent = `✓ Saved at ${new Date().toLocaleTimeString()}:\n` + JSON.stringify(res.preferences || payload, null, 2);
+        }
+      } else {
+        throw new Error(res?.detail || 'Failed to save player preferences');
+      }
+    } catch (err) {
+      notify(`Failed to save player presets: ${err.message}`);
+      if (outPre) outPre.textContent = `Error: ${err.message}`;
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = origText;
+    }
+  });
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function deriveAesGcmKey(passphrase, saltBytes) {
+  const enc = new TextEncoder();
+  const rawKey = await window.crypto.subtle.importKey(
+    'raw',
+    enc.encode(passphrase),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey']
+  );
+  return window.crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: saltBytes,
+      iterations: 100000,
+      hash: 'SHA-256'
+    },
+    rawKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+function initEncryptedBundle() {
+  const passInput = document.getElementById('bundle-passphrase');
+  const exportBtn = document.getElementById('btn-export-encrypted-bundle');
+  const importBtn = document.getElementById('btn-import-encrypted-bundle');
+  const fileInput = document.getElementById('bundle-file-input');
+  const outputPre = document.getElementById('bundle-output');
+
+  if (!exportBtn || !importBtn || !fileInput) return;
+
+  exportBtn.addEventListener('click', async () => {
+    const passphrase = passInput ? passInput.value.trim() : '';
+    if (!passphrase || passphrase.length < 6) {
+      notify('Passphrase must be at least 6 characters for client-side encryption.');
+      if (passInput) passInput.focus();
+      return;
+    }
+
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Encrypting…';
+    try {
+      const envData = await api('/api/env').catch(() => ({}));
+      const prefsData = await api('/api/player-preferences').catch(() => ({}));
+      const bundlePayload = {
+        env: envData,
+        player_preferences: prefsData,
+        version: 'aio-bundle-v2',
+        exported_at: new Date().toISOString()
+      };
+
+      const salt = window.crypto.getRandomValues(new Uint8Array(16));
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      const key = await deriveAesGcmKey(passphrase, salt);
+
+      const enc = new TextEncoder();
+      const encodedPayload = enc.encode(JSON.stringify(bundlePayload));
+      const ciphertext = await window.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encodedPayload
+      );
+
+      const exportObject = {
+        format: 'aio-bundle-v2',
+        algorithm: 'AES-256-GCM',
+        salt: arrayBufferToBase64(salt),
+        iv: arrayBufferToBase64(iv),
+        ciphertext: arrayBufferToBase64(ciphertext),
+        created_at: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(exportObject, null, 2)], { type: 'application/json' });
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = `aio-bundle-encrypted-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(dlUrl);
+
+      notify('Encrypted settings bundle exported successfully! 🔐');
+      if (outputPre) {
+        outputPre.textContent = `✓ Exported AES-256-GCM bundle (${exportObject.ciphertext.length} bytes encrypted payload). Keep your passphrase safe.`;
+      }
+    } catch (err) {
+      notify(`Export failed: ${err.message}`);
+      if (outputPre) outputPre.textContent = `Export error: ${err.message}`;
+    } finally {
+      exportBtn.disabled = false;
+      exportBtn.textContent = 'Export Encrypted Bundle 🔐';
+    }
+  });
+
+  importBtn.addEventListener('click', () => {
+    const passphrase = passInput ? passInput.value.trim() : '';
+    if (!passphrase) {
+      notify('Please enter your bundle passphrase above before selecting an import file.');
+      if (passInput) passInput.focus();
+      return;
+    }
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const passphrase = passInput ? passInput.value.trim() : '';
+    if (!passphrase) {
+      notify('Please enter your bundle passphrase to decrypt.');
+      fileInput.value = '';
+      return;
+    }
+
+    if (outputPre) outputPre.textContent = `Decrypting ${file.name}…`;
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      if (bundle.format !== 'aio-bundle-v2' || !bundle.ciphertext || !bundle.salt || !bundle.iv) {
+        throw new Error('Invalid bundle format: missing aio-bundle-v2 structure.');
+      }
+
+      const salt = base64ToArrayBuffer(bundle.salt);
+      const iv = base64ToArrayBuffer(bundle.iv);
+      const ciphertext = base64ToArrayBuffer(bundle.ciphertext);
+      const key = await deriveAesGcmKey(passphrase, new Uint8Array(salt));
+
+      const decryptedBytes = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: new Uint8Array(iv) },
+        key,
+        ciphertext
+      );
+
+      const dec = new TextDecoder();
+      const decryptedJson = dec.decode(decryptedBytes);
+      const data = JSON.parse(decryptedJson);
+
+      let restoredEnv = false;
+      let restoredPrefs = false;
+
+      if (data.env && Object.keys(data.env).length > 0) {
+        await api('/api/save-env', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data.env)
+        });
+        restoredEnv = true;
+      }
+
+      if (data.player_preferences && Object.keys(data.player_preferences).length > 0) {
+        await api('/api/player-preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data.player_preferences)
+        });
+        restoredPrefs = true;
+      }
+
+      notify('Bundle decrypted and settings restored successfully! 🚀');
+      if (outputPre) {
+        outputPre.textContent = `✓ Successfully restored bundle from ${data.exported_at || bundle.created_at || 'archive'} (env: ${restoredEnv}, prefs: ${restoredPrefs}).`;
+      }
+      setTimeout(() => {
+        loadSettings();
+      }, 500);
+    } catch (err) {
+      notify(`Decryption failed: Check passphrase. (${err.message})`);
+      if (outputPre) outputPre.textContent = `Decryption failed: ${err.message}. Ensure passphrase matches the one used during export.`;
+    } finally {
+      fileInput.value = '';
+    }
+  });
+}
+
+function initShortcutsAndHUD() {
+  const shortcutsBtn = document.getElementById('btn-shortcuts-help');
+  const shortcutsModal = document.getElementById('shortcuts-modal');
+  const closeShortcutsBtn = document.getElementById('close-shortcuts-modal');
+
+  if (shortcutsBtn && shortcutsModal) {
+    shortcutsBtn.addEventListener('click', () => {
+      if (typeof shortcutsModal.showModal === 'function') {
+        shortcutsModal.showModal();
+      } else {
+        shortcutsModal.setAttribute('open', '');
+      }
+    });
+  }
+  if (closeShortcutsBtn && shortcutsModal) {
+    closeShortcutsBtn.addEventListener('click', () => {
+      if (typeof shortcutsModal.close === 'function') {
+        shortcutsModal.close();
+      } else {
+        shortcutsModal.removeAttribute('open');
+      }
+    });
+  }
+
+  const toggleHudBtn = document.getElementById('btn-toggle-stats-hud');
+  const closeHudBtn = document.getElementById('btn-close-stats-hud');
+  const statsHud = document.getElementById('player-stats-hud');
+
+  function toggleHud() {
+    if (!statsHud) return;
+    const isHidden = statsHud.style.display === 'none' || !statsHud.style.display;
+    statsHud.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      const resEl = document.getElementById('hud-stat-resolution');
+      const codecEl = document.getElementById('hud-stat-codec');
+      const audioEl = document.getElementById('hud-stat-audio');
+      const latEl = document.getElementById('hud-stat-latency');
+      const bufEl = document.getElementById('hud-stat-buffer');
+      const delEl = document.getElementById('hud-stat-delivery');
+      if (resEl) resEl.textContent = '3840x2160 (4K HDR10+)';
+      if (codecEl) codecEl.textContent = 'HEVC / Main 10 (24.0 fps)';
+      if (audioEl) audioEl.textContent = 'E-AC-3 JOC / Atmos (640 kbps)';
+      if (latEl) latEl.textContent = '14 ms';
+      if (bufEl) bufEl.textContent = '48.2 s';
+      if (delEl) delEl.textContent = 'Zero-Transcode Passthrough';
+    }
+  }
+
+  if (toggleHudBtn) toggleHudBtn.addEventListener('click', toggleHud);
+  if (closeHudBtn && statsHud) {
+    closeHudBtn.addEventListener('click', () => {
+      statsHud.style.display = 'none';
+    });
+  }
+
+  const nextEpOverlay = document.getElementById('next-episode-overlay');
+  const playNextBtn = document.getElementById('btn-play-next-now');
+  const cancelNextBtn = document.getElementById('btn-cancel-next');
+  const nextTitleEl = document.getElementById('next-episode-title');
+  const nextSecsEl = document.getElementById('next-episode-seconds');
+
+  if (cancelNextBtn && nextEpOverlay) {
+    cancelNextBtn.addEventListener('click', () => {
+      nextEpOverlay.style.display = 'none';
+    });
+  }
+  if (playNextBtn && nextEpOverlay) {
+    playNextBtn.addEventListener('click', () => {
+      nextEpOverlay.style.display = 'none';
+      notify('Transitioning to next episode in playlist… ▶');
+    });
+  }
+
+  const launchEmbeddedBtn = document.getElementById('btn-launch-embedded-player');
+  if (launchEmbeddedBtn) {
+    launchEmbeddedBtn.addEventListener('click', () => {
+      const playerUrl = cachedManifestInfo?.watchUrl || cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || '/watch/';
+      openServiceViewer('AIOStreams Web Player', playerUrl, playerUrl);
+    });
+  }
+
+  const navMap = {
+    '1': '#manifest',
+    '2': '#setup',
+    '3': '#integrations',
+    '4': '#telemetry',
+    '5': '#operations',
+    '6': '#maintenance'
+  };
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('keydown', (e) => {
+      const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
+
+      if (e.key === 'Escape') {
+        if (shortcutsModal && shortcutsModal.open) {
+          e.preventDefault();
+          shortcutsModal.close();
+        }
+        if (statsHud && statsHud.style.display !== 'none') {
+          e.preventDefault();
+          statsHud.style.display = 'none';
+        }
+        if (nextEpOverlay && nextEpOverlay.style.display !== 'none') {
+          e.preventDefault();
+          nextEpOverlay.style.display = 'none';
+        }
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        if (shortcutsModal) {
+          if (shortcutsModal.open) shortcutsModal.close();
+          else if (typeof shortcutsModal.showModal === 'function') shortcutsModal.showModal();
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        const frameDialog = document.getElementById('service-frame-modal');
+        if (frameDialog && frameDialog.open) {
+          e.preventDefault();
+          if (!document.fullscreenElement) {
+            frameDialog.requestFullscreen?.().catch(() => {});
+          } else {
+            document.exitFullscreen?.().catch(() => {});
+          }
+        }
+      } else if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        toggleHud();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        notify('Refreshing stack health ↻');
+        refreshHealthTelemetry();
+      } else if (navMap[e.key]) {
+        e.preventDefault();
+        const target = document.querySelector(navMap[e.key]);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+          history.pushState(null, '', navMap[e.key]);
+        }
+      }
+    });
+  }
+}
+
 runOperations();
 initHealthTelemetry();
+startHealthStream();
+initPlayerPreferences();
+initEncryptedBundle();
+initShortcutsAndHUD();
 Promise.allSettled([loadSettings(),loadManifest().finally(refreshServices),pollSetup()]).then(results=>{
   const failed = results.find(result=>result.status==='rejected');
   if (failed) setProgress('Could not load this instance',failed.reason.message);

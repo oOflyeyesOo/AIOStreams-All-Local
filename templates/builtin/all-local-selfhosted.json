@@ -47,7 +47,7 @@
           "resources": [
             "stream"
           ],
-          "timeout": 10000,
+          "timeout": 4000,
           "mediaTypes": []
         }
       },
@@ -57,7 +57,7 @@
         "enabled": true,
         "options": {
           "name": "Knaben (Anime)",
-          "timeout": 8000,
+          "timeout": 4000,
           "resources": [
             "stream"
           ],
@@ -74,7 +74,7 @@
         "options": {
           "name": "StremThru Torz (Local)",
           "url": "http://stremthru:8080/stremio/torz/",
-          "timeout": 15000,
+          "timeout": 3000,
           "resources": [
             "stream"
           ],
@@ -89,7 +89,7 @@
         "enabled": true,
         "options": {
           "name": "Torrentio",
-          "timeout": 18000,
+          "timeout": 3500,
           "resources": [
             "stream"
           ],
@@ -103,7 +103,7 @@
         "enabled": false,
         "options": {
           "name": "Anime Tosho",
-          "timeout": 15000,
+          "timeout": 4000,
           "resources": [
             "stream"
           ],
@@ -119,7 +119,7 @@
         "enabled": false,
         "options": {
           "name": "TsukiHime",
-          "timeout": 15000,
+          "timeout": 4000,
           "resources": [
             "stream"
           ],
@@ -135,7 +135,7 @@
         "enabled": false,
         "options": {
           "name": "nekoBT",
-          "timeout": 15000,
+          "timeout": 4000,
           "resources": [
             "stream"
           ],
@@ -151,7 +151,7 @@
         "enabled": false,
         "options": {
           "name": "Easynews Search",
-          "timeout": 15000,
+          "timeout": 4000,
           "resources": [
             "stream"
           ],
@@ -243,6 +243,10 @@
           "direction": "desc"
         },
         {
+          "key": "library",
+          "direction": "desc"
+        },
+        {
           "key": "streamExpressionScore",
           "direction": "desc"
         },
@@ -303,7 +307,11 @@
           "library",
           "subtitles",
           "sizes",
-          "idMatched"
+          "idMatched",
+          "audioTags",
+          "visualTags",
+          "codecs",
+          "releaseGroups"
         ]
       }
     },
@@ -375,7 +383,7 @@
       "maxAttempts": 3,
       "includeExternalFailover": true,
       "precacheFailover": true,
-      "parallel": 1
+      "parallel": 2
     }
   },
   "presets": [],

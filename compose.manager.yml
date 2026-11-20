@@ -5,11 +5,18 @@ x-logging:
   options:
     max-size: 10m
     max-file: '3'
+    compress: 'true'
 services:
   stack-check:
     profiles:
     - test
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-bootstrap:${AIO_IMAGE_TAG:-latest}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+        compress: 'true'
     volumes:
     - aiostreams-data:/app/data/aiostreams:ro
     command: python3 /check_stack.py
@@ -21,6 +28,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     restart: unless-stopped
     network_mode: none
     read_only: true
@@ -59,6 +67,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     ports:
     - ${PORT_PORTAL:-8088}:8088
     volumes:
@@ -145,6 +154,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${AIOSTREAMS_MEM_LIMIT:-512m}
     dns:
     - 1.1.1.1
@@ -229,6 +239,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
     cpus: ${ZILEAN_CPU_LIMIT:-0.5}
     mem_limit: ${ZILEAN_MEM_LIMIT:-3072m}
@@ -271,6 +282,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_BITMAGNET:-3333}:3333
@@ -290,6 +302,10 @@ services:
     - POSTGRES_PASSWORD=aio_local_secret
     - POSTGRES_DB=bitmagnet
     - POSTGRES_SSLMODE=disable
+    - POSTGRES_MAX_OPEN_CONNS=25
+    - POSTGRES_MAX_IDLE_CONNS=10
+    - DHT_CRAWLER_SAVE_PIECES=false
+    - LOG_LEVEL=${BITMAGNET_LOG_LEVEL:-warn}
     - REDIS_ADDR=shared-redis:6379
     - REDIS_HOST=shared-redis:6379
     - REDIS_URL=redis://shared-redis:6379
@@ -316,6 +332,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     volumes:
     - prowlarr-data:/prowlarr
     - aiometadata-data:/aiometadata
@@ -340,6 +357,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${PROWLARR_MEM_LIMIT:-384m}
     dns:
     - 1.1.1.1
@@ -373,6 +391,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     depends_on:
     - aiostreams
     - controller
@@ -441,6 +460,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_FLARESOLVERR:-8191}:8191
     healthcheck:
@@ -453,7 +473,7 @@ services:
       retries: 5
       start_period: 15s
     environment:
-    - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+    - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-warn}
     - CAPTCHA_SOLVER=none
     - TZ=Etc/UTC
     mem_limit: ${FLARESOLVERR_MEM_LIMIT:-1024m}
@@ -468,6 +488,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${STREMTHRU_MEM_LIMIT:-768m}
     dns:
     - 1.1.1.1
@@ -519,6 +540,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_INFINIDYSK:-3005}:3000
@@ -564,6 +586,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     networks:
     - stremio-net
@@ -575,6 +598,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${KITSU_MEM_LIMIT:-256m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_ANIME_KITSU:-7005}:7000
@@ -606,6 +630,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
     ports:
     - ${PORT_AIOMETADATA:-4005}:4005
@@ -672,6 +697,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${LUMIERE_MEM_LIMIT:-512m}
     environment:
     - PORT=8000
@@ -704,6 +730,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${JIKAN_MONGO_MEM_LIMIT:-512m}
     command: mongod --wiredTigerCacheSizeGB 0.25
     healthcheck:
@@ -728,6 +755,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_JIKAN_API:-8001}:8080
     healthcheck:
@@ -763,6 +791,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
     ports:
     - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_POSTERSPLUS:-9039}:8000
@@ -789,6 +818,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${SUBSENSE_MEM_LIMIT:-384m}
     dns:
     - 1.1.1.1
@@ -821,6 +851,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
     command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
@@ -843,6 +874,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     depends_on:
       shared-postgres:
         condition: service_healthy
@@ -859,7 +891,10 @@ services:
       \ (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END\
       \ IF; END \\$\\$;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"ALTER DATABASE bitmagnet\
       \ OWNER TO aio;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"GRANT ALL PRIVILEGES ON\
-      \ DATABASE bitmagnet TO aio;\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
+      \ DATABASE bitmagnet TO aio;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"ALTER SYSTEM\
+      \ SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM\
+      \ SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\
+      \n  exit 0\nfi\n"
     networks:
     - stremio-net
   shared-postgres:
@@ -870,6 +905,7 @@ services:
       options:
         max-size: 10m
         max-file: '3'
+        compress: 'true'
     mem_limit: ${POSTGRES_MEM_LIMIT:-1024m}
     shm_size: 512mb
     environment:

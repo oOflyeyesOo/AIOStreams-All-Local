@@ -105,7 +105,17 @@ function Test-SystemPrerequisites {
         Write-Warn "Docker daemon appears unreachable. Ensure Docker Desktop is started."
     }
 
-    # 2. Port conflict test
+    # 2. Port conflict test or live diagnostic doctor
+    $runningContainers = @(docker ps -q 2>$null)
+    if ($runningContainers.Count -gt 0 -and (Test-Path "tools/doctor.py")) {
+        Write-Info "Active containers detected ($($runningContainers.Count) running). Running comprehensive stack diagnostic doctor..."
+        $py = Get-Command python, python3 -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($py) {
+            & $py.Name tools/doctor.py
+            return $true
+        }
+    }
+
     Write-Info "Checking target port availability..."
     $portsToCheck = @(
         @{ Port = 3001; Service = "AIOStreams" }

@@ -33,5 +33,8 @@ psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "DO \$\$ B
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER DATABASE bitmagnet OWNER TO aio;" 2>/dev/null || true
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE bitmagnet TO aio;" 2>/dev/null || true
 
+echo "[init-postgres] Applying PostgreSQL autovacuum & performance optimizations..."
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();" 2>/dev/null || true
+
 echo "[init-postgres] All application databases successfully verified and ready!"
 exit 0

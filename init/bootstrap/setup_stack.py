@@ -489,7 +489,8 @@ def setup_prowlarr_indexers():
         if torznab_schema and (is_url_reachable(bitmagnet_url, timeout=1.0) or is_url_reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or os.environ.get("BITMAGNET_URL")):
             b_payload = dict(torznab_schema)
             b_payload["name"] = "Bitmagnet (Torznab Local)"
-            b_payload["enable"] = True
+            # AIOStreams queries Bitmagnet directly; keep disabled in Prowlarr to avoid duplicate scraping
+            b_payload["enable"] = False
             b_payload["priority"] = 2
             b_payload["appProfileId"] = 1
             for f in b_payload.get("fields", []):
@@ -513,7 +514,7 @@ def tune_prowlarr_indexers():
     active_indexers = make_request(f"{PROWLARR_URL}/api/v1/indexer", headers=headers)
     if not isinstance(active_indexers, list):
         return
-    disabled_names = ["acg.rip", "zilean"]
+    disabled_names = ["acg.rip", "zilean", "bitmagnet"]
     priority_map = {
         "zilean": 1,
         "bitmagnet": 2,
@@ -1221,7 +1222,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "prowlarrUrl": PROWLARR_URL,
                 "prowlarrApiKey": PROWLARR_API_KEY,
                 "sources": ["torrent"],
-                "timeout": 6000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": []
             }
@@ -1232,7 +1233,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Knaben (Anime)",
-                "timeout": 6000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -1245,7 +1246,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "options": {
                 "name": "StremThru Torz (Local)",
                 "url": f"{STREMTHRU_URL}/stremio/torz/",
-                "timeout": 5000,
+                "timeout": 3000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "includeP2P": False,
@@ -1259,7 +1260,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "options": {
                 "name": "StremThru Store (Local)",
                 "url": f"{STREMTHRU_URL}/stremio/store/",
-                "timeout": 4000,
+                "timeout": 3000,
                 "resources": ["catalog", "meta", "stream"],
                 "mediaTypes": [],
                 "hideStreams": False,
@@ -1273,7 +1274,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Torrentio",
-                "timeout": 5000,
+                "timeout": 3500,
                 "resources": ["stream"],
                 "providers": [],
                 "useMultipleInstances": False
@@ -1328,7 +1329,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
-                "timeout": 10000
+                "timeout": 4000
             }
         }
     ])
@@ -1355,7 +1356,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Knaben (Anime)",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -1377,7 +1378,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "Anime Tosho",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -1389,7 +1390,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "TsukiHime",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": ["anime"],
                 "useMultipleInstances": False
@@ -1401,7 +1402,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": True,
             "options": {
                 "name": "nekoBT",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "useMultipleInstances": False
@@ -1413,7 +1414,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "enabled": bool(EASYNEWS_USER and EASYNEWS_PASSWORD),
             "options": {
                 "name": "Easynews Search",
-                "timeout": 8000,
+                "timeout": 4000,
                 "resources": ["stream"],
                 "mediaTypes": [],
                 "services": ["easynews"],
@@ -1455,7 +1456,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
-                "timeout": 10000
+                "timeout": 4000
             }
         })
 
@@ -1468,7 +1469,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "options": {
                     "name": "StremThru Store (Local)",
                     "url": f"{STREMTHRU_URL}/stremio/store/",
-                    "timeout": 8000,
+                    "timeout": 3000,
                     "resources": ["catalog", "meta", "stream"],
                     "mediaTypes": [],
                     "hideStreams": False,
@@ -1484,7 +1485,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "options": {
                     "name": "Zilean DMM (Local)",
                     "url": ZILEAN_URL,
-                    "timeout": 5000,
+                    "timeout": 2500,
                     "resources": ["stream"],
                     "mediaTypes": [],
                     "useMultipleInstances": False
@@ -1507,7 +1508,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                         "url": f"{bitmagnet_url}/torznab",
                         "torznabUrl": f"{bitmagnet_url}/torznab",
                         "apiKey": os.environ.get("BITMAGNET_API_KEY", ""),
-                        "timeout": 8000,
+                        "timeout": 3500,
                         "resources": ["stream"],
                         "mediaTypes": [],
                         "useMultipleInstances": False
@@ -1548,7 +1549,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
                 continue
             opts["name"] = "Torrentio"
-            opts["timeout"] = 5000
+            opts["timeout"] = 3500
             custom_url = os.environ.get("TORRENTIO_URL") or os.environ.get("KNIGHTCRAWLER_URL", "")
             if custom_url:
                 opts["url"] = custom_url
@@ -1565,7 +1566,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("url", PROWLARR_URL)
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
-                opts["timeout"] = int(opts.get("timeout") or 6000)
+                opts["timeout"] = int(opts.get("timeout") or 4000)
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
                 validated_presets.append(p)
@@ -1581,7 +1582,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
                 opts.setdefault("services", ["nzbdav"])
                 opts.setdefault("sources", ["usenet"])
-                opts["timeout"] = int(opts.get("timeout") or 6000)
+                opts["timeout"] = int(opts.get("timeout") or 4000)
                 validated_presets.append(p)
             else:
                 validated_presets.append(p)
@@ -1593,7 +1594,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             p["enabled"] = True
             opts["name"] = "Knaben (Anime)"
             opts["mediaTypes"] = ["anime"]
-            opts["timeout"] = int(opts.get("timeout") or 6000)
+            opts["timeout"] = int(opts.get("timeout") or 4000)
             validated_presets.append(p)
         elif ptype == "stremthruTorz":
             if pid:
@@ -1604,8 +1605,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            curr_timeout = int(opts.get("timeout") or 4000)
-            opts["timeout"] = min(max(curr_timeout, 3000), 5000)
+            opts["timeout"] = 3000
             if reachable(f"{STREMTHRU_URL}/stremio/store/manifest.json", timeout=1.0):
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ StremThru Store (Debrid Cloud Library) is online and active.", flush=True)
@@ -1621,8 +1621,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['services']=['easynews']
             opts['useMultipleInstances']=False
             opts['paginate']=False
-            curr_timeout = int(opts.get("timeout") or 6000)
-            opts["timeout"] = 6000
+            opts["timeout"] = 4000
             opts["services"] = ["easynews"]
             if p["enabled"]:
                 print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
@@ -1646,7 +1645,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['services']=selected
             opts['mediaTypes']=['anime']
             opts['useMultipleInstances']=False
-            curr_timeout = int(opts.get("timeout") or 6000)
             opts["timeout"] = 4000
             validated_presets.append(p)
         elif ptype == "zilean":
@@ -1655,7 +1653,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     removed_preset_ids.add(pid)
                 continue
             opts["url"] = ZILEAN_URL
-            opts["timeout"] = int(opts.get("timeout") or 3000)
+            opts["timeout"] = int(opts.get("timeout") or 2500)
             dmm_enabled = os.environ.get("ENABLE_DMM", "true").lower() != "false"
             if dmm_enabled and (not probe_services or reachable(f"{ZILEAN_URL}/dmm/filtered?query=ping", timeout=1.0)):
                 p["enabled"] = True
@@ -1671,7 +1669,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            opts["timeout"] = int(opts.get("timeout") or 3000)
+            opts["timeout"] = int(opts.get("timeout") or 3500)
             bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
             api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
             torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
@@ -1891,11 +1889,32 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "precacheFailover": True,
         })
     if "deduplicator" in config and isinstance(config["deduplicator"], dict):
-        config["deduplicator"].setdefault("merge", {
+        merge_cfg = config["deduplicator"].setdefault("merge", {
             "enabled": True,
             "failoverVariants": True,
-            "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched"],
+            "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched", "audioTags", "visualTags", "codecs", "releaseGroups"],
         })
+        if isinstance(merge_cfg, dict) and "fields" in merge_cfg and isinstance(merge_cfg["fields"], list):
+            for extra_field in ["audioTags", "visualTags", "codecs", "releaseGroups"]:
+                if extra_field not in merge_cfg["fields"]:
+                    merge_cfg["fields"].append(extra_field)
+
+    if "sortCriteria" in config and isinstance(config["sortCriteria"], dict):
+        glob_sort = config["sortCriteria"].get("global", [])
+        if isinstance(glob_sort, list):
+            has_library = any(item.get("key") == "library" for item in glob_sort if isinstance(item, dict))
+            if not has_library:
+                cached_idx = -1
+                for i, item in enumerate(glob_sort):
+                    if isinstance(item, dict) and item.get("key") == "cached":
+                        cached_idx = i
+                        break
+                library_entry = {"key": "library", "direction": "desc"}
+                if cached_idx >= 0:
+                    glob_sort.insert(cached_idx + 1, library_entry)
+                else:
+                    glob_sort.insert(0, library_entry)
+                config["sortCriteria"]["global"] = glob_sort
 
     # Inject metadata API keys into AIOStreams user configuration
     global TMDB_API_KEY, TVDB_API_KEY
