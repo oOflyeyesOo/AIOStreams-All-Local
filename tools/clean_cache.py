@@ -9,11 +9,9 @@ user databases, configurations, or credentials.
 
 import argparse
 import json
-import os
 from pathlib import Path
 import shutil
 import sys
-import time
 
 if hasattr(sys.stdout, "reconfigure"):
     try:

@@ -157,6 +157,7 @@ function renderFields(id, values) {
       savedKeys.delete(key); saved.textContent = ''; remove.hidden = true;
       testSavedBtn.hidden = true;
       input.value = ''; input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
+      if (typeof setFormDirty === 'function') setFormDirty(true);
     });
     title.append(remove);
     const input = document.createElement('input');
@@ -421,7 +422,12 @@ async function loadManifest() {
     if (installAioWeb) {
       installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
     }
-    const playerUrl = info.jellyfinWebPlayer || info.watchUrl || '/watch/';
+    const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+    const playerUrl = info.jellyfinWebPlayer || `${location.protocol}//${location.hostname}:${aioPort}/jellyfin/web/`;
+    const launchEmbedded = document.getElementById('btn-launch-embedded-player');
+    if (launchEmbedded) {
+      launchEmbedded.href = playerUrl;
+    }
     const aioPlayer = document.getElementById('aiostreams-player-action');
     if (aioPlayer) {
       aioPlayer.href = playerUrl;
@@ -761,8 +767,10 @@ function pollLumiereRebuildProgress(button, badge) {
             button.disabled = false;
             button.textContent = 'Rebuild index ↻';
           }
-          const docStr = (stats.docs >= 1000) ? (stats.docs / 1000).toFixed(1) + 'k' : stats.docs;
-          const epStr = (stats.episodes >= 1000000) ? (stats.episodes / 1000000).toFixed(2) + 'M' : stats.episodes;
+          const docStr = (typeof stats.docs === 'number' && stats.docs >= 1000) ? (stats.docs / 1000).toFixed(1) + 'k' : (stats.docs ?? '0');
+          const epStr = (stats.episodes && !isNaN(stats.episodes))
+            ? (stats.episodes >= 1000000 ? (stats.episodes / 1000000).toFixed(2) + 'M' : (stats.episodes >= 1000 ? (stats.episodes / 1000).toFixed(0) + 'k' : stats.episodes))
+            : '0k';
           if (badge) badge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
           showToast('LumiereDB index rebuild completed successfully!');
           refreshServices();
@@ -872,20 +880,17 @@ async function refreshServices() {
     if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
       const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
       const aioOrigin = service.uiUrl ? new URL(service.uiUrl, location.origin).origin : `http://${location.hostname}:${aioPort}`;
-      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || cachedManifestInfo?.watchUrl || '/watch/';
-      const playerEmbedUrl = cachedManifestInfo?.watchUrl || '/watch/';
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${aioOrigin}/jellyfin/web/`;
 
-      const playerEmbedBtn = document.createElement('button');
-      playerEmbedBtn.type = 'button';
-      playerEmbedBtn.className = 'service-embed-btn';
-      playerEmbedBtn.textContent = 'Player ⧉';
-      playerEmbedBtn.title = 'Open AIOStreams Web Player in embedded viewer';
-      playerEmbedBtn.setAttribute('aria-label', 'Open AIOStreams Web Player in embedded viewer');
-      playerEmbedBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openServiceViewer('AIOStreams Web Player', playerEmbedUrl, playerUrl);
-      });
-      if (canEmbedService(playerEmbedUrl)) actions.append(playerEmbedBtn);
+      const playerActionBtn = document.createElement('a');
+      playerActionBtn.className = 'service-embed-btn';
+      playerActionBtn.href = playerUrl;
+      playerActionBtn.target = '_blank';
+      playerActionBtn.rel = 'noopener noreferrer';
+      playerActionBtn.textContent = 'Player ↗';
+      playerActionBtn.title = 'Open AIOStreams Web Player in new tab';
+      playerActionBtn.setAttribute('aria-label', 'Open AIOStreams Web Player in new tab');
+      actions.append(playerActionBtn);
 
       const qcBtn = document.createElement('button');
       qcBtn.type = 'button';
@@ -911,8 +916,10 @@ async function refreshServices() {
           if (res.phase && res.phase !== 'idle') {
             statsBadge.textContent = `⚡ Rebuilding (${res.phase})…`;
           } else if (res.docs) {
-            const docStr = (res.docs >= 1000) ? (res.docs / 1000).toFixed(1) + 'k' : res.docs;
-            const epStr = (res.episodes >= 1000000) ? (res.episodes / 1000000).toFixed(2) + 'M' : (res.episodes / 1000).toFixed(0) + 'k';
+            const docStr = (typeof res.docs === 'number' && res.docs >= 1000) ? (res.docs / 1000).toFixed(1) + 'k' : (res.docs ?? '0');
+            const epStr = (res.episodes && !isNaN(res.episodes))
+              ? (res.episodes >= 1000000 ? (res.episodes / 1000000).toFixed(2) + 'M' : (res.episodes >= 1000 ? (res.episodes / 1000).toFixed(0) + 'k' : res.episodes))
+              : '0k';
             statsBadge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
           } else {
             statsBadge.textContent = 'Index: Ready';
@@ -948,7 +955,7 @@ async function refreshServices() {
         rebuildBtn.textContent = 'Rebuilding…';
         statsBadge.textContent = '⚡ Rebuilding index…';
         try {
-          const res = await api('/api/lumiere/rebuild', 'POST');
+          const res = await api('/api/lumiere/rebuild', { method: 'POST' });
           if (res && res.success) {
             showToast('LumiereDB rebuild triggered. Monitoring progress…');
             pollLumiereRebuildProgress(rebuildBtn, statsBadge);
@@ -1009,24 +1016,30 @@ async function refreshServices() {
   const aioAction = document.getElementById('aiostreams-player-action');
   const hubPlayer = document.getElementById('hub-open-web-player');
   const topbarPlayer = document.getElementById('topbar-open-player');
+  const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+  const directPlayerUrl = info?.jellyfinWebPlayer || `${location.protocol}//${location.hostname}:${aioPort}/jellyfin/web/`;
   if (aioAction) {
     aioAction.style.display = enabled ? 'block' : 'none';
     if (enabled) {
-      aioAction.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
+      aioAction.href = directPlayerUrl;
       aioAction.textContent = 'Open AIOStreams Web Player ↗';
     }
   }
   if (hubPlayer) {
     hubPlayer.style.display = enabled ? 'inline-flex' : 'none';
     if (enabled) {
-      hubPlayer.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
+      hubPlayer.href = directPlayerUrl;
     }
   }
   if (topbarPlayer) {
     topbarPlayer.style.display = enabled ? 'inline-flex' : 'none';
     if (enabled) {
-      topbarPlayer.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
+      topbarPlayer.href = directPlayerUrl;
     }
+  }
+  const launchEmbedded = document.getElementById('btn-launch-embedded-player');
+  if (launchEmbedded) {
+    launchEmbedded.href = directPlayerUrl;
   }
   const toolbar = document.getElementById('quickconnect-toolbar');
   if (toolbar) toolbar.hidden = !enabled;
@@ -1045,8 +1058,11 @@ async function refreshServices() {
 
 }
 
+let isPollSetupInFlight = false;
 async function pollSetup() {
   clearTimeout(pollTimer);
+  if (isPollSetupInFlight) return;
+  isPollSetupInFlight = true;
   try {
     const job = await api('/api/setup-status');
     reconnectAttempts = 0;
@@ -1103,6 +1119,8 @@ async function pollSetup() {
     setProgress('Connection interrupted',error.message);
     document.getElementById('setup-button').disabled = false;
     pollTimer = setTimeout(pollSetup, 5000);
+  } finally {
+    isPollSetupInFlight = false;
   }
 }
 
@@ -1512,6 +1530,7 @@ document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.getAttribute('data-mode');
     setStreamingMode(mode);
+    if (typeof setFormDirty === 'function') setFormDirty(true);
   });
 });
 
@@ -1519,6 +1538,7 @@ document.querySelectorAll('.access-scope-section .mode-pill').forEach(btn => {
   btn.addEventListener('click', () => {
     const scope = btn.getAttribute('data-scope');
     setAccessScope(scope);
+    if (typeof setFormDirty === 'function') setFormDirty(true);
   });
 });
 
@@ -1569,8 +1589,6 @@ function renderPlaybackReadiness() {
   const list = document.getElementById('startup-checks');
   const labels = { ready: '✓ Ready', off: '– Disabled', optional: '– Optional, unavailable', waiting: '… Waiting / unavailable' };
   if (list) list.textContent = (playbackReadiness?.checks || []).map(check => `${check.name}: ${labels[check.status] || labels.waiting}`).join('\n') || 'No service results yet.';
-  if (ready && currentManifest) {
-  }
 }
 
 document.getElementById('open-stack-settings')?.addEventListener('click', () => {
@@ -1599,10 +1617,17 @@ async function refreshPlaybackReadiness() {
   try { return await readinessRequest; } finally { readinessRequest = null; }
 }
 
+let isPollReadinessInFlight = false;
 async function pollPlaybackReadiness() {
   clearTimeout(readinessTimer);
-  if (!document.hidden) await refreshPlaybackReadiness();
-  readinessTimer = setTimeout(pollPlaybackReadiness, 5000);
+  if (isPollReadinessInFlight) return;
+  isPollReadinessInFlight = true;
+  try {
+    if (!document.hidden) await refreshPlaybackReadiness();
+  } finally {
+    isPollReadinessInFlight = false;
+    readinessTimer = setTimeout(pollPlaybackReadiness, 5000);
+  }
 }
 
 async function runPlaybackTest() {
@@ -2074,7 +2099,7 @@ async function runOperations() {
       btn.textContent = 'Rebuilding…';
     }
     try {
-      const res = await api('/api/lumiere/rebuild', 'POST');
+      const res = await api('/api/lumiere/rebuild', { method: 'POST' });
       if (res && res.success) {
         showToast('LumiereDB rebuild triggered.');
       } else {
@@ -2303,7 +2328,11 @@ async function runOperations() {
     btn.disabled = true;
     btn.textContent = 'Testing…';
     try {
-      const res = await api('/api/webhook-test', 'POST', { url: webhookUrl });
+      const res = await api('/api/webhook-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl })
+      });
       if (res && res.success) {
         showToast('✓ Webhook test notification sent successfully!');
       } else {
@@ -2317,29 +2346,7 @@ async function runOperations() {
     }
   });
 
-  if (typeof document !== 'undefined' && document.addEventListener) {
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key.toLowerCase() === 's')) {
-        const setupForm = document.getElementById('setup-form');
-        const setupBtn = document.getElementById('setup-button');
-        if (setupForm && setupBtn && !setupBtn.disabled) {
-          e.preventDefault();
-          setupBtn.click();
-        }
-      } else if (e.key === 'Escape') {
-        const frameDialog = document.getElementById('service-frame-modal');
-        if (frameDialog && frameDialog.open) {
-          e.preventDefault();
-          closeServiceViewer();
-        }
-        const logDialog = document.getElementById('service-log-dialog');
-        if (logDialog && logDialog.open) {
-          e.preventDefault();
-          closeLogDialog();
-        }
-      }
-    });
-  }
+
 }
 
 async function updateZileanCacheStats(providedStats) {
@@ -2519,8 +2526,13 @@ function initHealthTelemetry() {
           clearTimeout(pollTimer);
           pollTimer = null;
         }
+        if (readinessTimer) {
+          clearTimeout(readinessTimer);
+          readinessTimer = null;
+        }
       } else {
         pollSetup();
+        pollPlaybackReadiness();
         if (advanced?.open) refreshHealthTelemetry();
         updateInterval();
       }
@@ -2939,29 +2951,15 @@ function initShortcutsAndHUD() {
     });
   }
 
-  const nextEpOverlay = document.getElementById('next-episode-overlay');
-  const playNextBtn = document.getElementById('btn-play-next-now');
-  const cancelNextBtn = document.getElementById('btn-cancel-next');
-  const nextTitleEl = document.getElementById('next-episode-title');
-  const nextSecsEl = document.getElementById('next-episode-seconds');
 
-  if (cancelNextBtn && nextEpOverlay) {
-    cancelNextBtn.addEventListener('click', () => {
-      nextEpOverlay.style.display = 'none';
-    });
-  }
-  if (playNextBtn && nextEpOverlay) {
-    playNextBtn.addEventListener('click', () => {
-      nextEpOverlay.style.display = 'none';
-      notify('Transitioning to next episode in playlist… ▶');
-    });
-  }
 
   const launchEmbeddedBtn = document.getElementById('btn-launch-embedded-player');
   if (launchEmbeddedBtn) {
-    launchEmbeddedBtn.addEventListener('click', () => {
-      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || cachedManifestInfo?.watchUrl || '/watch/';
-      openServiceViewer('AIOStreams Web Player', playerUrl, playerUrl);
+    launchEmbeddedBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || `${location.protocol}//${location.hostname}:${aioPort}/jellyfin/web/`;
+      window.open(playerUrl, '_blank', 'noopener,noreferrer');
     });
   }
 
@@ -2976,25 +2974,50 @@ function initShortcutsAndHUD() {
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('keydown', (e) => {
-      const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
-      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
-
-      if (e.key === 'Escape') {
-        if (shortcutsModal && shortcutsModal.open) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.key.toLowerCase() === 's')) {
+        const setupForm = document.getElementById('setup-form');
+        const setupBtn = document.getElementById('setup-button');
+        if (setupForm && setupBtn && !setupBtn.disabled) {
           e.preventDefault();
-          shortcutsModal.close();
-        }
-        if (statsHud && statsHud.style.display !== 'none') {
-          e.preventDefault();
-          statsHud.style.display = 'none';
-        }
-        if (nextEpOverlay && nextEpOverlay.style.display !== 'none') {
-          e.preventDefault();
-          nextEpOverlay.style.display = 'none';
+          setupBtn.click();
         }
         return;
       }
 
+      if (e.key === 'Escape') {
+        const frameDialog = document.getElementById('service-frame-modal');
+        if (frameDialog && frameDialog.open) {
+          e.preventDefault();
+          closeServiceViewer();
+          return;
+        }
+        const logDialog = document.getElementById('service-log-dialog');
+        if (logDialog && logDialog.open) {
+          e.preventDefault();
+          closeLogDialog();
+          return;
+        }
+        const lumiereDialog = document.getElementById('lumiere-stats-dialog');
+        if (lumiereDialog && lumiereDialog.open) {
+          e.preventDefault();
+          closeLumiereStatsDialog();
+          return;
+        }
+        if (shortcutsModal && shortcutsModal.open) {
+          e.preventDefault();
+          shortcutsModal.close();
+          return;
+        }
+        if (statsHud && statsHud.style.display !== 'none') {
+          e.preventDefault();
+          statsHud.style.display = 'none';
+          return;
+        }
+        return;
+      }
+
+      const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
       if (isInput) return;
 
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
@@ -3045,4 +3068,3 @@ Promise.allSettled([loadSettings(),loadManifest().finally(refreshServices),pollS
 
 renderPlaybackReadiness();
 pollPlaybackReadiness();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) pollPlaybackReadiness(); });

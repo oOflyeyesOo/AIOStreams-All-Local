@@ -624,175 +624,11 @@ main {
 }
 
 /* ==========================================================================
-   Onboarding Quick-Start Guide Card & Stepper
-   ========================================================================== */
-.onboarding-guide-card {
-  margin: 0 0 24px;
-  padding: 22px 24px;
-  background: linear-gradient(135deg, rgba(16, 24, 38, 0.9) 0%, rgba(12, 18, 28, 0.95) 100%);
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  position: relative;
-  overflow: hidden;
-}
-
-.onboarding-guide-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #38bdf8, #f59e0b, #10b981);
-}
-
-.onboarding-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.onboarding-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: rgba(56, 189, 248, 0.12);
-  color: var(--accent-cyan);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.onboarding-badge .badge-spark {
-  font-size: 13px;
-  line-height: 1;
-}
-
-.onboarding-subtitle {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: var(--text-sub);
-}
-
-.onboarding-subtitle strong {
-  color: var(--accent-gold);
-  font-weight: 600;
-}
-
-.stepper-grid {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.stepper-step {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 0.2s ease;
-}
-
-.stepper-step.active {
-  background: rgba(56, 189, 248, 0.06);
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.08);
-}
-
-.stepper-step.completed {
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.35);
-}
-
-.stepper-num {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-muted);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
-}
-
-.stepper-step.active .stepper-num {
-  background: var(--accent-cyan);
-  color: #041019;
-  border-color: transparent;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
-}
-
-.stepper-step.completed .stepper-num {
-  background: var(--green);
-  color: #04140b;
-  border-color: transparent;
-}
-
-.stepper-content {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.stepper-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.stepper-desc {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-
-.stepper-step.active .stepper-title {
-  color: #fff;
-}
-
-.stepper-step.active .stepper-desc {
-  color: var(--text-sub);
-}
-
-.stepper-step.completed .stepper-title {
-  color: #d1fae5;
-}
-
-.stepper-divider {
-  font-size: 18px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.2);
-  user-select: none;
-  flex-shrink: 0;
-}
-
-/* ==========================================================================
-   Workspace Grid (Left: Setup, Right: Manifest)
+   Workspace Section (Stack Setup Panel)
    ========================================================================== */
 .workspace-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 1.35fr) minmax(300px, 1fr);
-  gap: 24px;
-  align-items: start;
+  display: block;
+  width: 100%;
 }
 
 /* Mobile Nav */
@@ -2422,18 +2258,6 @@ footer {
   main {
     padding: 0 24px 48px;
   }
-  .stepper-grid {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .stepper-divider {
-    display: none;
-  }
-  .workspace-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
   .service-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2442,10 +2266,6 @@ footer {
 @media (max-width: 650px) {
   main {
     padding: 0 16px 40px;
-  }
-  .onboarding-guide-card {
-    padding: 16px;
-    margin-bottom: 20px;
   }
   .topbar {
     height: auto;
@@ -2963,35 +2783,6 @@ a.disabled, button.disabled {
   margin-top: 2px;
 }
 
-.hub-share-block {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.hub-share-divider {
-  border-top: 1px solid var(--line);
-  margin-top: 5px;
-  padding-top: 6px;
-}
-.hub-share-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.hub-share-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-main);
-}
-.hub-share-tag {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 1.5px 5px;
-  border-radius: 4px;
-}
 .hub-endpoint-preview {
   margin: 0;
 }
@@ -3009,25 +2800,6 @@ a.disabled, button.disabled {
   text-overflow: ellipsis !important;
   display: block !important;
   color: #c084fc !important;
-}
-
-.hub-share-inline-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-.hub-share-inline-row .manifest-preview {
-  flex: 1;
-  min-width: 0;
-}
-.hub-share-inline-row .hub-card-actions {
-  margin: 0;
-  padding: 0;
-  flex-shrink: 0;
-}
-.hub-share-inline-row .hub-card-actions .light-button {
-  height: 100%;
-  white-space: nowrap;
 }
 
 .hub-card-actions {

@@ -197,7 +197,7 @@ services:
     - STREMTHRU_TORZ_URL=http://stremthru:8080/stremio/torz/
     - FORCE_PROXY_ENABLED=${FORCE_PROXY_ENABLED:-true}
     - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
-    - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
+    - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3001}
     - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
     - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
     - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-1800}
@@ -240,9 +240,6 @@ services:
         max-size: 10m
         max-file: '3'
         compress: 'true'
-    cpu_shares: ${ZILEAN_CPU_SHARES:-256}
-    cpus: ${ZILEAN_CPU_LIMIT:-0.5}
-    mem_limit: ${ZILEAN_MEM_LIMIT:-3072m}
     deploy:
       resources:
         limits:

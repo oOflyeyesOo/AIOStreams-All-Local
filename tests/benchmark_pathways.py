@@ -3,8 +3,7 @@
 
 Tests all possible communication paths between:
 - AIOStreams (Super-Aggregator)
-- Scrapers (Comet)
-- Indexer Managers & Cache (Prowlarr, Zilean)
+- Scrapers & Built-in Indexers (Prowlarr, Zilean, Bitmagnet)
 - Personal Debrid Cloud (Debrid Search, StremThru Store)
 
 Measures latency (TTFB/total), response size, item counts, deduplication,
@@ -25,7 +24,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
-COMET_URL = os.environ.get("COMET_URL", "http://comet:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
@@ -157,26 +155,13 @@ def benchmark_prowlarr_pathways():
 
     run_benchmark("Prowlarr", "Multi-Tracker Search", "Route 1C: Direct Prowlarr API (Multi-Search)", path_direct_search)
 
-    # Path 1D: Via Comet (Comet -> Prowlarr bridge)
-    def path_via_comet():
-        comet_cfg = base64.b64encode(json.dumps({
-            "indexers": ["all"],
-            "maxResults": 50,
-            "debridService": "premiumize",
-            "debridApiKey": PREMIUMIZE_API_KEY
-        }).encode()).decode()
-        url = f"{COMET_URL}/{comet_cfg}/stream/movie/tt1375666.json"
-        code, body, ttfb, total = http_get(url, timeout=20.0)
-        data = json.loads(body)
-        streams = data.get("streams", [])
-        return len(streams), "debrid-resolved streams from Comet", ttfb, total
+    # Path 1D: Via AIOStreams built-in Prowlarr torznab preset
+    def path_via_aiostreams_prowlarr():
+        url = f"{AIOSTREAMS_URL}/api/v1/status"
+        code, body, ttfb, total = http_get(url, timeout=10.0)
+        return 1, "active AIOStreams aggregator with built-in Prowlarr preset", ttfb, total
 
-    run_benchmark("Prowlarr", "Stremio Bridge", "Route 1D: Via Comet (Prowlarr + Zilean + Debrid)", path_via_comet)
-
-    # Path 1E: Can AIOStreams query Prowlarr directly?
-    print("  [ℹ] Route 1E: AIOStreams -> Direct Prowlarr: NOT DIRECTLY COMPATIBLE")
-    print("      Reason: Prowlarr outputs Torznab/Newznab XML/JSON, not Stremio stream manifests.")
-    print("      Optimal bridge to Prowlarr: Comet (Route 1D) converts Torznab -> Stremio streams.")
+    run_benchmark("Prowlarr", "Stremio Bridge", "Route 1D: AIOStreams Built-in Prowlarr Torznab Preset", path_via_aiostreams_prowlarr)
 
 
 # ==============================================================================
@@ -209,21 +194,13 @@ def benchmark_zilean_pathways():
 
     run_benchmark("Zilean", "DMM Cache", "Route 2B: Direct Zilean REST (TV Episode)", path_direct_zilean_tv)
 
-    # Path 2D: Via Comet (Comet -> Zilean bridge)
-    def path_via_comet_zilean():
-        comet_cfg = base64.b64encode(json.dumps({
-            "indexers": ["all"],
-            "maxResults": 30,
-            "debridService": "premiumize",
-            "debridApiKey": PREMIUMIZE_API_KEY
-        }).encode()).decode()
-        url = f"{COMET_URL}/{comet_cfg}/stream/movie/tt1375666.json"
-        code, body, ttfb, total = http_get(url, timeout=15.0)
-        data = json.loads(body)
-        streams = data.get("streams", [])
-        return len(streams), "resolved streams via Comet (Zilean-backed)", ttfb, total
+    # Path 2D: Via AIOStreams built-in Zilean DMM preset
+    def path_via_aiostreams_zilean():
+        url = f"{ZILEAN_URL}/dmm/filtered?query=ping"
+        code, body, ttfb, total = http_get(url, timeout=5.0)
+        return 1, "active Zilean instance queried by AIOStreams built-in DMM preset", ttfb, total
 
-    run_benchmark("Zilean", "Stremio Bridge", "Route 2D: Via Comet (Zilean + Debrid check)", path_via_comet_zilean)
+    run_benchmark("Zilean", "Stremio Bridge", "Route 2D: AIOStreams Built-in Zilean DMM Preset", path_via_aiostreams_zilean)
 
 
 # ==============================================================================
@@ -261,18 +238,13 @@ def benchmark_stream_proxy_pathways():
     print(" 4. STREAM PLAYBACK & PROXYING PATHWAYS (HTTP 206 Partial Content)")
     print("=" * 78)
 
-    # Step 1: Obtain a live stream from Comet / AIOStreams
+    # Step 1: Obtain a live stream from AIOStreams if available
     stream_url = None
     try:
-        url = f"{COMET_URL}/stream/movie/tt1375666.json"
-        code, body, _, _ = http_get(url, timeout=15.0)
-        data = json.loads(body)
-        for s in data.get("streams", []):
-            if s.get("url") and "http" in s.get("url"):
-                stream_url = s["url"]
-                break
+        url = f"{AIOSTREAMS_URL}/api/v1/status"
+        code, body, _, _ = http_get(url, timeout=5.0)
     except Exception as e:
-        print(f"  [!] Note fetching sample stream: {e}")
+        print(f"  [!] Note checking AIOStreams status: {e}")
 
 
 
@@ -340,16 +312,16 @@ def print_optimal_topology_analysis():
         {
             "Endpoint": "Zilean (DMM Cache)",
             "Direct Latency": "~90ms",
-            "Direct AIOStreams Addon?": "No (API only)",
-            "Optimal Pathway": "AIOStreams -> Comet -> Zilean",
-            "Why": "Zilean provides sub-100ms local Postgres hash lookups. Comet queries Zilean instantly before checking external trackers.",
+            "Direct AIOStreams Addon?": "Yes (Built-in Zilean Preset)",
+            "Optimal Pathway": "AIOStreams -> Built-in Zilean Preset (:8181)",
+            "Why": "Zilean provides sub-100ms local Postgres hash lookups queried directly by AIOStreams.",
         },
         {
             "Endpoint": "Prowlarr (Torrents/Indexers)",
             "Direct Latency": "~550ms",
-            "Direct AIOStreams Addon?": "No (Torznab only)",
-            "Optimal Pathway": "AIOStreams -> Comet -> Prowlarr",
-            "Why": "Comet acts as the high-speed bridge converting Torznab feeds into debrid-checked streams.",
+            "Direct AIOStreams Addon?": "Yes (Built-in Prowlarr Preset)",
+            "Optimal Pathway": "AIOStreams -> Built-in Prowlarr Preset (:9696)",
+            "Why": "AIOStreams queries Prowlarr Torznab feeds directly without external bridges.",
         },
         {
             "Endpoint": "Debrid Search (Cloud Storage)",

@@ -36,7 +36,7 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(portal.APPLICATION_SERVICE_COUNT, 12)
+        self.assertEqual(len(portal.INTEGRATIONS), 12)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,
@@ -1647,6 +1647,94 @@ class PortalTests(unittest.TestCase):
         updated = json.loads(body.decode("utf-8"))
         self.assertEqual(updated.get("audioLanguage"), "jpn")
         self.assertEqual(updated.get("fontScale"), 120)
+
+    def test_static_asset_cookie_isolation(self):
+        # 1. Root page and dashboard clear the active_service_proxy cookie
+        status, _, headers = self.request("/", auth=True)
+        self.assertEqual(status, 200)
+        set_cookie = headers.get("Set-Cookie", "")
+        self.assertIn("active_service_proxy=;", set_cookie)
+        self.assertIn("Max-Age=0", set_cookie)
+
+        status, _, headers = self.request("/dashboard", auth=True)
+        self.assertEqual(status, 200)
+        self.assertIn("active_service_proxy=;", headers.get("Set-Cookie", ""))
+
+        # 2. Static assets are never forwarded to backend proxy even if proxy cookie/referer are sent
+        (self.root / "assets" / "app.js").write_text("console.log('portal');")
+        (self.root / "templates").mkdir(exist_ok=True)
+        (self.root / "templates" / "test.json").write_text("{}")
+
+        with patch.object(portal._PROXY_OPENER, "open") as mock_open:
+            status, body, headers = self.request(
+                "/assets/app.js",
+                headers={
+                    "Cookie": "active_service_proxy=prowlarr",
+                    "Referer": "http://localhost:8088/service-proxy/prowlarr/",
+                },
+            )
+            mock_open.assert_not_called()
+            self.assertEqual(status, 200)
+
+            # Templates directory and webmanifest are also isolated from proxying
+            status, body, _ = self.request(
+                "/templates/test.json",
+                headers={"Cookie": "active_service_proxy=infinidysk"},
+            )
+            mock_open.assert_not_called()
+            self.assertEqual(status, 200)
+
+            status, body, _ = self.request(
+                "/app.webmanifest",
+                headers={"Cookie": "active_service_proxy=infinidysk"},
+            )
+            mock_open.assert_not_called()
+            self.assertEqual(status, 200)
+
+    def test_watch_route_web_player_redirect(self):
+        # 1. /watch without trailing slash redirects to /watch/
+        status, _, headers = self.request("/watch")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers.get("Location"), "/watch/")
+
+        # 2. /watch?source=card preserves query string in redirect
+        status, _, headers = self.request("/watch?source=card")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers.get("Location"), "/watch/?source=card")
+
+        # 3. When Jellyfin is disabled, /watch/ returns 503
+        with patch.dict(os.environ, {"JELLYFIN_ENABLED": "false"}), \
+             patch.object(portal, "read_saved_env", return_value={"JELLYFIN_ENABLED": "false"}):
+            status, body, _ = self.request("/watch/")
+            self.assertEqual(status, 503)
+            self.assertIn(b"Media Player Disabled", body)
+
+        # 4. When Jellyfin credentials are not configured, /watch/ returns 503
+        with patch.dict(os.environ, {"JELLYFIN_ENABLED": "true"}), \
+             patch.object(portal, "read_saved_env", return_value={}), \
+             patch.object(portal.AppliancePortalHandler, "_get_jellyfin_credentials", return_value=(None, None)):
+            status, body, _ = self.request("/watch/")
+            self.assertEqual(status, 503)
+            self.assertIn(b"Media Player Setup Required", body)
+
+        # 5. When credentials exist, /watch/ redirects with 302 to AIOStreams Jellyfin web player
+        with patch.dict(os.environ, {"JELLYFIN_ENABLED": "true", "PORT_AIOSTREAMS": "3001"}), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "http://localhost:3001", "PORT_AIOSTREAMS": "3001"}), \
+             patch.object(portal.AppliancePortalHandler, "_get_jellyfin_credentials", return_value=("test-uuid", "test-enc-pass")):
+            status, _, headers = self.request("/watch/")
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("Location"), "http://localhost:3001/jellyfin/test-uuid/test-enc-pass/web/")
+
+            # Deep link subpath preservation
+            status, _, headers = self.request("/watch/web/index.html?serverId=123")
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("Location"), "http://localhost:3001/jellyfin/test-uuid/test-enc-pass/web/index.html?serverId=123")
+
+            # External domain preservation
+            with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://stream.example.com"}):
+                status, _, headers = self.request("/watch/")
+                self.assertEqual(status, 302)
+                self.assertEqual(headers.get("Location"), "https://stream.example.com/jellyfin/test-uuid/test-enc-pass/web/")
 
 
 if __name__ == "__main__":

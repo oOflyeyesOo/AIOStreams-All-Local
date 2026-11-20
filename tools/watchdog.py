@@ -22,7 +22,6 @@ import subprocess
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -82,7 +81,6 @@ DISCORD_ALERT_HISTORY = []
 MAX_ALERTS_PER_WINDOW = 3
 ALERT_WINDOW_SECONDS = 60
 THROTTLED_ALERTS_COUNT = 0
-LAST_ANIME_DELTA_CHECK = 0
 
 
 def get_webhook_url() -> str:
@@ -307,109 +305,6 @@ def get_zilean_stats() -> dict:
             "error": str(e),
             "engine": "DMM Hash Search"
         }
-
-
-def check_scheduled_backup(keep_last: int = 5) -> dict:
-    """Check if automated daily/weekly backup is due and trigger it."""
-    schedule = os.environ.get("BACKUP_SCHEDULE", "").strip().lower()
-    if not schedule:
-        try:
-            env_file = Path.cwd() / ".env"
-            if not env_file.is_file():
-                env_file = Path(__file__).resolve().parent.parent / ".env"
-            if env_file.is_file():
-                for line in env_file.read_text(encoding="utf-8").splitlines():
-                    if line.strip().startswith("BACKUP_SCHEDULE="):
-                        schedule = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
-        except Exception:
-            pass
-    schedule = schedule or "daily"
-    if schedule == "off":
-        return {"status": "disabled"}
-
-    try:
-        import tools.backup as stack_backup
-    except ImportError:
-        return {"status": "unavailable"}
-
-    project_root = Path.cwd()
-    if not (project_root / "compose.manager.yml").is_file():
-        project_root = Path(__file__).resolve().parent.parent
-    output_dir = project_root / "backups"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    telemetry = stack_backup.get_backup_telemetry(output_dir, project_root)
-    latest_str = telemetry.get("latest")
-    now_utc = datetime.now(timezone.utc)
-    is_due = False
-
-    if not latest_str or telemetry.get("count", 0) == 0:
-        is_due = True
-    else:
-        try:
-            latest_dt = datetime.fromisoformat(latest_str)
-            age_hours = (now_utc - latest_dt).total_seconds() / 3600.0
-            if schedule == "daily" and age_hours >= 24.0:
-                is_due = True
-            elif schedule == "weekly" and age_hours >= 168.0:
-                is_due = True
-        except Exception:
-            is_due = True
-
-    if is_due:
-        print(f"  [i] Automated backup is due (schedule={schedule}). Creating backup...", flush=True)
-        res = stack_backup.create_backup(output_dir=output_dir, project_root=project_root, keep_last=keep_last)
-        if res.get("success"):
-            send_discord_alert(
-                title="💾 AIO Automated Backup Created",
-                description=f"Automated scheduled backup completed successfully (`{schedule}`).\nArchive: `{res.get('archive')}` ({res.get('size_mb')} MB)",
-                color=0x3498DB
-            )
-        return res
-    return {"status": "up_to_date", "latest": latest_str}
-
-
-def refresh_anime_ids_delta() -> dict:
-    """Periodically refresh anime ID mappings from community repositories."""
-    global LAST_ANIME_DELTA_CHECK
-    now = time.monotonic()
-    if LAST_ANIME_DELTA_CHECK != 0 and (now - LAST_ANIME_DELTA_CHECK) < 86400:
-        return {"status": "skipped_recent"}
-    LAST_ANIME_DELTA_CHECK = now
-
-    project_root = Path.cwd()
-    if not (project_root / "compose.manager.yml").is_file():
-        project_root = Path(__file__).resolve().parent.parent
-    db_path = project_root / "data" / "postersplus" / "anime_ids.db"
-    if not db_path.is_file():
-        return {"status": "no_db"}
-
-    try:
-        req = urllib.request.Request(
-            "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-mini.json",
-            headers={"User-Agent": "AIO-Watchdog/2.0"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            import sqlite3
-            conn = sqlite3.connect(str(db_path))
-            cur = conn.cursor()
-            inserted = 0
-            for item in data:
-                mal_id = item.get("mal_id")
-                kitsu_id = item.get("kitsu_id")
-                anilist_id = item.get("anilist_id")
-                if mal_id and (kitsu_id or anilist_id):
-                    cur.execute(
-                        "INSERT OR IGNORE INTO anime_mal_map (mal_id, kitsu_id, anilist_id) VALUES (?, ?, ?)",
-                        (mal_id, kitsu_id, anilist_id)
-                    )
-                    inserted += cur.rowcount
-            conn.commit()
-            conn.close()
-            return {"status": "refreshed", "new_mappings": inserted}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
 
 
 def restart_container(container_name: str) -> bool:

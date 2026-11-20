@@ -27,7 +27,6 @@ import ipaddress
 import socket
 import sqlite3
 import http.client
-import platform
 import math
 import html
 from concurrent.futures import ThreadPoolExecutor
@@ -479,7 +478,10 @@ def run_playback_test(mode=None, content_id=None, kind=None):
     if not mode:
         mode = env_vars.get("STREAMING_MODE", "debrid").lower()
 
-    sample_id = content_id.strip() if content_id and isinstance(content_id, str) and content_id.strip() else "tt1375666"
+    raw_id = content_id.strip() if content_id and isinstance(content_id, str) and content_id.strip() else "tt1375666"
+    if not re.fullmatch(r"[a-zA-Z0-9:_.-]{1,100}", raw_id):
+        raw_id = "tt1375666"
+    sample_id = urllib.parse.quote(raw_id, safe=":")
     sample_kind = kind.strip().lower() if kind and isinstance(kind, str) and kind.strip().lower() in ("movie", "series", "anime") else "movie"
 
     steps = []
@@ -1053,11 +1055,16 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
 
 _STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
 _INFINIDYSK_SESSION = None
+_INFINIDYSK_SESSION_LAST_ATTEMPT = 0.0
 
 def get_infinidysk_session_cookie(force_refresh=False):
-    global _INFINIDYSK_SESSION
+    global _INFINIDYSK_SESSION, _INFINIDYSK_SESSION_LAST_ATTEMPT
+    now = time.monotonic()
     if _INFINIDYSK_SESSION and not force_refresh:
         return _INFINIDYSK_SESSION
+    if not force_refresh and not _INFINIDYSK_SESSION and (now - _INFINIDYSK_SESSION_LAST_ATTEMPT < 10.0):
+        return None
+    _INFINIDYSK_SESSION_LAST_ATTEMPT = now
     env = read_saved_env()
     addon_pw = env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
     configured_url = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
@@ -1080,7 +1087,7 @@ def get_infinidysk_session_cookie(force_refresh=False):
         )
         try:
             try:
-                resp = opener.open(req, timeout=3)
+                resp = opener.open(req, timeout=1.0)
                 headers = resp.headers
             except urllib.error.HTTPError as e:
                 headers = e.headers
@@ -1720,7 +1727,8 @@ button:hover {{ background: #0369a1; }}
         # Redirect /watch to native Jellyfin Web Player on the AIOStreams port (3001)
         env_vars = read_saved_env()
         base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL")
-        raw_host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "localhost")).split(",")[0].strip().split(":")[0]
+        host_hdr = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "localhost")).split(",")[0].strip()
+        raw_host = host_hdr[:host_hdr.rfind("]") + 1] if (host_hdr.startswith("[") and "]" in host_hdr) else (host_hdr.rsplit(":", 1)[0] if ":" in host_hdr else host_hdr)
         aio_port = env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS", "3001")
         proto = "https" if (self.headers.get("X-Forwarded-Proto") == "https" or (base_url and base_url.startswith("https://"))) else "http"
 
@@ -2068,7 +2076,8 @@ button:hover {{ background: #0369a1; }}
             if base_url and not any(h in base_url for h in ("localhost:3000", "127.0.0.1:3000", "aiostreams:3000")):
                 target = f"{base_url.rstrip('/')}/stremio/u/local/manifest.json"
             else:
-                raw_host = self.headers.get("Host", "localhost").split(":")[0]
+                host_hdr = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "localhost")).split(",")[0].strip()
+                raw_host = host_hdr[:host_hdr.rfind("]") + 1] if (host_hdr.startswith("[") and "]" in host_hdr) else (host_hdr.rsplit(":", 1)[0] if ":" in host_hdr else host_hdr)
                 aio_port = env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS", "3001")
                 proto = "https" if self.headers.get("X-Forwarded-Proto") == "https" else "http"
                 target = f"{proto}://{raw_host}:{aio_port}/stremio/u/local/manifest.json"
@@ -2542,13 +2551,6 @@ button:hover {{ background: #0369a1; }}
         }
         self.json_response(resp_env if env_only else resp)
 
-    def update_env_key(self, key, value):
-        try:
-            save_env_updates({key: value})
-        except Exception as e:
-            log_key = "[REDACTED]" if re.search(r"KEY|PASS|TOKEN|SECRET", key) else key
-            print(f"[Portal] Note updating env key {log_key}: {type(e).__name__}", flush=True)
-
     def handle_api_manifest_info(self):
         install_info = {}
         candidates = [
@@ -2732,7 +2734,7 @@ button:hover {{ background: #0369a1; }}
                 try:
                     with open(path, "r", encoding="utf-8", errors="ignore") as f:
                         lines = f.readlines()
-                        logs[name] = "".join(lines[-100:])
+                        logs[name] = self.redact_service_logs("".join(lines[-100:]))
                 except Exception:
                     logs[name] = "Error reading log."
             else:
@@ -2859,11 +2861,15 @@ button:hover {{ background: #0369a1; }}
                             key, separator, value = line.strip().partition("=")
                             if separator and not key.startswith("#"):
                                 existing[key] = value
-                old_urls = public_service_urls(normalize_base_url(existing.get("BASE_URL")))
+                old_urls = {}
+                try:
+                    old_urls = public_service_urls(normalize_base_url(existing.get("BASE_URL")))
+                except (ValueError, TypeError):
+                    old_urls = {}
                 for key, url in public_service_urls(keys_to_update["BASE_URL"]).items():
                     current = existing.get(key, "")
                     current_host = urllib.parse.urlsplit(current).hostname
-                    if key not in keys_to_update and (not current or current == old_urls[key] or current_host in ("localhost", "127.0.0.1")):
+                    if key not in keys_to_update and (not current or current == old_urls.get(key) or current_host in ("localhost", "127.0.0.1")):
                         keys_to_update[key] = url
 
             save_env_updates(keys_to_update)

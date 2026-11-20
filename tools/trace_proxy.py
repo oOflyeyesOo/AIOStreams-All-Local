@@ -1,5 +1,4 @@
 """Opt-in internal HTTP tracing. Never records URLs, queries, headers or bodies."""
-import collections
 import http.client
 import http.server
 import json

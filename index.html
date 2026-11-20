@@ -232,7 +232,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-size:14px;font-weight:600;color:var(--green);">▶ Stream preview</span>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button type="button" id="btn-launch-embedded-player" class="player-copy-btn" style="font-size:12px;padding:3px 8px;color:#38bdf8;border-color:#38bdf8;">Launch in Embedded Player ↗</button>
+        <a id="btn-launch-embedded-player" class="player-copy-btn" href="#" target="_blank" rel="noopener noreferrer" style="font-size:12px;padding:3px 8px;color:#38bdf8;border-color:#38bdf8;text-decoration:none;display:inline-flex;align-items:center;">Launch Web Player ↗</a>
         <a id="playback-direct-stream-link" class="subtle-link" href="#" target="_blank" rel="noopener noreferrer" style="margin:0;">Open stream directly ↗</a>
       </div>
     </div>
@@ -836,17 +836,7 @@
         <div>Delivery Mode: <strong id="hud-stat-delivery">Zero-Transcode Passthrough</strong></div>
       </div>
     </div>
-    <div id="next-episode-overlay" class="next-episode-overlay" style="display:none;">
-      <div class="next-episode-card">
-        <div class="next-episode-eyebrow">UP NEXT</div>
-        <h4 id="next-episode-title">Next Episode</h4>
-        <p>Playing in <strong id="next-episode-seconds">10</strong>s...</p>
-        <div class="next-episode-actions">
-          <button type="button" id="btn-play-next-now" class="primary-button">Play Now ▶</button>
-          <button type="button" id="btn-cancel-next" class="text-button">Cancel ✕</button>
-        </div>
-      </div>
-    </div>
+
     <iframe id="service-frame-iframe" class="service-frame-iframe" src="about:blank" title="Embedded Service Viewer" referrerpolicy="same-origin" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
   </div>
 </dialog>

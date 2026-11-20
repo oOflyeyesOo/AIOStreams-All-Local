@@ -4,7 +4,7 @@ import {performance} from 'node:perf_hooks';
 const output=process.stdout.write.bind(process.stdout);
 for(const name of ['log','info','warn','error','debug'])console[name]=()=>{};
 const endpoints={torrentio:'https://torrentio.strem.fun',knightcrawler:'https://knightcrawler.elfhosted.com'};
-const report={scope:'public discovery; local Comet comparison; optional cache checks only against official Premiumize API; no configuration changes or media decoding',sources:{},cases:[]};
+const report={scope:'public discovery; optional cache checks only against official Premiumize API; no configuration changes or media decoding',sources:{},cases:[]};
 async function read(url){
   const start=performance.now();
   let status,type;
@@ -19,7 +19,7 @@ for(const [name,url] of Object.entries(endpoints)){
   const {value,summary}=await read(url+'/manifest.json');
   report.sources[name]={...summary,id:value.id||null,name:value.name||null};
 }
-let cometToken,providerKey;
+let providerKey;
 try{
   const install=JSON.parse(fs.readFileSync('/data/aiostreams_install.json','utf8'));
   let user;
@@ -35,12 +35,10 @@ try{
   if(!user) throw new Error('Could not authenticate the installed profile');
   const services=user.services.filter(s=>s.enabled&&s.id==='premiumize'&&s.credentials?.apiKey);
   providerKey=services[0]?.credentials.apiKey;
-  cometToken=Buffer.from(JSON.stringify({debridServices:services.map(s=>({service:s.id,apiKey:s.credentials.apiKey})),
-    enableTorrent:true,scrapeDebridAccountTorrents:false,cachedOnly:false,removeTrash:true,maxResultsPerResolution:0,maxSize:0,resultFormat:['all']})).toString('base64');
 }catch{report.localComparisonUnavailable=true;}
 for(const [kind,id] of [['movie','tt15239678'],['series','tt0944947:2:2'],['movie','tt1375666'],['series','tt0903747:1:1']]){
   const row={case:kind,id,sources:{}};const sets={};
-  for(const [name,base] of Object.entries({...endpoints,...(cometToken?{comet:'http://comet:8000/'+cometToken}:{})})){
+  for(const [name,base] of Object.entries(endpoints)){
     const {value,summary}=await read(base+'/stream/'+kind+'/'+id+'.json');
     const rows=(value.streams||[]).filter(s=>s.infoHash||s.url);
     const hashes=new Set();
@@ -56,8 +54,6 @@ for(const [kind,id] of [['movie','tt15239678'],['series','tt0944947:2:2'],['movi
     }
     sets[name]=hashes;row.sources[name]={...summary,candidates:rows.length,hashes:hashes.size,...(name==='torrentio'?{providers}:{} )};
   }
-  if(sets.knightcrawler&&sets.comet)row.knightcrawlerHashesAbsentFromComet=[...sets.knightcrawler].filter(h=>!sets.comet.has(h)).length;
-  if(sets.torrentio&&sets.comet)row.torrentioHashesAbsentFromComet=[...sets.torrentio].filter(h=>!sets.comet.has(h)).length;
   if(sets.torrentio&&sets.knightcrawler)row.knightcrawlerHashesAbsentFromTorrentio=[...sets.knightcrawler].filter(h=>!sets.torrentio.has(h)).length;
   if(process.env.BENCH_CACHE==='true'&&providerKey){
     try{
@@ -71,7 +67,6 @@ for(const [kind,id] of [['movie','tt15239678'],['series','tt0944947:2:2'],['movi
         batch.forEach((hash,i)=>{if(value.response[i])cached.add(hash);});
       }
       row.cachedHashes=Object.fromEntries(Object.entries(sets).map(([name,hashes])=>[name,[...hashes].filter(h=>cached.has(h)).length]));
-      row.torrentioCachedHashesAbsentFromComet=[...sets.torrentio].filter(h=>cached.has(h)&&!sets.comet?.has(h)).length;
     }catch{row.cacheCheckUnavailable=true;}
   }
   report.cases.push(row);
