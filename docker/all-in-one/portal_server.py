@@ -1189,6 +1189,8 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if getattr(self, "_is_proxy_response", False):
             super().end_headers()
             return
+        if hasattr(self, "path") and self.path in ("/", "/index.html", "/dashboard", "/dashboard.html"):
+            self.send_header("Set-Cookie", "active_service_proxy=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -1540,7 +1542,7 @@ button:hover {{ background: #0369a1; }}
                     if fresh_cookie:
                         infinidysk_auto_cookie = fresh_cookie
 
-            self.send_header("Set-Cookie", f"active_service_proxy={service}; Path=/; SameSite=Lax")
+            self.send_header("Set-Cookie", f"active_service_proxy={service}; Path=/service-proxy/; SameSite=Lax")
             if service == "infinidysk" and infinidysk_auto_cookie:
                 self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/; SameSite=Lax")
 
@@ -1576,6 +1578,11 @@ button:hover {{ background: #0369a1; }}
             return
 
     def get_active_service_from_request(self):
+        clean_path = urllib.parse.urlsplit(self.path).path
+        if (clean_path.startswith("/assets/") or clean_path.startswith("/templates/")
+                or clean_path in ("/", "/index.html", "/dashboard", "/dashboard.html", "/app.webmanifest", "/favicon.ico")
+                or clean_path in PORTAL_API_GET_PATHS or clean_path in PORTAL_API_POST_PATHS):
+            return None, False
         referer = self.headers.get("Referer", "")
         if referer:
             match = re.search(r"/service-proxy/([a-zA-Z0-9_-]+)(?:/|$)", referer)
@@ -1710,30 +1717,30 @@ button:hover {{ background: #0369a1; }}
             self.wfile.write(body)
             return
 
-        # Map /watch[/rest] → /jellyfin/<uid>/<enc>/web[/rest]
-        # If subpath is empty or just "/", send to the web player root
-        if not subpath or subpath == "/":
-            internal_path = f"/jellyfin/{uuid}/{encrypted_password}/web/"
+        # Redirect /watch to native Jellyfin Web Player on the AIOStreams port (3001)
+        env_vars = read_saved_env()
+        base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL")
+        raw_host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "localhost")).split(",")[0].strip().split(":")[0]
+        aio_port = env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS", "3001")
+        proto = "https" if (self.headers.get("X-Forwarded-Proto") == "https" or (base_url and base_url.startswith("https://"))) else "http"
+
+        if base_url and not any(h in base_url for h in ("localhost:3000", "127.0.0.1:3000", "aiostreams:3000")):
+            aio_base = base_url.rstrip("/")
         else:
-            # Strip a leading /web prefix if the browser already followed a rewrite
-            stripped = re.sub(r"^/web(?=/|$)", "", subpath)
-            internal_path = f"/jellyfin/{uuid}/{encrypted_password}/web{stripped}"
+            aio_base = f"{proto}://{raw_host}:{aio_port}"
 
-        # Temporarily swap the path so proxy_to_service sees the credential path,
-        # then restore it after so Location rewrites stay on /watch/
-        original_path = self.path
-        self.path = internal_path + (f"?{query}" if query else "")
+        qs = f"?{query}" if query else ""
+        sub = subpath.lstrip("/")
+        if not sub or sub == "web" or sub == "web/":
+            target = f"{aio_base}/jellyfin/{uuid}/{encrypted_password}/web/{qs}"
+        else:
+            stripped = re.sub(r"^web(?=/|$)", "", sub).lstrip("/")
+            target = f"{aio_base}/jellyfin/{uuid}/{encrypted_password}/web/{stripped}{qs}"
 
-        # Delegate to the existing aiostreams proxy, treating this as an alias
-        # so Location and base-href rewrites are applied.  We override the
-        # base_href injection below via the is_watch flag.
-        try:
-            self._watch_base = "/watch/"  # signal to proxy_to_service rewriter
-            self.proxy_to_service("aiostreams", internal_path, query, is_alias=True,
-                                  watch_base="/watch/")
-        finally:
-            self.path = original_path
-            self._watch_base = None
+        self.send_response(302)
+        self.send_header("Location", target)
+        self.end_headers()
+        return
 
     def do_GET(self):
         url_parts = urllib.parse.urlparse(self.path)
@@ -2125,6 +2132,10 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/clean-cache":
             self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
+
+        # Static portal assets — never proxy to backend services
+        if path.startswith("/assets/") or path.startswith("/templates/") or path in ("/app.webmanifest", "/favicon.ico"):
+            return super().do_GET()
 
         if self.check_proxy_referer_fallback(path, url_parts.query):
             return

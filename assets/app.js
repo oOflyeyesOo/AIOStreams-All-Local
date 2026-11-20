@@ -421,7 +421,7 @@ async function loadManifest() {
     if (installAioWeb) {
       installAioWeb.href = `https://web.aiostreams.org/#/server/add?serverUrl=${encodeURIComponent(serverUrl)}`;
     }
-    const playerUrl = info.watchUrl || info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer || '/watch/';
+    const playerUrl = info.jellyfinWebPlayer || info.watchUrl || '/watch/';
     const aioPlayer = document.getElementById('aiostreams-player-action');
     if (aioPlayer) {
       aioPlayer.href = playerUrl;
@@ -872,7 +872,7 @@ async function refreshServices() {
     if (service.host === 'aiostreams' || service.name === 'AIOStreams') {
       const aioPort = (cachedEnv && cachedEnv.ports && cachedEnv.ports.aiostreams) || (cachedEnv && cachedEnv.PORT_AIOSTREAMS) || 3001;
       const aioOrigin = service.uiUrl ? new URL(service.uiUrl, location.origin).origin : `http://${location.hostname}:${aioPort}`;
-      const playerUrl = cachedManifestInfo?.watchUrl || cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || '/watch/';
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || cachedManifestInfo?.watchUrl || '/watch/';
       const playerEmbedUrl = cachedManifestInfo?.watchUrl || '/watch/';
 
       const playerEmbedBtn = document.createElement('button');
@@ -1012,20 +1012,20 @@ async function refreshServices() {
   if (aioAction) {
     aioAction.style.display = enabled ? 'block' : 'none';
     if (enabled) {
-      aioAction.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
+      aioAction.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
       aioAction.textContent = 'Open AIOStreams Web Player ↗';
     }
   }
   if (hubPlayer) {
     hubPlayer.style.display = enabled ? 'inline-flex' : 'none';
     if (enabled) {
-      hubPlayer.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
+      hubPlayer.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
     }
   }
   if (topbarPlayer) {
     topbarPlayer.style.display = enabled ? 'inline-flex' : 'none';
     if (enabled) {
-      topbarPlayer.href = info.jellyfinWebPlayerProxy || info.jellyfinWebPlayer;
+      topbarPlayer.href = info.jellyfinWebPlayer || info.jellyfinWebPlayerProxy || '/watch/';
     }
   }
   const toolbar = document.getElementById('quickconnect-toolbar');
@@ -2960,7 +2960,7 @@ function initShortcutsAndHUD() {
   const launchEmbeddedBtn = document.getElementById('btn-launch-embedded-player');
   if (launchEmbeddedBtn) {
     launchEmbeddedBtn.addEventListener('click', () => {
-      const playerUrl = cachedManifestInfo?.watchUrl || cachedManifestInfo?.jellyfinWebPlayerProxy || cachedManifestInfo?.jellyfinWebPlayer || '/watch/';
+      const playerUrl = cachedManifestInfo?.jellyfinWebPlayer || cachedManifestInfo?.watchUrl || '/watch/';
       openServiceViewer('AIOStreams Web Player', playerUrl, playerUrl);
     });
   }
