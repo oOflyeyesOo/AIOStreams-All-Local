@@ -268,8 +268,9 @@
       <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
       <div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
         <button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Server (No Domain Required)</span></button>
-        <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access</span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
+        <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access<span id="cf-host-badge" class="cf-detected-badge" style="display:none;">☁️ Connector Found</span></span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
       </div>
+      <div id="cf-detected-hint" style="display:none;margin-top:8px;font-size:12px;color:var(--accent-cyan);line-height:1.4;"></div>
     </div>
   </div>
 

@@ -384,6 +384,9 @@ async function loadSettings(options) {
 
   const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.') || /^https?:\/\/(172\.(1[6-9]|2[0-9]|3[0-1])\.|[^\/:]+\.(local|internal|lan|home\.arpa))/.test(baseUrl);
   if (typeof setAccessScope === 'function') setAccessScope(isLocal ? 'local' : 'remote');
+  if (typeof refreshCloudflareStatus === 'function') {
+    refreshCloudflareStatus().catch(() => {});
+  }
 
   const aiomInput = document.getElementById('aiometadata-host');
   if (aiomInput) {
@@ -1682,8 +1685,22 @@ async function refreshCloudflareStatus() {
 
     updateClientTokenPreview();
 
+    const hostBadge = document.getElementById('cf-host-badge');
+    const hintBox = document.getElementById('cf-detected-hint');
+
     let html = '';
     if (res.has_external && res.external_connectors && res.external_connectors.length > 0) {
+      const primary = res.external_connectors[0].name || 'Connector';
+      if (hostBadge) {
+        hostBadge.textContent = `☁️ ${primary}`;
+        hostBadge.style.display = 'inline-block';
+        hostBadge.title = `Detected running host connector: ${primary}`;
+      }
+      if (hintBox) {
+        hintBox.innerHTML = `💡 Detected running Cloudflare connector <strong>${primary}</strong> on this Docker host. Switch to <strong>Remote Access</strong> to route or auto-push DNS.`;
+        hintBox.style.display = 'block';
+      }
+
       html += '<div style="color:var(--accent-cyan);font-weight:700;margin-bottom:6px;">☁️ Detected External Cloudflare Connector on Host:</div>';
       res.external_connectors.forEach(c => {
         html += `<div class="cf-connector-item">
@@ -1694,11 +1711,15 @@ async function refreshCloudflareStatus() {
       html += `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.4;">
         💡 <strong>Host Connector Advice:</strong> Since an existing Cloudflare Tunnel is running on this Docker host, you can route directly through it in your Cloudflare Zero Trust dashboard (point Public Hostname to <code>http://host.docker.internal:3001</code> or <code>http://${res.current_host || '127.0.0.1'}:3001</code>), OR run the isolated local <code>aio-tunnel</code> container below.
       </div>`;
-    } else if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
-      html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is active and connected.</div>
-               <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
     } else {
-      html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No external Cloudflare connectors detected on Docker host. You can use the built-in tunnel container below.</div>`;
+      if (hostBadge) hostBadge.style.display = 'none';
+      if (hintBox) hintBox.style.display = 'none';
+      if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
+        html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is active and connected.</div>
+                 <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
+      } else {
+        html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No external Cloudflare connectors detected on Docker host. You can use the built-in tunnel container below.</div>`;
+      }
     }
 
     body.innerHTML = html;
