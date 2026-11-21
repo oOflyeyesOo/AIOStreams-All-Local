@@ -791,8 +791,8 @@ services:
     container_name: shared-redis
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: ${REDIS_MEM_LIMIT:-384m}
-    command: redis-server --maxmemory 300mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
       - ./data/redis:/data
     healthcheck:

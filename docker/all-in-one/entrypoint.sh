@@ -165,6 +165,8 @@ if [ "$daemon_ready" = "true" ]; then
         fi
     else
         echo "[ERROR] Service startup failed. Inspect inner Compose status and logs."
+        docker compose ps -a 2>&1 || true
+        docker compose logs --tail 30 2>&1 || true
         # Keep a reachable status page if the real portal could not start.
         if ! curl -fsS http://127.0.0.1:8088/healthz >/dev/null 2>&1; then
             python3 -u /app/docker/all-in-one/portal_server.py > /var/log/portal_server.log 2>&1 &

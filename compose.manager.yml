@@ -852,8 +852,8 @@ services:
         max-size: 10m
         max-file: '3'
         compress: 'true'
-    mem_limit: ${REDIS_MEM_LIMIT:-384m}
-    command: redis-server --maxmemory 300mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
     - redis-data:/data
     healthcheck:
