@@ -247,186 +247,301 @@
 <h2>Set up your stack</h2>
 <div id="setup-sync-status" class="setup-sync-bar"><span class="sync-dot" id="setup-sync-dot"></span><span id="setup-sync-text">Checking saved settings and service readiness…</span></div>
 <form id="setup-form">
-<div class="optional-setup stack-password-setting">
-  <label class="field-label" for="stack-admin-password">Stack admin password</label>
-  <input id="stack-admin-password" type="password" autocomplete="new-password" minlength="8" maxlength="64" aria-describedby="stack-admin-password-help">
-  <p class="field-help" id="stack-admin-password-help">Use this password for AIOStreams, its player, and AIOMetadata. Enter a new password and select <strong>Connect my stack</strong> to apply it. Leave the field blank to keep your current password.</p>
-</div>
-<div class="access-scope-section">
-<label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
-<div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
-<button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Server (No Domain Required)</span></button>
-<button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access</span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
-</div>
-</div>
-<div id="remote-access-guide" class="remote-access-guide-card" style="display:none;margin:12px 0 16px;padding:14px 16px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.3);border-radius:8px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span style="font-size:18px;">☁️</span>
-      <strong style="color:#38bdf8;font-size:13px;font-weight:700;">Cloudflare Tunnel &amp; Remote Web Player (Zero Router Ports)</strong>
-    </div>
-    <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;background:#0284c7;color:#fff;padding:2px 8px;border-radius:999px;font-weight:700;">1 HOSTNAME NEEDED</span>
-  </div>
-  <p style="color:#94a3b8;font-size:12px;line-height:1.5;margin:0 0 10px;">
-    To watch on your phone, tablet, or TV outside home, you only need to expose <strong>Port 3001</strong>. 
-    <strong style="color:#f8fafc;">AIOMetadata, Prowlarr, Zilean, and the portal remain 100% private and local!</strong>
-  </p>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:12px;font-size:11px;color:#cbd5e1;">
-    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:8px 10px;">
-      <span style="color:#38bdf8;font-weight:700;">1. Cloudflare Dashboard:</span><br>
-      Networks &rarr; Tunnels &rarr; <em>Add Tunnel</em>. Copy token into <code>.env</code> as <code>CLOUDFLARE_TUNNEL_TOKEN=...</code>
-    </div>
-    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:8px 10px;">
-      <span style="color:#38bdf8;font-weight:700;">2. Public Hostname:</span><br>
-      Subdomain: <code>watch</code> &rarr; Domain: <code>yourdomain.com</code> &rarr; Service: <code>HTTP</code> &rarr; URL: <code>aiostreams:3000</code>
-    </div>
-    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(255,255,255,0.07);border-radius:6px;padding:8px 10px;">
-      <span style="color:#38bdf8;font-weight:700;">3. Enter Address Below:</span><br>
-      Set AIOStreams address to <code>https://watch.yourdomain.com</code> and click <em>Connect my stack</em>.
+<!-- STEP 1: Admin & Network Access -->
+<div class="setup-step-card" id="step-admin-network">
+  <div class="setup-step-header">
+    <div class="setup-step-badge"><span class="step-num">1</span></div>
+    <div class="setup-step-title-group">
+      <h3 class="setup-step-title">Admin &amp; Network Access</h3>
+      <p class="setup-step-subtitle">Master password, network access scope, and Web Player endpoints.</p>
     </div>
   </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:8px;border-top:1px solid rgba(14,165,233,0.15);font-size:12px;">
-    <span style="color:#94a3b8;">🎬 Remote Player URL: <code id="guide-player-preview" style="color:#38bdf8;background:rgba(14,165,233,0.1);padding:2px 6px;border-radius:4px;font-family:monospace;">https://watch.yourdomain.com</code> <span style="color:#34d399;font-size:11px;font-weight:600;">(Root defaults directly to Web Player &mdash; no folders needed!)</span></span>
-    <button type="button" class="mini-action-btn" id="btn-copy-guide-player-url" style="margin:0;font-size:11px;padding:3px 8px;">Copy Player URL 📋</button>
-  </div>
-</div>
-<label class="field-label" for="base-url">AIOStreams / Web Player address (Port 3001) <span>REQUIRED</span></label>
-<input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help" id="base-url-help">Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player &amp; streams.</p>
-<label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>OPTIONAL SUBDOMAIN</span></label>
-<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help" id="aiometa-url-help">Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!</p>
-<div class="streaming-mode-section">
-<label class="field-label">Streaming provider mode <span>BACKEND</span></label>
-<div class="mode-selector-pills" role="radiogroup" aria-label="Streaming Provider Mode">
-<button type="button" class="mode-pill active" id="mode-debrid" data-mode="debrid" role="radio" aria-checked="true"><span class="mode-pill-icon">⚡</span><span class="mode-pill-title">Debrid (Default)</span><span class="mode-pill-desc">Real-Debrid, TorBox, PM, AllDebrid</span></button>
-<button type="button" class="mode-pill" id="mode-usenet" data-mode="usenet" role="radio" aria-checked="false"><span class="mode-pill-icon">📰</span><span class="mode-pill-title">Usenet Only</span><span class="mode-pill-desc">NNTP &amp; NZB Indexers (No Debrid)</span></button>
-<button type="button" class="mode-pill" id="mode-hybrid" data-mode="hybrid" role="radio" aria-checked="false"><span class="mode-pill-icon">🔀</span><span class="mode-pill-title">Hybrid</span><span class="mode-pill-desc">Debrid + Usenet Failover</span></button>
-</div>
-<input type="hidden" id="streaming-mode" name="STREAMING_MODE" value="debrid">
-</div>
-<div id="debrid-provider-container">
-<div class="section-divider"><span>Primary Debrid Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 KEY NEEDED TO START)</strong></span><span class="optional">HIGH-SPEED CLOUD CACHE</span></div>
-<div id="provider-fields" class="field-grid"></div>
-</div>
-<div id="usenet-primary-container" style="display:none">
-<div class="section-divider"><span>Primary Usenet Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 SERVER NEEDED TO START)</strong></span></div>
-<div class="usenet-primary-card">
-<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-  <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
-  <button type="button" id="test-saved-usenet-btn" class="mini-action-btn">Test saved primary server</button>
-</div>
-<h3>Primary Usenet server</h3>
-<div class="field-grid">
-<label><span class="field-label">Server hostname <span>NNTP HOST</span></span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
-<label><span class="field-label">Port <span>PORT</span></span><input id="usenet-port" type="number" min="1" max="65535" value="563"></label>
-<label><span class="field-label">Username <span>USER</span></span><input id="usenet-user" autocomplete="off"></label>
-<label><span class="field-label">Password <span>PASSWORD</span></span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
-<label><span class="field-label">Connections <span>MAX</span></span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
-<label class="optional-service" style="display:flex;align-items:center;gap:6px;margin-top:24px"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption (Port 563)</label>
-</div>
-<div id="extra-usenet-servers"></div>
-<button type="button" id="add-usenet-server" class="text-button">+ Add Usenet server</button>
-<template id="usenet-server-row">
-  <fieldset class="usenet-source-row">
-    <legend>Additional Usenet server</legend>
-    <div class="field-grid">
-      <label>Hostname <input data-source-field="host" autocomplete="off" required></label>
-      <label>Port <input data-source-field="port" type="number" min="1" max="65535" value="563" required></label>
-      <label>Username <input data-source-field="username" autocomplete="off" required></label>
-      <label>Password <input data-source-field="password" type="password" autocomplete="new-password"></label>
-      <label>Connections <input data-source-field="connections" type="number" min="1" max="1000" value="10" required></label>
-      <label class="optional-service"><input data-source-field="tls" type="checkbox" checked> Use TLS</label>
+
+  <div class="step-settings-grid">
+    <div class="optional-setup stack-password-setting">
+      <label class="field-label" for="stack-admin-password">Stack admin password</label>
+      <input id="stack-admin-password" type="password" autocomplete="new-password" minlength="8" maxlength="64" aria-describedby="stack-admin-password-help">
+      <p class="field-help" id="stack-admin-password-help">Use this password for AIOStreams, its player, and AIOMetadata. Enter a new password and select <strong>Connect my stack</strong> to apply it. Leave the field blank to keep your current password.</p>
     </div>
-    <label class="optional-service"><input data-source-field="backupOnly" type="checkbox" checked> Backup only</label>
-    <button type="button" class="text-button" data-remove-source>Remove server</button>
-  </fieldset>
-</template>
-<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
-<h3>NZB indexers</h3>
-<label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
-<div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
-<div id="extra-nzb-indexers"></div>
-<button type="button" id="add-nzb-indexer" class="text-button">+ Add NZB indexer</button>
-<template id="nzb-indexer-row">
-  <fieldset class="usenet-source-row">
-    <legend>Additional NZB indexer</legend>
-    <div class="field-grid">
-      <label>Newznab base address <input data-source-field="url" type="url" required></label>
-      <label>API key <input data-source-field="apiKey" type="password" autocomplete="new-password"></label>
+
+    <div class="access-scope-section">
+      <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
+      <div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
+        <button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Server (No Domain Required)</span></button>
+        <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access</span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
+      </div>
     </div>
-    <button type="button" class="text-button" data-remove-source>Remove indexer</button>
-  </fieldset>
-</template>
-</div>
-<p class="field-help" style="margin-top:10px">Streams are fetched on-demand by InfiniDysk via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
-</div>
-</div>
-<div class="section-divider"><span>Metadata &amp; artwork</span><span class="optional">RECOMMENDED</span></div>
-<div class="template-selector-box">
-<div class="template-header">
-<label class="field-label" for="aiometadata-template">Metadata catalog template <span>PRESET</span></label>
-<div class="template-actions">
-<button type="button" id="copy-template-json" class="mini-action-btn" title="Copy template JSON to clipboard">Copy JSON ⧉</button>
-<a id="download-template-json" class="mini-action-btn" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json" title="Download template JSON file">Grab JSON ↓</a>
-</div>
-</div>
-<select id="aiometadata-template" name="AIOMETADATA_TEMPLATE">
-<option value="tamtaro-aiometadata-with-anime.json" selected>Tamtaro Complete (with Anime Catalogs: Airing, Seasons, Studios, Rankings) [Recommended]</option>
-<option value="tamtaro-aiometadata-without-anime.json">Tamtaro Standard (Movies &amp; Series only, without Anime)</option>
-<option value="grabberhawk-aiometadata-config.json">Grabberhawk Metadata Preset</option>
-</select>
-<p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
-<div class="template-profile-pill">
-  <span style="color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:var(--accent-cyan);">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
-  <div style="display:flex;gap:6px;align-items:center;">
-    <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:var(--accent-cyan);" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
-    <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--accent-gold);">Open Profile ↗</a>
   </div>
-</div>
-</div>
-<div id="metadata-fields" class="field-grid"></div>
-<details class="more-options"><summary>Optional Customizations (Anime, Subtitles, Scrobbling, Discord) · Defaults Active <span>+</span></summary>
-<div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
-<label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
-<div class="credential-sharing-notice notice-callout notice-callout-warning">
-  <strong style="color:var(--accent-gold);">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Prowlarr, TorBox/Real-Debrid direct).
-</div>
-<div id="overlap-warning-banner" class="overlap-warning-banner notice-callout notice-callout-info">
-  <strong style="color:var(--accent-cyan);">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
-</div>
-<p>Calls out to the public Torrentio index database (<code>https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
-<div class="field-grid" style="margin-top:10px;">
-<label><span class="field-label">Custom Torrentio endpoint (optional)</span><input id="torrentio-url" placeholder="https://torrentio.strem.fun (default)" autocomplete="off"></label>
+
+  <div id="remote-access-guide" class="remote-access-guide-card" style="display:none;">
+    <div class="guide-header-badge-row">
+      <div class="guide-header-badge">
+        <span class="guide-header-badge-title">🎬 Web Player Remote Access (Port 3001) - Zero Ports on Router (1 Hostname Needed)</span>
+      </div>
+      <span class="guide-hostname-tag">1 HOSTNAME NEEDED</span>
+    </div>
+    <p class="guide-intro">
+      Stream movies, anime, and series on your phone, tablet, or web browser anywhere in the world. Only <strong>Port 3001</strong> needs to be exposed &mdash; all backend scrapers, indexers, and databases stay strictly sealed.
+    </p>
+
+    <div class="guide-playback-callout">
+      <div class="playback-callout-content">
+        <span class="playback-callout-icon">✨</span>
+        <div class="playback-callout-text">
+          <span class="playback-callout-label">Direct Root Playback Callout:</span>
+          <code id="guide-player-preview" class="guide-player-code">https://watch.yourdomain.com</code>
+          <span class="playback-callout-sub">(Root defaults directly to Web Player - no folders needed!)</span>
+        </div>
+      </div>
+      <button type="button" class="mini-action-btn" id="btn-copy-guide-player-url" style="margin:0;font-size:11px;padding:4px 10px;">Copy Player URL 📋</button>
+    </div>
+
+    <div class="guide-steps-grid">
+      <div class="guide-step-card">
+        <div class="guide-step-header">
+          <span class="guide-step-icon">☁️</span>
+          <strong class="guide-step-title">1. Tunnel / Proxy Setup</strong>
+        </div>
+        <p class="guide-step-desc">
+          In Cloudflare Zero Trust: <em>Networks &rarr; Tunnels &rarr; Add Tunnel</em>. Copy token into <code>.env</code> as <code>CLOUDFLARE_TUNNEL_TOKEN=...</code> (or use Caddy / Nginx / Traefik).
+        </p>
+      </div>
+      <div class="guide-step-card">
+        <div class="guide-step-header">
+          <span class="guide-step-icon">🧭</span>
+          <strong class="guide-step-title">2. Route to Port 3001</strong>
+        </div>
+        <p class="guide-step-desc">
+          Subdomain: <code>watch</code> &rarr; Domain: <code>yourdomain.com</code> &rarr; Service: <code>HTTP</code> &rarr; URL: <code>aiostreams:3000</code> (Exposes Port 3001).
+        </p>
+      </div>
+      <div class="guide-step-card">
+        <div class="guide-step-header">
+          <span class="guide-step-icon">🚀</span>
+          <strong class="guide-step-title">3. Enter Address &amp; Connect</strong>
+        </div>
+        <p class="guide-step-desc">
+          Set AIOStreams address below to <code>https://watch.yourdomain.com</code> and click <em>Connect my stack</em>. Root URL loads Web Player directly.
+        </p>
+      </div>
+    </div>
+
+    <div class="integrated-proxy-card" id="proxy-config-details">
+      <div class="integrated-proxy-header">
+        <div class="proxy-header-title-group">
+          <span class="proxy-header-badge">PROXY</span>
+          <h4 class="proxy-header-title">Reverse proxy config</h4>
+        </div>
+        <span class="proxy-header-sub">Generates ready-to-use reverse proxy routing snippets for your external domain.</span>
+      </div>
+      <div class="integrated-proxy-inputs">
+        <div class="proxy-input-field">
+          <label class="field-label" for="proxy-url">External Domain / Base URL</label>
+          <input id="proxy-url" type="url" placeholder="https://aio.yourdomain.com" aria-label="Reverse proxy external base URL">
+        </div>
+        <div class="proxy-input-field">
+          <label class="field-label" for="proxy-format">Proxy Format</label>
+          <select id="proxy-format" aria-label="Reverse proxy configuration format">
+            <option value="cloudflare">Cloudflare Tunnel (Zero-Trust)</option>
+            <option value="caddy">Caddy</option>
+            <option value="nginx">Nginx</option>
+            <option value="traefik">Traefik</option>
+          </select>
+        </div>
+      </div>
+      <div class="integrated-proxy-actions">
+        <button id="generate-proxy" class="light-button" type="button">Generate snippet ↗</button>
+        <button id="copy-proxy-config" class="light-button" type="button">Copy Config 📋</button>
+      </div>
+      <div class="op-console">
+        <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
+        <pre id="proxy-output" class="mono-code" aria-live="polite"><code>Not generated yet.</code></pre>
+      </div>
+    </div>
+
+    <div class="guide-isolation-callout">
+      <span class="isolation-icon">🔒</span>
+      <div class="isolation-content">
+        <strong class="isolation-title">Local Isolation:</strong> AIOMetadata, Prowlarr, Zilean, StremThru, Bitmagnet remain 100% private on <code>stremio-net</code>.
+        <p class="isolation-sub">Only Port 3001 (Web Player / streams) is exposed externally. All indexing databases and credential keys remain completely private.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="endpoints-grid">
+    <div class="endpoint-field">
+      <label class="field-label" for="base-url">AIOStreams / Web Player address (Port 3001) <span>REQUIRED</span></label>
+      <input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false">
+      <p class="field-help" id="base-url-help">Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player &amp; streams.</p>
+    </div>
+    <div class="endpoint-field">
+      <label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>OPTIONAL SUBDOMAIN</span></label>
+      <input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false">
+      <p class="field-help" id="aiometa-url-help">Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!</p>
+    </div>
+  </div>
 </div>
 
-<div style="margin-top:16px;">
-<label class="optional-service"><input id="enable-dmm" type="checkbox" checked> Enable DMM Database (Debrid Media Manager)</label>
-<p>Calls out to community Debrid Media Manager (DMM) hashlists over the internet to periodically sync curated torrent hashes into your local Zilean container. This gives you instant (&lt;50ms) local cache hits for popular releases without scraping public trackers from scratch.</p>
-</div>
-
-<div style="margin-top:16px;">
-<label class="optional-service"><input id="enable-remuxdb" type="checkbox" checked> Enable RemuxDB (MediaInfo &amp; Codec Probes)</label>
-<p>Calls out to the public RemuxDB database over the internet to source accurate container probe data (TrueHD 7.1 Atmos, DTS-HD MA, and Dolby Vision / HDR10+ profiles), enabling high-precision ranking and filtering for 4K Remux releases.</p>
-</div>
-</div>
-<div class="optional-setup"><h3>Anime sources · optional</h3><label class="optional-service"><input id="enable-anime-sources" type="checkbox"> Enable additional native anime sources</label><p>Anime Tosho, nekoBT and TsukiHime run directly through AIOStreams for anime requests only. Sources without a compatible account stay disabled.</p>
-<div class="aniskip-box">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-    <label class="field-label" style="margin:0;font-weight:600;">AniSkip Opening / Ending Auto-Skip <span>ANIME API</span></label>
-    <button type="button" id="copy-aniskip-endpoint-btn" class="mini-action-btn" title="Copy AniSkip endpoint for MPV / external players">Copy API URL ⧉</button>
+<!-- STEP 2: Streaming Provider Accounts -->
+<div class="setup-step-card" id="step-streaming-providers">
+  <div class="setup-step-header">
+    <div class="setup-step-badge"><span class="step-num">2</span></div>
+    <div class="setup-step-title-group">
+      <h3 class="setup-step-title">Streaming Provider Accounts</h3>
+      <p class="setup-step-subtitle">Configure cloud debrid cache, high-speed usenet, or hybrid failover.</p>
+    </div>
   </div>
-  <p class="field-help" style="margin:0 0 10px;">Automatically detects anime intro / outro skip timestamps via AniSkip database. Compatible with MPV and external media players.</p>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <input id="aniskip-test-id" aria-label="IMDb ID or MyAnimeList ID" placeholder="IMDb (e.g. tt9335498) or MAL ID" style="flex:2;min-width:140px;" value="tt9335498">
-    <input id="aniskip-test-ep" aria-label="Episode number" type="number" min="1" max="1000" placeholder="Ep #" value="1" style="flex:1;min-width:60px;">
-    <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;">Test Skip Timestamps ⚡</button>
+
+  <div class="streaming-mode-section">
+    <label class="field-label">Streaming provider mode <span>BACKEND</span></label>
+    <div class="mode-selector-pills" role="radiogroup" aria-label="Streaming Provider Mode">
+      <button type="button" class="mode-pill active" id="mode-debrid" data-mode="debrid" role="radio" aria-checked="true"><span class="mode-pill-icon">⚡</span><span class="mode-pill-title">Debrid (Default)</span><span class="mode-pill-desc">Real-Debrid, TorBox, PM, AllDebrid</span></button>
+      <button type="button" class="mode-pill" id="mode-usenet" data-mode="usenet" role="radio" aria-checked="false"><span class="mode-pill-icon">📰</span><span class="mode-pill-title">Usenet Only</span><span class="mode-pill-desc">NNTP &amp; NZB Indexers (No Debrid)</span></button>
+      <button type="button" class="mode-pill" id="mode-hybrid" data-mode="hybrid" role="radio" aria-checked="false"><span class="mode-pill-icon">🔀</span><span class="mode-pill-title">Hybrid</span><span class="mode-pill-desc">Debrid + Usenet Failover</span></button>
+    </div>
+    <input type="hidden" id="streaming-mode" name="STREAMING_MODE" value="debrid">
   </div>
-  <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#101720;border-radius:6px;font-size:13.5px;color:var(--text-sub);"></div>
-</div>
+
+  <div id="debrid-provider-container">
+    <div class="section-divider"><span>Primary Debrid Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 KEY NEEDED TO START)</strong></span><span class="optional">HIGH-SPEED CLOUD CACHE</span></div>
+    <div id="provider-fields" class="field-grid"></div>
+  </div>
+
+  <div id="usenet-primary-container" style="display:none">
+    <div class="section-divider"><span>Primary Usenet Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 SERVER NEEDED TO START)</strong></span></div>
+    <div class="usenet-primary-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
+        <button type="button" id="test-saved-usenet-btn" class="mini-action-btn">Test saved primary server</button>
+      </div>
+      <h3>Primary Usenet server</h3>
+      <div class="field-grid">
+        <label><span class="field-label">Server hostname <span>NNTP HOST</span></span><input id="usenet-host" placeholder="news.provider.com" autocomplete="off"></label>
+        <label><span class="field-label">Port <span>PORT</span></span><input id="usenet-port" type="number" min="1" max="65535" value="563"></label>
+        <label><span class="field-label">Username <span>USER</span></span><input id="usenet-user" autocomplete="off"></label>
+        <label><span class="field-label">Password <span>PASSWORD</span></span><input id="usenet-pass" type="password" autocomplete="off" placeholder="Usenet password"></label>
+        <label><span class="field-label">Connections <span>MAX</span></span><input id="usenet-connections" type="number" min="1" max="1000" value="10"></label>
+        <label class="optional-service" style="display:flex;align-items:center;gap:6px;margin-top:24px"><input id="usenet-tls" type="checkbox" checked> Use TLS encryption (Port 563)</label>
+      </div>
+      <div id="extra-usenet-servers"></div>
+      <button type="button" id="add-usenet-server" class="text-button">+ Add Usenet server</button>
+      <template id="usenet-server-row">
+        <fieldset class="usenet-source-row">
+          <legend>Additional Usenet server</legend>
+          <div class="field-grid">
+            <label>Hostname <input data-source-field="host" autocomplete="off" required></label>
+            <label>Port <input data-source-field="port" type="number" min="1" max="65535" value="563" required></label>
+            <label>Username <input data-source-field="username" autocomplete="off" required></label>
+            <label>Password <input data-source-field="password" type="password" autocomplete="new-password"></label>
+            <label>Connections <input data-source-field="connections" type="number" min="1" max="1000" value="10" required></label>
+            <label class="optional-service"><input data-source-field="tls" type="checkbox" checked> Use TLS</label>
+          </div>
+          <label class="optional-service"><input data-source-field="backupOnly" type="checkbox" checked> Backup only</label>
+          <button type="button" class="text-button" data-remove-source>Remove server</button>
+        </fieldset>
+      </template>
+      <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+        <h3>NZB indexers</h3>
+        <label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
+        <div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
+        <div id="extra-nzb-indexers"></div>
+        <button type="button" id="add-nzb-indexer" class="text-button">+ Add NZB indexer</button>
+        <template id="nzb-indexer-row">
+          <fieldset class="usenet-source-row">
+            <legend>Additional NZB indexer</legend>
+            <div class="field-grid">
+              <label>Newznab base address <input data-source-field="url" type="url" required></label>
+              <label>API key <input data-source-field="apiKey" type="password" autocomplete="new-password"></label>
+            </div>
+            <button type="button" class="text-button" data-remove-source>Remove indexer</button>
+          </fieldset>
+        </template>
+      </div>
+      <p class="field-help" style="margin-top:10px">Streams are fetched on-demand by InfiniDysk via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
+    </div>
+  </div>
 </div>
 
+<!-- STEP 3: Addon Enhancements & Catalogs -->
+<div class="setup-step-card" id="step-addon-catalogs">
+  <div class="setup-step-header">
+    <div class="setup-step-badge"><span class="step-num">3</span></div>
+    <div class="setup-step-title-group">
+      <h3 class="setup-step-title">Addon Enhancements &amp; Catalogs</h3>
+      <p class="setup-step-subtitle">Metadata catalogs, anime auto-skip, watch tracking, and subtitle providers.</p>
+    </div>
+  </div>
 
-<div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
-<div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div></details>
+  <div class="section-divider"><span>Metadata &amp; artwork</span><span class="optional">RECOMMENDED</span></div>
+  <div class="template-selector-box">
+    <div class="template-header">
+      <label class="field-label" for="aiometadata-template">Metadata catalog template <span>PRESET</span></label>
+      <div class="template-actions">
+        <button type="button" id="copy-template-json" class="mini-action-btn" title="Copy template JSON to clipboard">Copy JSON ⧉</button>
+        <a id="download-template-json" class="mini-action-btn" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json" title="Download template JSON file">Grab JSON ↓</a>
+      </div>
+    </div>
+    <select id="aiometadata-template" name="AIOMETADATA_TEMPLATE">
+      <option value="tamtaro-aiometadata-with-anime.json" selected>Tamtaro Complete (with Anime Catalogs: Airing, Seasons, Studios, Rankings) [Recommended]</option>
+      <option value="tamtaro-aiometadata-without-anime.json">Tamtaro Standard (Movies &amp; Series only, without Anime)</option>
+      <option value="grabberhawk-aiometadata-config.json">Grabberhawk Metadata Preset</option>
+    </select>
+    <p class="field-help" id="template-description">Includes 20+ Anime catalogs (Jikan MAL airing schedule, upcoming, seasons, studios, top rankings) mapped to TVDB/IMDb with Posters+ rating badges.</p>
+    <div class="template-profile-pill">
+      <span style="color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span>Profile Status:</span> <strong id="aiom-profile-badge" style="color:var(--accent-cyan);">Ready (UUID: <span id="aiom-active-uuid">loading…</span>)</strong></span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button type="button" id="btn-sync-aiometadata" class="mini-action-btn" style="color:var(--accent-cyan);" title="Push selected template configuration into AIOMetadata">Apply Preset ⚡</button>
+        <a id="quick-configure-aiometa" class="mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--accent-gold);">Open Profile ↗</a>
+      </div>
+    </div>
+  </div>
+  <div id="metadata-fields" class="field-grid"></div>
+
+  <details class="more-options"><summary>Optional Customizations (Anime, Subtitles, Scrobbling, Discord) · Defaults Active <span>+</span></summary>
+    <div class="optional-setup"><h3>Public &amp; Community Databases — optional</h3>
+      <label class="optional-service"><input id="enable-torrentio" type="checkbox" checked> Enable Torrentio (Public Index Database)</label>
+      <div class="credential-sharing-notice notice-callout notice-callout-warning">
+        <strong style="color:var(--accent-gold);">Credential Sharing Notice:</strong> Torrentio operates as an external hosted index. When enabled in Debrid mode, your provider API key is passed to Torrentio so it can resolve and unrestrict cached cloud streams. If you prefer your debrid keys never leave your server, uncheck Torrentio to route search queries exclusively through your local scrapers (MediaFusion, Jackett, Prowlarr, TorBox/Real-Debrid direct).
+      </div>
+      <div id="overlap-warning-banner" class="overlap-warning-banner notice-callout notice-callout-info">
+        <strong style="color:var(--accent-cyan);">💡 Scraper Overlap &amp; Deduplication:</strong> Both Torrentio and local indexers (Prowlarr) query public torrent indexers (1337x, EZTV, YTS). AIOStreams automatically deduplicates identical info-hashes so you will not see duplicated stream rows in Stremio. However, enabling both issues concurrent queries across the web.
+      </div>
+      <p>Calls out to the public Torrentio index database (<code>https://torrentio.strem.fun</code>) over the internet to access millions of pre-indexed torrent releases in ~30ms without requiring a multi-year local crawler. <strong>Privacy protection:</strong> All video streams are proxied through this server's IP address so your client IP is shielded and multiple devices won't trigger debrid provider bans.</p>
+      <div class="field-grid" style="margin-top:10px;">
+        <label><span class="field-label">Custom Torrentio endpoint (optional)</span><input id="torrentio-url" placeholder="https://torrentio.strem.fun (default)" autocomplete="off"></label>
+      </div>
+
+      <div style="margin-top:16px;">
+        <label class="optional-service"><input id="enable-dmm" type="checkbox" checked> Enable DMM Database (Debrid Media Manager)</label>
+        <p>Calls out to community Debrid Media Manager (DMM) hashlists over the internet to periodically sync curated torrent hashes into your local Zilean container. This gives you instant (&lt;50ms) local cache hits for popular releases without scraping public trackers from scratch.</p>
+      </div>
+
+      <div style="margin-top:16px;">
+        <label class="optional-service"><input id="enable-remuxdb" type="checkbox" checked> Enable RemuxDB (MediaInfo &amp; Codec Probes)</label>
+        <p>Calls out to the public RemuxDB database over the internet to source accurate container probe data (TrueHD 7.1 Atmos, DTS-HD MA, and Dolby Vision / HDR10+ profiles), enabling high-precision ranking and filtering for 4K Remux releases.</p>
+      </div>
+    </div>
+
+    <div class="optional-setup"><h3>Anime sources · optional</h3><label class="optional-service"><input id="enable-anime-sources" type="checkbox"> Enable additional native anime sources</label><p>Anime Tosho, nekoBT and TsukiHime run directly through AIOStreams for anime requests only. Sources without a compatible account stay disabled.</p>
+      <div class="aniskip-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label class="field-label" style="margin:0;font-weight:600;">AniSkip Opening / Ending Auto-Skip <span>ANIME API</span></label>
+          <button type="button" id="copy-aniskip-endpoint-btn" class="mini-action-btn" title="Copy AniSkip endpoint for MPV / external players">Copy API URL ⧉</button>
+        </div>
+        <p class="field-help" style="margin:0 0 10px;">Automatically detects anime intro / outro skip timestamps via AniSkip database. Compatible with MPV and external media players.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="aniskip-test-id" aria-label="IMDb ID or MyAnimeList ID" placeholder="IMDb (e.g. tt9335498) or MAL ID" style="flex:2;min-width:140px;" value="tt9335498">
+          <input id="aniskip-test-ep" aria-label="Episode number" type="number" min="1" max="1000" placeholder="Ep #" value="1" style="flex:1;min-width:60px;">
+          <button type="button" id="btn-test-aniskip" class="light-button" style="margin:0;padding:10px 14px;white-space:nowrap;">Test Skip Timestamps ⚡</button>
+        </div>
+        <div id="aniskip-test-results" style="display:none;margin-top:10px;padding:8px 10px;background:#101720;border-radius:6px;font-size:13.5px;color:var(--text-sub);"></div>
+      </div>
+    </div>
+
+    <div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
+    <div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div>
+  </details>
+</div>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
 <button class="primary-button" id="setup-button" type="submit"><span>Connect my stack</span><span>↗</span></button>
 <p class="under-button">Your services, configured together. Setup details stay available below.</p>
@@ -764,31 +879,7 @@
     </div>
   </div>
 
-  <details class="op-card" id="proxy-config-details" open>
-    <summary class="op-card-header" style="cursor:pointer;list-style:none;">
-      <div class="op-card-title-group">
-        <span class="op-badge">PROXY</span>
-        <h3>Reverse proxy config</h3>
-      </div>
-      <span class="op-status-dot"></span>
-    </summary>
-    <p class="op-card-desc">Generates ready-to-use reverse proxy routing snippets for your external domain.</p>
-    <div class="op-card-inputs">
-      <div class="op-input-group">
-        <label class="field-label" for="proxy-url">External Domain / Base URL</label>
-        <input id="proxy-url" type="url" placeholder="https://aio.yourdomain.com" aria-label="Reverse proxy external base URL">
-      </div>
-    </div>
-    <div class="op-card-actions op-actions-split">
-      <select id="proxy-format" aria-label="Reverse proxy configuration format"><option value="cloudflare">Cloudflare Tunnel (Zero-Trust)</option><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option></select>
-      <button id="generate-proxy" class="light-button" type="button">Generate snippet ↗</button>
-      <button id="copy-proxy-config" class="light-button" type="button">Copy Config 📋</button>
-    </div>
-    <div class="op-console">
-      <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
-      <pre id="proxy-output" class="mono-code" aria-live="polite"><code>Not generated yet.</code></pre>
-    </div>
-  </details>
+
 
   <div class="op-card op-card-wide">
     <div class="op-card-header">

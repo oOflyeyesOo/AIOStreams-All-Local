@@ -231,3 +231,93 @@ test('aiometadata template selector updates description and links on change', as
   assert.equal(dl.download, 'tamtaro-aiometadata-with-anime.json');
 });
 
+test('bidirectional sync between base-url and proxy-url updates preview and paired field', async () => {
+  const env = form({});
+  const syncCode = source.slice(source.indexOf('async function generateProxySnippet('), source.indexOf('let playbackReadiness = null'));
+  vm.runInContext(syncCode, env.context);
+
+  const baseInput = env.document.getElementById('base-url');
+  const proxyInput = env.document.getElementById('proxy-url');
+  const preview = env.document.getElementById('guide-player-preview');
+
+  // 1. Updating base-url triggers syncBaseToProxy
+  baseInput.value = 'https://stream.example.com';
+  baseInput.handlers.input();
+  assert.equal(proxyInput.value, 'https://stream.example.com');
+  assert.equal(preview.textContent, 'https://stream.example.com');
+
+  // 2. Updating proxy-url triggers syncProxyToBase
+  proxyInput.value = 'https://custom-proxy.example.com';
+  proxyInput.handlers.input();
+  assert.equal(baseInput.value, 'https://custom-proxy.example.com');
+  assert.equal(preview.textContent, 'https://custom-proxy.example.com');
+});
+
+test('remote access scope reveals guide and triggers automatic proxy snippet generation', async () => {
+  const env = form({ BASE_URL: 'https://proxy.example.com', configuredKeys: [] });
+  let fetchedUrl = null;
+  env.context.fetch = async (url) => {
+    fetchedUrl = url;
+    return { ok: true, text: async () => 'sample proxy config' };
+  };
+  const fnScope = source.match(/function setAccessScope\([^\)]*\) \{[\s\S]*?\n\}/)[0];
+  const fnGen = source.match(/async function generateProxySnippet\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(fnGen + '\n' + fnScope, env.context);
+
+  const guide = env.document.getElementById('remote-access-guide');
+  const baseInput = env.document.getElementById('base-url');
+  baseInput.value = 'https://proxy.example.com';
+
+  vm.runInContext("setAccessScope('remote')", env.context);
+  assert.equal(guide.style.display, 'block');
+  assert.equal(guide.hidden, false);
+  assert.ok(fetchedUrl, 'Expected fetch to be called for snippet generation');
+  assert.match(fetchedUrl, /\/api\/proxy-config\?format=.*base_url=https%3A%2F%2Fproxy\.example\.com/);
+});
+
+test('proxy format change auto-regenerates snippet and displays output', async () => {
+  const env = form({});
+  let fetchedFormat = null;
+  env.context.fetch = async (url) => {
+    const u = new URL(url, 'http://localhost');
+    fetchedFormat = u.searchParams.get('format');
+    return { ok: true, text: async () => `config for ${fetchedFormat}` };
+  };
+  const fnGen = source.match(/async function generateProxySnippet\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(fnGen, env.context);
+
+  const formatEl = env.document.getElementById('proxy-format');
+  const outputEl = env.document.getElementById('proxy-output');
+  formatEl.value = 'traefik';
+
+  await vm.runInContext('generateProxySnippet()', env.context);
+  assert.equal(fetchedFormat, 'traefik');
+  assert.equal(outputEl.textContent, 'config for traefik');
+});
+
+test('copy buttons for guide player url and proxy config trigger instant feedback', async () => {
+  const env = form({});
+  let copiedText = null;
+  env.context.navigator = {
+    clipboard: {
+      writeText: async (text) => { copiedText = text; }
+    }
+  };
+  env.context.notify = (msg) => { env.context.lastNotification = msg; };
+
+  const copyFn = source.slice(source.indexOf('async function copyToClipboard('), source.indexOf('document.getElementById(\'btn-test-playback\')'));
+  const syncCode = source.slice(source.indexOf('async function generateProxySnippet('), source.indexOf('let playbackReadiness = null'));
+  vm.runInContext(copyFn + '\n' + syncCode, env.context);
+
+  const guidePreview = env.document.getElementById('guide-player-preview');
+  guidePreview.textContent = 'https://watch.customdomain.com';
+  const copyGuideBtn = env.document.getElementById('btn-copy-guide-player-url');
+
+  copyGuideBtn.handlers.click({ currentTarget: copyGuideBtn });
+  assert.equal(copyGuideBtn.textContent, 'Copied! ✓');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(copiedText, 'https://watch.customdomain.com');
+  assert.equal(env.context.lastNotification, 'Remote Web Player URL copied!');
+});
+
+

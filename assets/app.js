@@ -333,12 +333,14 @@ async function loadSettings(options) {
   detectedServer.port = (env.ports && env.ports.aiostreams) || env.PORT_AIOSTREAMS || '3001';
   const defaultBase = detectedServer.origin;
   const baseUrl = !env.BASE_URL || env.BASE_URL.includes('yourdomain.com') ? defaultBase : env.BASE_URL;
-  document.getElementById('base-url').value = baseUrl;
+  const baseUrlEl = document.getElementById('base-url');
+  if (baseUrlEl) baseUrlEl.value = baseUrl;
 
   const proxyUrlEl = document.getElementById('proxy-url');
-  if (proxyUrlEl && !proxyUrlEl.value) {
-    proxyUrlEl.value = baseUrl || window.location.origin;
+  if (proxyUrlEl) {
+    proxyUrlEl.value = baseUrl || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
   }
+  if (typeof updateGuidePlayerPreview === 'function') updateGuidePlayerPreview();
 
   const bitmagnetPort = (env.ports && env.ports.bitmagnet) || env.PORT_BITMAGNET || '3333';
   const bitmagnetUrl = location.protocol === 'https:' ? `${location.origin}/bitmagnet` : `http://${location.hostname}:${bitmagnetPort}`;
@@ -1198,6 +1200,24 @@ document.getElementById('refresh-services').addEventListener('click',()=>refresh
 
 async function copyToClipboard(text, successMsg, triggerBtn) {
   if (!text) return;
+  if (triggerBtn && !triggerBtn._origContent) {
+    triggerBtn._origContent = triggerBtn.innerHTML || triggerBtn.textContent || '';
+    triggerBtn.textContent = 'Copied! ✓';
+    if (triggerBtn.classList && typeof triggerBtn.classList.add === 'function') {
+      triggerBtn.classList.add('copied-active');
+    }
+    if (typeof setTimeout !== 'undefined') {
+      setTimeout(() => {
+        if (triggerBtn._origContent !== null) {
+          triggerBtn.innerHTML = triggerBtn._origContent;
+          triggerBtn._origContent = null;
+        }
+        if (triggerBtn.classList && typeof triggerBtn.classList.remove === 'function') {
+          triggerBtn.classList.remove('copied-active');
+        }
+      }, 2000);
+    }
+  }
   try {
     await navigator.clipboard.writeText(text);
     notify(successMsg);
@@ -1210,16 +1230,6 @@ async function copyToClipboard(text, successMsg, triggerBtn) {
     let copied = false;
     try { copied = document.execCommand('copy'); } finally { textarea.remove(); }
     notify(copied ? successMsg : 'Select the URL above and copy it.');
-  }
-  if (triggerBtn && !triggerBtn._origContent) {
-    triggerBtn._origContent = triggerBtn.innerHTML;
-    triggerBtn.textContent = 'Copied! ✓';
-    triggerBtn.classList.add('copied-active');
-    setTimeout(() => {
-      triggerBtn.innerHTML = triggerBtn._origContent;
-      triggerBtn._origContent = null;
-      triggerBtn.classList.remove('copied-active');
-    }, 2000);
   }
 }
 
@@ -1502,6 +1512,7 @@ function setAccessScope(scope) {
     }
   });
   const baseUrlInput = document.getElementById('base-url');
+  const proxyUrlInput = document.getElementById('proxy-url');
   const aiomInput = document.getElementById('aiometadata-host');
   const baseUrlHelp = document.getElementById('base-url-help');
   const aiomHelp = document.getElementById('aiometa-url-help');
@@ -1512,11 +1523,15 @@ function setAccessScope(scope) {
   const aiomPort = (env && env.ports && env.ports.aiometadata) || (env && env.PORT_AIOMETADATA) || '4005';
 
   if (scope === 'local') {
-    if (guide && guide.style) guide.style.display = 'none';
+    if (guide) {
+      if (guide.style) guide.style.display = 'none';
+      guide.hidden = true;
+    }
     const localBase = `${location.protocol}//${location.hostname}:${aioPort}`;
     const localAiom = `${location.protocol}//${location.hostname}:${aiomPort}`;
     if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.includes('yourdomain.com'))) {
       baseUrlInput.value = localBase;
+      if (proxyUrlInput) proxyUrlInput.value = localBase;
     }
     if (aiomInput && (!aiomInput.value || aiomInput.value.includes('yourdomain.com'))) {
       aiomInput.value = localAiom;
@@ -1524,38 +1539,122 @@ function setAccessScope(scope) {
     if (baseUrlHelp) baseUrlHelp.textContent = 'Direct LAN / home server address on port 3001 (no domain required).';
     if (aiomHelp) aiomHelp.textContent = 'Direct LAN / home server address on port 4005 for rich external catalogs.';
   } else {
-    if (guide && guide.style) guide.style.display = 'block';
+    if (guide) {
+      if (guide.style) guide.style.display = 'block';
+      guide.hidden = false;
+    }
+    if (proxyUrlInput && baseUrlInput) {
+      if (baseUrlInput.value && proxyUrlInput.value !== baseUrlInput.value) {
+        proxyUrlInput.value = baseUrlInput.value;
+      } else if (proxyUrlInput.value && baseUrlInput.value !== proxyUrlInput.value) {
+        baseUrlInput.value = proxyUrlInput.value;
+      }
+    }
     if (guidePreview) {
-      const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
+      const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : (proxyUrlInput && proxyUrlInput.value ? proxyUrlInput.value.trim() : 'https://watch.yourdomain.com');
       guidePreview.textContent = val.replace(/\/+$/, '');
     }
     if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player & streams.';
     if (aiomHelp) aiomHelp.textContent = 'Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!';
+    if (typeof generateProxySnippet === 'function') {
+      try {
+        generateProxySnippet();
+      } catch (_) {}
+    }
   }
 }
 
+async function generateProxySnippet() {
+  const formatEl = document.getElementById('proxy-format');
+  const format = formatEl ? formatEl.value : 'cloudflare';
+  const proxyUrlEl = document.getElementById('proxy-url');
+  const baseUrlEl = document.getElementById('base-url');
+  const targetUrl = (proxyUrlEl && proxyUrlEl.value && proxyUrlEl.value.trim()) ||
+                    (baseUrlEl && baseUrlEl.value && baseUrlEl.value.trim()) ||
+                    (typeof window !== 'undefined' && window.location ? window.location.origin : '');
+  const outputEl = document.getElementById('proxy-output');
+  if (!outputEl) return;
+  try {
+    if (typeof fetch === 'undefined') return;
+    const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(targetUrl)}`);
+    outputEl.textContent = response.ok ? await response.text() : `Server returned ${response.status}`;
+  } catch (error) {
+    outputEl.textContent = error.message;
+  }
+}
+if (typeof window !== 'undefined') window.generateProxySnippet = generateProxySnippet;
+
 function updateGuidePlayerPreview() {
   const baseUrlInput = document.getElementById('base-url');
+  const proxyUrlInput = document.getElementById('proxy-url');
   const preview = document.getElementById('guide-player-preview');
   if (!preview) return;
-  const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
+  const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : (proxyUrlInput && proxyUrlInput.value ? proxyUrlInput.value.trim() : 'https://watch.yourdomain.com');
   const clean = val.replace(/\/+$/, '');
   preview.textContent = clean;
+}
+
+function syncBaseToProxy() {
+  const baseUrlInput = document.getElementById('base-url');
+  const proxyUrlInput = document.getElementById('proxy-url');
+  if (baseUrlInput && proxyUrlInput && proxyUrlInput.value !== baseUrlInput.value) {
+    proxyUrlInput.value = baseUrlInput.value;
+  }
+  updateGuidePlayerPreview();
+}
+
+function syncProxyToBase() {
+  const baseUrlInput = document.getElementById('base-url');
+  const proxyUrlInput = document.getElementById('proxy-url');
+  if (baseUrlInput && proxyUrlInput && baseUrlInput.value !== proxyUrlInput.value) {
+    baseUrlInput.value = proxyUrlInput.value;
+    if (typeof Event !== 'undefined' && typeof baseUrlInput.dispatchEvent === 'function') {
+      try {
+        baseUrlInput.dispatchEvent(new Event('input'));
+      } catch (_) {}
+    }
+  }
+  updateGuidePlayerPreview();
 }
 
 const copyGuidePlayerBtn = document.getElementById('btn-copy-guide-player-url');
 if (copyGuidePlayerBtn) {
   copyGuidePlayerBtn.addEventListener('click', (e) => {
     const preview = document.getElementById('guide-player-preview');
-    if (preview && preview.textContent) {
-      copyToClipboard(preview.textContent, 'Remote Web Player URL copied!', e.currentTarget);
-    }
+    const text = (preview && preview.textContent && preview.textContent.trim()) ||
+                 document.getElementById('base-url')?.value?.trim() ||
+                 document.getElementById('proxy-url')?.value?.trim() ||
+                 'https://watch.yourdomain.com';
+    copyToClipboard(text, 'Remote Web Player URL copied!', e.currentTarget);
   });
 }
 
 const baseUrlEl = document.getElementById('base-url');
 if (baseUrlEl) {
-  baseUrlEl.addEventListener('input', updateGuidePlayerPreview);
+  baseUrlEl.addEventListener('input', () => {
+    syncBaseToProxy();
+  });
+  baseUrlEl.addEventListener('change', () => {
+    syncBaseToProxy();
+    const guide = document.getElementById('remote-access-guide');
+    if (guide && guide.style && guide.style.display !== 'none' && !guide.hidden) {
+      if (typeof generateProxySnippet === 'function') generateProxySnippet();
+    }
+  });
+}
+
+const proxyUrlEl = document.getElementById('proxy-url');
+if (proxyUrlEl) {
+  proxyUrlEl.addEventListener('input', () => {
+    syncProxyToBase();
+  });
+  proxyUrlEl.addEventListener('change', () => {
+    syncProxyToBase();
+    const guide = document.getElementById('remote-access-guide');
+    if (guide && guide.style && guide.style.display !== 'none' && !guide.hidden) {
+      if (typeof generateProxySnippet === 'function') generateProxySnippet();
+    }
+  });
 }
 
 document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
@@ -1913,34 +2012,22 @@ async function runOperations() {
     proxyUrlInput.value = document.getElementById('base-url')?.value || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
   }
 
-  document.getElementById('generate-proxy')?.addEventListener('click', async () => {
-    try {
-      const format = document.getElementById('proxy-format').value;
-      const targetUrl = document.getElementById('proxy-url')?.value?.trim() || document.getElementById('base-url')?.value?.trim() || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
-      const response = await fetch(`/api/proxy-config?format=${encodeURIComponent(format)}&base_url=${encodeURIComponent(targetUrl)}`);
-      output('proxy-output').textContent = response.ok ? await response.text() : `Server returned ${response.status}`;
-    } catch (error) { output('proxy-output').textContent = error.message; }
+  document.getElementById('proxy-format')?.addEventListener('change', () => {
+    generateProxySnippet();
   });
 
-  document.getElementById('copy-proxy-config')?.addEventListener('click', async () => {
-    const text = document.getElementById('proxy-output')?.textContent;
-    if (!text || text === 'Not generated yet.') return;
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else if (typeof document !== 'undefined') {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      notify('Proxy configuration copied to clipboard.');
-    } catch (err) {
-      notify('Failed to copy config: ' + err.message, true);
+  document.getElementById('generate-proxy')?.addEventListener('click', async () => {
+    await generateProxySnippet();
+  });
+
+  document.getElementById('copy-proxy-config')?.addEventListener('click', async (e) => {
+    let text = document.getElementById('proxy-output')?.textContent;
+    if (!text || text === 'Not generated yet.') {
+      await generateProxySnippet();
+      text = document.getElementById('proxy-output')?.textContent;
+    }
+    if (text && text !== 'Not generated yet.') {
+      copyToClipboard(text, 'Proxy configuration copied to clipboard.', e.currentTarget);
     }
   });
 
