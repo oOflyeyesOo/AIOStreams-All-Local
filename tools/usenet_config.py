@@ -140,6 +140,8 @@ def update_sources(updates, existing, field, secret):
         row_id = row_id or uuid4().hex
         ids.add(row_id)
         value = row.get(secret) or (old or {}).get(secret, '')
+        if isinstance(value, str):
+            value = value.strip()
         if not isinstance(value, str) or not value or len(value) > 400 or any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError('Every added source needs a valid password or API key')
         if secret == 'password':
@@ -147,7 +149,7 @@ def update_sources(updates, existing, field, secret):
                 raise ValueError('Invalid Usenet server fields')
             if not all(isinstance(row.get(key, default), bool) for key, default in (('tls', True), ('backupOnly', False))):
                 raise ValueError('Invalid Usenet server options')
-            normalized = {key: row.get(key, default) for key, default in (
+            normalized = {key: (row.get(key, default).strip() if isinstance(row.get(key), str) else row.get(key, default)) for key, default in (
                 ('host', ''), ('port', '563'), ('username', ''), ('connections', '10'), ('tls', True), ('backupOnly', False))}
             normalized['password'] = value
             extra_server(normalized)

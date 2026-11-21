@@ -578,7 +578,7 @@ def setup_usenet_indexer():
     managed_name = 'AIO Local Usenet'
     owned = {item['name']: item for item in indexers
              if re.fullmatch(r'AIO Local Usenet(?: \[aio:[a-f0-9]{32}\])?', item.get('name', ''))}
-    schema = None
+    schemas = None
     errors = 0
     keep = set()
 
@@ -599,11 +599,30 @@ def setup_usenet_indexer():
             continue
         if prior and prior.get('enable') and field(prior, 'baseUrl') == base and field(prior, 'apiKey') == api_key:
             continue
-        if prior is None and schema is None:
-            schemas = make_request(endpoint + '/schema', headers=headers)
-            schema = next((item for item in schemas if item.get('implementation') == 'Newznab'), None) if isinstance(schemas, list) else None
-            if schema is None:
+        if prior is None:
+            if schemas is None:
+                schemas = make_request(endpoint + '/schema', headers=headers)
+                if not isinstance(schemas, list):
+                    raise RuntimeError('Prowlarr Newznab support is unavailable')
+            domain = urllib.parse.urlsplit(base).netloc.lower().split(':')[0]
+            for prefix in ('api.', 'www.', 'nzb.'):
+                if domain.startswith(prefix):
+                    domain = domain[len(prefix):]
+            slug = domain.split('.')[0]
+            matched = None
+            if slug and len(slug) >= 3:
+                matched = next((s for s in schemas if s.get('implementation') == 'Newznab' and (
+                    slug in s.get('definitionName', '').lower() or slug in s.get('name', '').lower()
+                )), None)
+            if matched is None:
+                matched = next((s for s in schemas if s.get('implementation') == 'Newznab' and (
+                    'generic' in s.get('name', '').lower() or s.get('definitionName', '').lower() == 'newznab'
+                )), None)
+            if matched is None:
+                matched = next((s for s in schemas if s.get('implementation') == 'Newznab'), None)
+            if matched is None:
                 raise RuntimeError('Prowlarr Newznab support is unavailable')
+            schema = matched
         payload = copy.deepcopy(prior or schema)
         payload.update(name=name, enable=True, appProfileId=payload.get('appProfileId') or 1)
         for entry in payload.get('fields', []):
@@ -617,6 +636,7 @@ def setup_usenet_indexer():
         result = make_request(path, method='PUT' if prior else 'POST', headers=headers, data=payload, timeout=30)
         if not isinstance(result, dict) or not result.get('id'):
             errors += 1
+            print(f"[Usenet Setup] Prowlarr could not configure indexer {base} ({name}): {result}", flush=True)
 
     for name, item in owned.items():
         if name in keep or not item.get('enable'):
@@ -624,6 +644,7 @@ def setup_usenet_indexer():
         result = make_request(f"{endpoint}/{item['id']}", method='PUT', headers=headers, data=dict(item, enable=False))
         if not isinstance(result, dict) or not result.get('id'):
             errors += 1
+            print(f"[Usenet Setup] Prowlarr could not disable retired indexer ({name}): {result}", flush=True)
     if errors:
         raise RuntimeError(f'Prowlarr could not apply {errors} NZB indexer change(s); check the addresses and API keys')
     if rows:

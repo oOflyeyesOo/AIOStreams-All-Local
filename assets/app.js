@@ -134,13 +134,13 @@ function renderFields(id, values) {
           body: JSON.stringify({ provider: prov, key: 'saved' })
         });
         const isValid = res.status === 'valid' || res.status === 'ok';
-        notify(isValid ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`);
+        notify(isValid ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`, !isValid);
         if (saved) {
           saved.textContent = isValid ? 'SAVED (VALID)' : 'SAVED (INVALID)';
           saved.style.color = isValid ? '#34d399' : '#f87171';
         }
       } catch (err) {
-        notify(`Validation error: ${err.message}`);
+        notify(`Validation error: ${err.message}`, true);
       } finally {
         testSavedBtn.disabled = false;
         testSavedBtn.textContent = 'Test Saved Key';
@@ -177,13 +177,22 @@ async function api(path, options, attempt=0) {
   try {
     const response = await fetch(new URL(path,location.origin).href, options);
     if (!response.ok) {
-      const error = new Error(response.status === 401 ? 'Sign in with your portal password, then retry.' : `The server returned ${response.status}. Check setup details and retry.`);
-      if (path === '/api/aiometadata/apply-template') {
-        const detail = await response.json().catch(() => null);
-        if (detail?.errorCode === 'AIOMETADATA_PRESET_FAILED' && typeof detail.error === 'string') {
-          error.message = detail.error;
+      let msg = response.status === 401 ? 'Sign in with your portal password, then retry.' : `The server returned ${response.status}. Check setup details and retry.`;
+      try {
+        const detail = await response.json();
+        if (detail) {
+          if (detail.errorCode === 'AIOMETADATA_PRESET_FAILED' && typeof detail.error === 'string') {
+            msg = detail.error;
+          } else if (typeof detail.error === 'string' && detail.error.trim()) {
+            msg = detail.error.trim();
+          } else if (typeof detail.message === 'string' && detail.message.trim()) {
+            msg = detail.message.trim();
+          } else if (typeof detail.detail === 'string' && detail.detail.trim()) {
+            msg = detail.detail.trim();
+          }
         }
-      }
+      } catch {}
+      const error = new Error(msg);
       error.status = response.status;
       throw error;
     }
@@ -281,8 +290,9 @@ function readExtraUsenetSources(payload) {
       const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
       for (const input of row.querySelectorAll('[data-source-field]')) {
         const field = input.dataset.sourceField;
-        if (field === source.secret && !input.value) continue;
-        values[field] = input.type === 'checkbox' ? input.checked : input.value;
+        const val = input.type === 'checkbox' ? input.checked : (input.value ? input.value.trim() : '');
+        if (field === source.secret && !val) continue;
+        values[field] = val;
       }
       return values;
     });
@@ -1174,11 +1184,11 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
   if (mode === 'usenet') {
     payload.USENET_ENABLED = 'true';
     if (!payload.USENET_HOST || !payload.USENET_USER || (!payload.USENET_PASS && !usenetPasswordSaved)) {
-      notify('Enter your Usenet server hostname, username, and password.');
+      notify('Enter your Usenet server hostname, username, and password.', true);
       return;
     }
   } else if (!providers.some(([key])=>payload[key] || savedKeys.has(key))&&payload.USENET_ENABLED!=='true'&&!usenetPasswordSaved) {
-    notify('Add a provider key or enable Usenet.');
+    notify('Add a provider key or enable Usenet.', true);
     return;
   }
   const button = document.getElementById('setup-button'); button.disabled = true;
@@ -1193,10 +1203,10 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     renderPlaybackReadiness();
     if (typeof setFormDirty === 'function') setFormDirty(false);
     await pollSetup();
-  } catch(error) { setProgress('Setup needs attention',error.message); button.disabled=false; notify(error.message); }
+  } catch(error) { setProgress('Setup needs attention',error.message); button.disabled=false; notify(error.message, true); }
 });
 
-document.getElementById('refresh-services').addEventListener('click',()=>refreshServices().catch(error=>notify(error.message)));
+document.getElementById('refresh-services').addEventListener('click',()=>refreshServices().catch(error=>notify(error.message, true)));
 
 async function copyToClipboard(text, successMsg, triggerBtn) {
   if (!text) return;
@@ -1247,7 +1257,7 @@ if (backupSched) {
         notify(`Automated backup schedule set to: ${val}`);
       }
     } catch (e) {
-      notify('Failed to update backup schedule');
+      notify('Failed to update backup schedule', true);
     }
   });
 }
@@ -1335,9 +1345,9 @@ document.getElementById('test-saved-usenet-btn')?.addEventListener('click', asyn
       body: JSON.stringify({ provider: 'usenet' })
     });
     const isValid = res.status === 'valid' || res.status === 'ok';
-    notify(isValid ? `✓ Usenet NNTP valid: ${res.detail}` : `✗ Usenet: ${res.detail}`);
+    notify(isValid ? `✓ Usenet NNTP valid: ${res.detail}` : `✗ Usenet: ${res.detail}`, !isValid);
   } catch (err) {
-    notify(`Usenet test failed: ${err.message}`);
+    notify(`Usenet test failed: ${err.message}`, true);
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
@@ -1903,7 +1913,7 @@ async function runPlaybackTest() {
         if (iconPlayback.style) iconPlayback.style.color = '#8fa1a8';
       }
       if (descPlayback) descPlayback.textContent = 'Skipped because an earlier check failed.';
-      notify(`Playback check: ${res.message || 'Verification issue detected'}`);
+      notify(`Playback check: ${res.message || 'Verification issue detected'}`, true);
     }
 
     if (res.troubleshoot && troubleshootEl) {
@@ -1921,7 +1931,7 @@ async function runPlaybackTest() {
       troubleshootEl.textContent = `💡 Check if portal server and AIOStreams are reachable: ${err.message}`;
       if (troubleshootEl.style) troubleshootEl.style.display = 'block';
     }
-    notify(`Playback test failed: ${err.message}`);
+    notify(`Playback test failed: ${err.message}`, true);
   } finally {
     playbackBusy = false;
     await refreshPlaybackReadiness();
@@ -1947,7 +1957,7 @@ async function refreshMaintenance() {
 }
 
 async function runOperations() {
-  document.getElementById('refresh-maintenance')?.addEventListener('click', () => refreshMaintenance().catch(error=>notify(error.message)));
+  document.getElementById('refresh-maintenance')?.addEventListener('click', () => refreshMaintenance().catch(error=>notify(error.message, true)));
   document.getElementById('refresh-resources')?.addEventListener('click', async () => {
     try {
       const result = await api('/api/resources');
@@ -2596,7 +2606,7 @@ function initHealthTelemetry() {
       notify(`Watchdog probe complete: ${probeRes.healthy_count || 0}/${probeRes.total_services || 0} services healthy!`);
       await refreshHealthTelemetry();
     } catch (e) {
-      notify(`Watchdog probe failed: ${e.message}`);
+      notify(`Watchdog probe failed: ${e.message}`, true);
     }
   });
 
@@ -2611,7 +2621,7 @@ function initHealthTelemetry() {
       notify(`Backup retention: kept ${res.retained?.length || 0}, deleted ${prunedCount} old archive(s).`);
       await refreshHealthTelemetry();
     } catch (e) {
-      notify(`Prune failed: ${e.message}`);
+      notify(`Prune failed: ${e.message}`, true);
     }
   });
 
@@ -2630,7 +2640,7 @@ function initHealthTelemetry() {
     updateInterval();
     if (advanced.open && !document.hidden) {
       refreshHealthTelemetry();
-      refreshMaintenance().catch(error => notify(error.message));
+      refreshMaintenance().catch(error => notify(error.message, true));
     }
   });
 
@@ -2815,7 +2825,7 @@ async function initPlayerPreferences() {
         throw new Error(res?.detail || 'Failed to save player preferences');
       }
     } catch (err) {
-      notify(`Failed to save player presets: ${err.message}`);
+      notify(`Failed to save player presets: ${err.message}`, true);
       if (outPre) outPre.textContent = `Error: ${err.message}`;
     } finally {
       saveBtn.disabled = false;
@@ -2877,7 +2887,7 @@ function initEncryptedBundle() {
   exportBtn.addEventListener('click', async () => {
     const passphrase = passInput ? passInput.value.trim() : '';
     if (!passphrase || passphrase.length < 6) {
-      notify('Passphrase must be at least 6 characters for client-side encryption.');
+      notify('Passphrase must be at least 6 characters for client-side encryption.', true);
       if (passInput) passInput.focus();
       return;
     }
@@ -2932,7 +2942,7 @@ function initEncryptedBundle() {
         outputPre.textContent = `✓ Exported AES-256-GCM bundle (${exportObject.ciphertext.length} bytes encrypted payload). Keep your passphrase safe.`;
       }
     } catch (err) {
-      notify(`Export failed: ${err.message}`);
+      notify(`Export failed: ${err.message}`, true);
       if (outputPre) outputPre.textContent = `Export error: ${err.message}`;
     } finally {
       exportBtn.disabled = false;
@@ -2943,7 +2953,7 @@ function initEncryptedBundle() {
   importBtn.addEventListener('click', () => {
     const passphrase = passInput ? passInput.value.trim() : '';
     if (!passphrase) {
-      notify('Please enter your bundle passphrase above before selecting an import file.');
+      notify('Please enter your bundle passphrase above before selecting an import file.', true);
       if (passInput) passInput.focus();
       return;
     }
@@ -2956,7 +2966,7 @@ function initEncryptedBundle() {
 
     const passphrase = passInput ? passInput.value.trim() : '';
     if (!passphrase) {
-      notify('Please enter your bundle passphrase to decrypt.');
+      notify('Please enter your bundle passphrase to decrypt.', true);
       fileInput.value = '';
       return;
     }
@@ -3028,7 +3038,7 @@ function initEncryptedBundle() {
         loadSettings();
       }, 500);
     } catch (err) {
-      notify(`Decryption failed: Check passphrase. (${err.message})`);
+      notify(`Decryption failed: Check passphrase. (${err.message})`, true);
       if (outputPre) outputPre.textContent = `Decryption failed: ${err.message}. Ensure passphrase matches the one used during export.`;
     } finally {
       fileInput.value = '';
