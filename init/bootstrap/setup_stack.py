@@ -1965,10 +1965,65 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 prefs_data = json.load(pf)
                 user_audio = prefs_data.get("audioLanguage") or prefs_data.get("audio_language")
                 user_sub = prefs_data.get("subtitleLanguage") or prefs_data.get("subtitle_language")
-                if user_audio:
-                    config["preferredLanguages"] = [user_audio]
-                if user_sub:
-                    config["preferredSubtitleLanguages"] = [user_sub]
+                aiostreams_lang_map = {
+                    "english": "English", "eng": "English", "en": "English",
+                    "japanese": "Japanese", "jpn": "Japanese", "ja": "Japanese",
+                    "chinese": "Chinese", "chi": "Chinese", "zho": "Chinese", "zh": "Chinese",
+                    "russian": "Russian", "rus": "Russian", "ru": "Russian",
+                    "arabic": "Arabic", "ara": "Arabic", "ar": "Arabic",
+                    "portuguese": "Portuguese", "por": "Portuguese", "pt": "Portuguese",
+                    "portuguese (brazil)": "Portuguese (Brazil)", "pt-br": "Portuguese (Brazil)",
+                    "spanish": "Spanish", "spa": "Spanish", "es": "Spanish",
+                    "french": "French", "fre": "French", "fra": "French", "fr": "French",
+                    "german": "German", "ger": "German", "deu": "German", "de": "German",
+                    "italian": "Italian", "ita": "Italian", "it": "Italian",
+                    "korean": "Korean", "kor": "Korean", "ko": "Korean",
+                    "hindi": "Hindi", "hin": "Hindi", "hi": "Hindi",
+                    "bengali": "Bengali", "ben": "Bengali", "bn": "Bengali",
+                    "punjabi": "Punjabi", "pan": "Punjabi", "pa": "Punjabi",
+                    "marathi": "Marathi", "mar": "Marathi", "mr": "Marathi",
+                    "gujarati": "Gujarati", "guj": "Gujarati", "gu": "Gujarati",
+                    "tamil": "Tamil", "tam": "Tamil", "ta": "Tamil",
+                    "telugu": "Telugu", "tel": "Telugu", "te": "Telugu",
+                    "kannada": "Kannada", "kan": "Kannada", "kn": "Kannada",
+                    "malayalam": "Malayalam", "mal": "Malayalam", "ml": "Malayalam",
+                    "thai": "Thai", "tha": "Thai", "th": "Thai",
+                    "vietnamese": "Vietnamese", "vie": "Vietnamese", "vi": "Vietnamese",
+                    "indonesian": "Indonesian", "ind": "Indonesian", "id": "Indonesian",
+                    "turkish": "Turkish", "tur": "Turkish", "tr": "Turkish",
+                    "hebrew": "Hebrew", "heb": "Hebrew", "he": "Hebrew",
+                    "persian": "Persian", "fas": "Persian", "per": "Persian", "fa": "Persian",
+                    "ukrainian": "Ukrainian", "ukr": "Ukrainian", "uk": "Ukrainian",
+                    "greek": "Greek", "gre": "Greek", "ell": "Greek", "el": "Greek",
+                    "lithuanian": "Lithuanian", "lit": "Lithuanian", "lt": "Lithuanian",
+                    "latvian": "Latvian", "lav": "Latvian", "lv": "Latvian",
+                    "estonian": "Estonian", "est": "Estonian", "et": "Estonian",
+                    "polish": "Polish", "pol": "Polish", "pl": "Polish",
+                    "czech": "Czech", "ces": "Czech", "cze": "Czech", "cs": "Czech",
+                    "slovak": "Slovak", "slk": "Slovak", "slo": "Slovak", "sk": "Slovak",
+                    "hungarian": "Hungarian", "hun": "Hungarian", "hu": "Hungarian",
+                    "romanian": "Romanian", "ron": "Romanian", "rum": "Romanian", "ro": "Romanian",
+                    "bulgarian": "Bulgarian", "bul": "Bulgarian", "bg": "Bulgarian",
+                    "serbian": "Serbian", "srp": "Serbian", "sr": "Serbian",
+                    "croatian": "Croatian", "hrv": "Croatian", "hr": "Croatian",
+                    "slovenian": "Slovenian", "slv": "Slovenian", "sl": "Slovenian",
+                    "dutch": "Dutch", "dut": "Dutch", "nld": "Dutch", "nl": "Dutch",
+                    "danish": "Danish", "dan": "Danish", "da": "Danish",
+                    "finnish": "Finnish", "fin": "Finnish", "fi": "Finnish",
+                    "swedish": "Swedish", "swe": "Swedish", "sv": "Swedish",
+                    "norwegian": "Norwegian", "nor": "Norwegian", "no": "Norwegian",
+                    "malay": "Malay", "msa": "Malay", "may": "Malay", "ms": "Malay",
+                    "latino": "Latino", "dual audio": "Dual Audio", "dubbed": "Dubbed",
+                    "multi": "Multi", "original": "Original", "unknown": "Unknown"
+                }
+                if user_audio and isinstance(user_audio, str):
+                    matched_audio = aiostreams_lang_map.get(user_audio.strip().lower())
+                    if matched_audio:
+                        config["preferredLanguages"] = [matched_audio]
+                if user_sub and isinstance(user_sub, str):
+                    matched_sub = aiostreams_lang_map.get(user_sub.strip().lower())
+                    if matched_sub:
+                        config["preferredSubtitleLanguages"] = [matched_sub]
         except Exception:
             pass
 

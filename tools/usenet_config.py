@@ -134,10 +134,12 @@ def update_sources(updates, existing, field, secret):
         if not isinstance(row, Mapping):
             raise ValueError('Invalid Usenet source row')
         row_id = row.get('id')
-        if row_id and (not isinstance(row_id, str) or row_id not in previous or row_id in ids):
+        if row_id and (not isinstance(row_id, str) or row_id in ids):
             raise ValueError('Usenet source list changed. Reload the page and retry.')
         old = previous.get(row_id) if row_id else None
-        row_id = row_id or uuid4().hex
+        if row_id and old is None and not row.get(secret):
+            raise ValueError('Usenet source list changed. Reload the page and retry.')
+        row_id = (row_id if old is not None else None) or uuid4().hex
         ids.add(row_id)
         value = row.get(secret) or (old or {}).get(secret, '')
         if isinstance(value, str):

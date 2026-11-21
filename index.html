@@ -357,6 +357,41 @@
         <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
         <pre id="proxy-output" class="mono-code" aria-live="polite"><code>Not generated yet.</code></pre>
       </div>
+
+      <!-- Cloudflare Zero-Trust & Host Connector Hub -->
+      <div id="cloudflare-automation-panel" class="cf-dns-hub" style="margin-top:14px;">
+        <div class="cf-connector-header">
+          <span class="cf-connector-title">☁️ Cloudflare Host Connectors &amp; Automated DNS</span>
+          <button type="button" id="btn-scan-cf-connectors" class="mini-action-btn" title="Scan Docker for running Cloudflare connectors">Scan Host ↻</button>
+        </div>
+
+        <div id="cf-connectors-banner" class="cf-connector-banner" style="display:none;">
+          <div id="cf-connectors-body"></div>
+        </div>
+
+        <div class="field-grid" style="margin-top:10px;">
+          <label>
+            <span class="field-label">Cloudflare Tunnel Token <span>TOKEN</span></span>
+            <input id="cf-tunnel-token" type="password" autocomplete="new-password" placeholder="eyJhIjoi... (from Cloudflare Zero Trust)">
+          </label>
+          <label>
+            <span class="field-label">Cloudflare API Token (for automated DNS) <span>DNS:EDIT</span></span>
+            <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Cloudflare API Token with Zone.DNS:Edit">
+          </label>
+        </div>
+
+        <div id="cf-token-meta-preview" style="display:none;margin-top:8px;">
+          <span class="cf-dns-meta-badge" id="cf-token-meta-text"></span>
+        </div>
+
+        <div class="integrated-proxy-actions" style="margin-top:12px;margin-bottom:0;">
+          <button type="button" id="btn-save-cf-token" class="light-button">Save Tunnel Token 💾</button>
+          <button type="button" id="btn-start-cf-tunnel" class="light-button">Start Local Tunnel ▶</button>
+          <button type="button" id="btn-push-cf-dns" class="light-button" style="border-color:rgba(56,189,248,0.4);color:#38bdf8;">Push DNS to Cloudflare 🚀</button>
+        </div>
+
+        <div id="cf-dns-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--radius-xs);font-size:12px;background:rgba(255,255,255,0.03);border:1px solid var(--line);"></div>
+      </div>
     </div>
 
     <div class="guide-isolation-callout">

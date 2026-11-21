@@ -781,3 +781,14 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(config["groups"]["enabled"])
         self.assertEqual(len(config["groups"]["groupings"]), 1)
         self.assertEqual(config["groups"]["groupings"][0]["addons"], ["prowlarr-scraper"])
+
+    def test_player_preferences_iso_language_normalization(self):
+        with tempfile.TemporaryDirectory() as td:
+            prefs_file = os.path.join(td, "data", "player_preferences.json")
+            os.makedirs(os.path.dirname(prefs_file), exist_ok=True)
+            with open(prefs_file, "w", encoding="utf-8") as f:
+                json.dump({"audioLanguage": "jpn", "subtitleLanguage": "eng"}, f)
+            with patch.dict(os.environ, {"WEB_ROOT": td}):
+                config = bootstrap.build_default_config(probe_services=False)
+                self.assertEqual(config.get("preferredLanguages"), ["Japanese"])
+                self.assertEqual(config.get("preferredSubtitleLanguages"), ["English"])

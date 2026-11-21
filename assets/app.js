@@ -26,8 +26,8 @@ const extras = [
   ['OFFCLOUD_API_KEY','Offcloud','O'],
   ['SEEDR_API_KEY','Seedr','S']
 ];
-const fields = [...providers,...metadata,...trackingKeys,...extras];
 const optionalSecrets=[['NZB_INDEXER_API_KEY','AltHUB / AnimeTosho / NZB API key','NZB']];
+const fields = [...providers,...metadata,...trackingKeys,...extras,...optionalSecrets];
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -191,7 +191,17 @@ async function api(path, options, attempt=0) {
             msg = detail.detail.trim();
           }
         }
-      } catch {}
+      } catch {
+        try {
+          const rawText = await response.text();
+          if (rawText && typeof rawText === 'string') {
+            const trimmed = rawText.trim();
+            if (trimmed && trimmed.length < 300 && !trimmed.startsWith('<!DOCTYPE') && !trimmed.startsWith('<html')) {
+              msg = trimmed;
+            }
+          }
+        } catch {}
+      }
       const error = new Error(msg);
       error.status = response.status;
       throw error;
@@ -351,6 +361,19 @@ async function loadSettings(options) {
     proxyUrlEl.value = baseUrl || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
   }
   if (typeof updateGuidePlayerPreview === 'function') updateGuidePlayerPreview();
+
+  const cfTokenInput = document.getElementById('cf-tunnel-token');
+  if (cfTokenInput && env.CLOUDFLARE_TUNNEL_TOKEN_SAVED) {
+    cfTokenInput.placeholder = 'Saved · enter to replace';
+  }
+  if (env.CLOUDFLARE_TUNNEL_METADATA && env.CLOUDFLARE_TUNNEL_METADATA.valid) {
+    const metaBox = document.getElementById('cf-token-meta-preview');
+    const metaText = document.getElementById('cf-token-meta-text');
+    if (metaBox && metaText) {
+      metaText.textContent = `Tunnel ID: ${env.CLOUDFLARE_TUNNEL_METADATA.tunnel_id} · CNAME Target: ${env.CLOUDFLARE_TUNNEL_METADATA.cname_target}`;
+      metaBox.style.display = 'block';
+    }
+  }
 
   const bitmagnetPort = (env.ports && env.ports.bitmagnet) || env.PORT_BITMAGNET || '3333';
   const bitmagnetUrl = location.protocol === 'https:' ? `${location.origin}/bitmagnet` : `http://${location.hostname}:${bitmagnetPort}`;
@@ -1583,6 +1606,15 @@ async function generateProxySnippet() {
                     (baseUrlEl && baseUrlEl.value && baseUrlEl.value.trim()) ||
                     (typeof window !== 'undefined' && window.location ? window.location.origin : '');
   const outputEl = document.getElementById('proxy-output');
+
+  const cfPanel = document.getElementById('cloudflare-automation-panel');
+  if (cfPanel) {
+    cfPanel.style.display = (format === 'cloudflare') ? 'block' : 'none';
+    if (format === 'cloudflare' && typeof refreshCloudflareStatus === 'function') {
+      refreshCloudflareStatus();
+    }
+  }
+
   if (!outputEl) return;
   try {
     if (typeof fetch === 'undefined') return;
@@ -1593,6 +1625,89 @@ async function generateProxySnippet() {
   }
 }
 if (typeof window !== 'undefined') window.generateProxySnippet = generateProxySnippet;
+
+// Cloudflare Tunnel & Automated DNS Management
+let cachedCloudflareStatus = null;
+
+function parseClientTunnelToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    let b64 = token.trim();
+    b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+    const parsed = JSON.parse(atob(b64));
+    if (parsed && parsed.t) {
+      return {
+        tunnel_id: parsed.t,
+        account_id: parsed.a || '',
+        cname_target: `${parsed.t}.cfargotunnel.com`
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+
+function updateClientTokenPreview() {
+  const tokenInput = document.getElementById('cf-tunnel-token');
+  const previewBox = document.getElementById('cf-token-meta-preview');
+  const previewText = document.getElementById('cf-token-meta-text');
+  if (!tokenInput || !previewBox || !previewText) return;
+
+  const raw = tokenInput.value ? tokenInput.value.trim() : '';
+  const meta = parseClientTunnelToken(raw) || (cachedCloudflareStatus && cachedCloudflareStatus.tunnel_metadata?.valid ? cachedCloudflareStatus.tunnel_metadata : null);
+
+  if (meta && (meta.tunnel_id || meta.cname_target)) {
+    previewText.textContent = `Tunnel ID: ${meta.tunnel_id || 'valid'} · CNAME Target: ${meta.cname_target || (meta.tunnel_id + '.cfargotunnel.com')}`;
+    previewBox.style.display = 'block';
+  } else {
+    previewBox.style.display = 'none';
+  }
+}
+
+async function refreshCloudflareStatus() {
+  const banner = document.getElementById('cf-connectors-banner');
+  const body = document.getElementById('cf-connectors-body');
+  if (!body) return;
+
+  try {
+    body.innerHTML = '<em>Scanning Docker for Cloudflare connectors…</em>';
+    if (banner) banner.style.display = 'block';
+
+    const res = await api('/api/cloudflare/status');
+    cachedCloudflareStatus = res;
+
+    const tokenInput = document.getElementById('cf-tunnel-token');
+    if (tokenInput && res.token_configured && !tokenInput.value) {
+      tokenInput.placeholder = 'Saved · enter to replace';
+    }
+
+    updateClientTokenPreview();
+
+    let html = '';
+    if (res.has_external && res.external_connectors && res.external_connectors.length > 0) {
+      html += '<div style="color:var(--accent-cyan);font-weight:700;margin-bottom:6px;">☁️ Detected External Cloudflare Connector on Host:</div>';
+      res.external_connectors.forEach(c => {
+        html += `<div class="cf-connector-item">
+          <span><strong>${c.name}</strong> <span style="color:var(--text-muted);font-size:11px;">(${c.image})</span></span>
+          <span style="color:#34d399;font-weight:600;">${c.status || c.state}</span>
+        </div>`;
+      });
+      html += `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.4;">
+        💡 <strong>Host Connector Advice:</strong> Since an existing Cloudflare Tunnel is running on this Docker host, you can route directly through it in your Cloudflare Zero Trust dashboard (point Public Hostname to <code>http://host.docker.internal:3001</code> or <code>http://${res.current_host || '127.0.0.1'}:3001</code>), OR run the isolated local <code>aio-tunnel</code> container below.
+      </div>`;
+    } else if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
+      html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is active and connected.</div>
+               <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
+    } else {
+      html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No external Cloudflare connectors detected on Docker host. You can use the built-in tunnel container below.</div>`;
+    }
+
+    body.innerHTML = html;
+    if (banner) banner.style.display = 'block';
+  } catch (err) {
+    body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${err.message}</span>`;
+  }
+}
+if (typeof window !== 'undefined') window.refreshCloudflareStatus = refreshCloudflareStatus;
 
 function updateGuidePlayerPreview() {
   const baseUrlInput = document.getElementById('base-url');
@@ -1666,6 +1781,118 @@ if (proxyUrlEl) {
     }
   });
 }
+
+document.getElementById('btn-scan-cf-connectors')?.addEventListener('click', () => {
+  refreshCloudflareStatus().then(() => notify('Scanned Docker host for Cloudflare connectors ↻'));
+});
+
+document.getElementById('cf-tunnel-token')?.addEventListener('input', () => {
+  updateClientTokenPreview();
+});
+
+document.getElementById('btn-save-cf-token')?.addEventListener('click', async () => {
+  const input = document.getElementById('cf-tunnel-token');
+  const token = input ? input.value.trim() : '';
+  if (!token) {
+    notify('Enter a Cloudflare Tunnel Token to save.', true);
+    return;
+  }
+  try {
+    await api('/api/save-env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ CLOUDFLARE_TUNNEL_TOKEN: token })
+    });
+    notify('Cloudflare Tunnel Token saved to configuration! 💾');
+    input.value = '';
+    input.placeholder = 'Saved · enter to replace';
+    await refreshCloudflareStatus();
+  } catch (err) {
+    notify(`Failed to save tunnel token: ${err.message}`, true);
+  }
+});
+
+document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  try {
+    const res = await api('/api/cloudflare/tunnel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start' })
+    });
+    notify(res.success ? '✓ Local aio-tunnel container started!' : `Tunnel start failed: ${res.error}`, !res.success);
+    await refreshCloudflareStatus();
+  } catch (err) {
+    notify(`Could not start tunnel: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const orig = btn.textContent;
+  const apiTokenInput = document.getElementById('cf-api-token');
+  const tunnelTokenInput = document.getElementById('cf-tunnel-token');
+  const proxyUrlInput = document.getElementById('proxy-url');
+  const baseUrlInput = document.getElementById('base-url');
+  const resultBox = document.getElementById('cf-dns-result');
+
+  const apiToken = apiTokenInput ? apiTokenInput.value.trim() : '';
+  if (!apiToken) {
+    notify('Enter a Cloudflare API Token (Zone:DNS:Edit permission) to push DNS.', true);
+    if (apiTokenInput) apiTokenInput.focus();
+    return;
+  }
+
+  const hostname = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
+  const tunnelToken = tunnelTokenInput?.value?.trim() || '';
+
+  btn.disabled = true;
+  btn.textContent = 'Pushing DNS…';
+  if (resultBox) {
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = '<em>Connecting to Cloudflare API…</em>';
+  }
+
+  try {
+    const res = await api('/api/cloudflare/push-dns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_token: apiToken,
+        hostname: hostname,
+        tunnel_token: tunnelToken
+      })
+    });
+
+    if (res.success) {
+      notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
+      if (resultBox) {
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = `<span style="color:#34d399;font-weight:700;">✓ ${res.message}</span>
+          <div style="margin-top:4px;color:var(--text-muted);font-size:11.5px;">
+            Hostname: <code>${res.hostname}</code> &rarr; Target: <code>${res.cname_target}</code> (Zone: <code>${res.zone_name}</code>, Proxied: ON)
+          </div>`;
+      }
+    } else {
+      throw new Error(res.error || 'Failed to push DNS record');
+    }
+  } catch (err) {
+    notify(`Cloudflare DNS push failed: ${err.message}`, true);
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `<span style="color:#f87171;font-weight:700;">✗ ${err.message}</span>`;
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
 
 document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
   btn.addEventListener('click', () => {

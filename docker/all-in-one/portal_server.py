@@ -343,6 +343,37 @@ def validate_provider(provider, key=None):
         ok, msg = test_nntp_login(host, port, user, password, use_ssl)
         return {"status": "valid" if ok else "rejected", "detail": f"Usenet NNTP server ({host}:{port}): {msg}"}
 
+    if provider == "nzb":
+        env_vars = read_saved_env()
+        base_url = (env_vars.get("NZB_INDEXER_URL") or "https://api.althub.co.za").strip().rstrip("/")
+        if not key or key == "saved":
+            key = env_vars.get("NZB_INDEXER_API_KEY") or os.environ.get("NZB_INDEXER_API_KEY")
+        if not isinstance(key, str) or not key.strip():
+            return {"status": "invalid", "detail": "No NZB API key configured."}
+        clean_key = key.strip()
+        test_url = f"{base_url}/api?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
+        headers = {"User-Agent": "AIO-Local/1.0", "Accept": "*/*"}
+        request = urllib.request.Request(test_url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                body = response.read().decode("utf-8", errors="ignore")
+            if "<error " in body:
+                desc = "Invalid or rejected API key."
+                m = re.search(r'description="([^"]+)"', body)
+                if m:
+                    desc = m.group(1)
+                return {"status": "rejected", "detail": f"Indexer rejected API key: {desc}"}
+            if "<caps>" in body or "<categories>" in body or response.status == 200:
+                host_label = urllib.parse.urlsplit(base_url).netloc or base_url
+                return {"status": "valid", "detail": f"NZB indexer ({host_label}) verified successfully."}
+            return {"status": "rejected", "detail": "Indexer did not return standard Newznab capabilities."}
+        except urllib.error.HTTPError as error:
+            if error.code in (401, 403):
+                return {"status": "rejected", "detail": f"NZB API key rejected (HTTP {error.code}). Check your indexer profile API key."}
+            return {"status": "rejected", "detail": f"Indexer returned HTTP {error.code}."}
+        except (OSError, ValueError):
+            return {"status": "unavailable", "detail": f"Could not connect to NZB indexer at {base_url}."}
+
     if provider not in PROVIDER_VALIDATORS:
         return {"status": "invalid", "detail": "Choose a supported provider."}
     env_key, template = PROVIDER_VALIDATORS[provider]
@@ -1205,7 +1236,7 @@ PORTAL_API_GET_PATHS = {
     "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
     "/api/aniskip", "/api/health-stream", "/api/player-preferences",
-    "/api/config-bundle-raw",
+    "/api/config-bundle-raw", "/api/cloudflare/status",
 }
 
 PORTAL_API_POST_PATHS = {
@@ -1215,6 +1246,7 @@ PORTAL_API_POST_PATHS = {
     "/api/settings", "/api/env", "/api/save", "/api/restart",
     "/api/clean-cache", "/api/watchdog", "/api/backups/prune",
     "/api/lumiere/rebuild", "/api/aniskip", "/api/player-preferences",
+    "/api/cloudflare/push-dns", "/api/cloudflare/tunnel",
 }
 
 _TELEMETRY_CACHE = {"data": None, "timestamp": 0.0, "lock": threading.Lock()}
@@ -2284,6 +2316,9 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/clean-cache":
             self.json_response({"error": "Use POST for cache cleanup."}, 405)
             return
+        elif path == "/api/cloudflare/status":
+            self.handle_api_cloudflare_status()
+            return
 
         # Static portal assets — never proxy to backend services
         if path.startswith("/assets/") or path.startswith("/templates/") or path in ("/app.webmanifest", "/favicon.ico"):
@@ -2509,6 +2544,12 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/backups/prune":
             self.handle_api_backups_prune()
             return
+        elif path == "/api/cloudflare/push-dns":
+            self.handle_api_cloudflare_push_dns()
+            return
+        elif path == "/api/cloudflare/tunnel":
+            self.handle_api_cloudflare_tunnel_action()
+            return
         elif path == "/api/lumiere/rebuild":
             if not self.authorize():
                 return
@@ -2648,10 +2689,19 @@ button:hover {{ background: #0369a1; }}
                 mode_val = "hybrid"
             else:
                 mode_val = "debrid"
+        cf_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+        cf_meta = {}
+        if cf_token:
+            try:
+                from tools.cloudflare_helper import parse_tunnel_token
+                cf_meta = parse_tunnel_token(cf_token)
+            except Exception:
+                cf_meta = {}
+
         resp_env = {
             **public_settings(env_vars),
             "STREAMING_MODE": mode_val,
-                "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
+            "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
             "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
             "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
             "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
@@ -2661,6 +2711,8 @@ button:hover {{ background: #0369a1; }}
             "AIOMETADATA_HOST": aiom_val,
             "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
             "BACKUP_SCHEDULE": env_vars.get("BACKUP_SCHEDULE", "daily"),
+            "CLOUDFLARE_TUNNEL_TOKEN_SAVED": bool(cf_token),
+            "CLOUDFLARE_TUNNEL_METADATA": cf_meta,
             "configuredKeys": sorted(key for key, value in env_vars.items()
                                      if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
         }
@@ -3352,6 +3404,94 @@ button:hover {{ background: #0369a1; }}
             self.json_response(res)
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while cleaning cache."}, 500)
+
+    def handle_api_cloudflare_status(self):
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            from tools.cloudflare_helper import check_cloudflare_containers, parse_tunnel_token
+            containers = check_cloudflare_containers()
+            env_vars = read_saved_env()
+            token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+            meta = parse_tunnel_token(token) if token else {"valid": False}
+            base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL") or ""
+            parsed_host = ""
+            if base_url:
+                try:
+                    parsed_host = urllib.parse.urlsplit(base_url).netloc.split(":")[0]
+                except Exception:
+                    pass
+
+            self.json_response({
+                "success": True,
+                "available": containers.get("available", False),
+                "local_tunnel": containers.get("local_tunnel"),
+                "external_connectors": containers.get("external_connectors", []),
+                "has_external": containers.get("has_external", False),
+                "token_configured": bool(token),
+                "tunnel_metadata": meta,
+                "current_host": parsed_host
+            })
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_cloudflare_push_dns(self):
+        if not self.authorize():
+            return
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token
+            payload = self.read_json_body()
+            api_token = (payload.get("api_token") or "").strip()
+            if not api_token:
+                self.json_response({"success": False, "error": "Cloudflare API Token is required. Generate one in Cloudflare Dashboard -> My Profile -> API Tokens."}, 400)
+                return
+
+            env_vars = read_saved_env()
+
+            # Resolve hostname
+            hostname = (payload.get("hostname") or "").strip()
+            if not hostname:
+                base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL") or ""
+                if base_url:
+                    hostname = urllib.parse.urlsplit(base_url).netloc.split(":")[0]
+            if not hostname:
+                self.json_response({"success": False, "error": "Enter a hostname or set your external Base URL first."}, 400)
+                return
+
+            # Resolve target and metadata
+            tunnel_token = (payload.get("tunnel_token") or "").strip() or env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+            meta = parse_tunnel_token(tunnel_token) if tunnel_token else {"valid": False}
+            cname_target = (payload.get("cname_target") or "").strip() or (meta.get("cname_target") if meta.get("valid") else "")
+            account_id = payload.get("account_id") or meta.get("account_id")
+            tunnel_id = payload.get("tunnel_id") or meta.get("tunnel_id")
+
+            if not cname_target:
+                self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)
+                return
+
+            res = push_cloudflare_dns(
+                api_token=api_token,
+                hostname=hostname,
+                cname_target=cname_target,
+                account_id=account_id,
+                tunnel_id=tunnel_id
+            )
+            self.json_response(res, 200 if res.get("success") else 400)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
+
+    def handle_api_cloudflare_tunnel_action(self):
+        if not self.authorize():
+            return
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            from tools.cloudflare_helper import manage_local_tunnel
+            payload = self.read_json_body()
+            action = payload.get("action", "status")
+            res = manage_local_tunnel(action, cwd=WEB_ROOT)
+            self.json_response(res, 200 if res.get("success") else 400)
+        except Exception as e:
+            self.json_response({"success": False, "error": str(e)}, 500)
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True

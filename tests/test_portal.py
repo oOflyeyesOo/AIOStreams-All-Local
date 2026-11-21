@@ -1737,6 +1737,61 @@ class PortalTests(unittest.TestCase):
                 self.assertEqual(status, 302)
                 self.assertEqual(headers.get("Location"), "https://stream.example.com/jellyfin/test-uuid/test-enc-pass/web/")
 
+    def test_cloudflare_status_endpoint(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "status": "running", "is_local": True},
+            "external_connectors": [{"id": "abc12345", "name": "docktun-cloudflared", "status": "Created", "is_local": False}],
+            "has_external": True
+        }
+        with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
+            status, body, _ = self.request("/api/cloudflare/status", "GET", auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["success"])
+            self.assertTrue(data["has_external"])
+            self.assertEqual(len(data["external_connectors"]), 1)
+            self.assertEqual(data["external_connectors"][0]["name"], "docktun-cloudflared")
+            self.assertEqual(data["current_host"], "watch.example.com")
+
+    def test_cloudflare_push_dns_endpoint(self):
+        # 1. Missing api_token -> 400
+        with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {"api_token": ""}, auth=True)
+            self.assertEqual(status, 400)
+            data = json.loads(body.decode("utf-8"))
+            self.assertIn("API Token is required", data.get("error", ""))
+
+        # 2. Successful push
+        mock_push = {
+            "success": True,
+            "action": "created",
+            "hostname": "watch.example.com",
+            "cname_target": "tun123.cfargotunnel.com",
+            "zone_name": "example.com",
+            "record_id": "rec-123",
+            "message": "✓ Successfully created Cloudflare CNAME record"
+        }
+        with patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=mock_push):
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                "api_token": "valid_token",
+                "hostname": "watch.example.com",
+                "cname_target": "tun123.cfargotunnel.com"
+            }, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["success"])
+            self.assertEqual(data["record_id"], "rec-123")
+
+    def test_cloudflare_tunnel_action_endpoint(self):
+        with patch("tools.cloudflare_helper.manage_local_tunnel", return_value={"success": True, "action": "start"}):
+            status, body, _ = self.request("/api/cloudflare/tunnel", "POST", {"action": "start"}, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["success"])
+            self.assertEqual(data["action"], "start")
+
 
 if __name__ == "__main__":
     unittest.main()
