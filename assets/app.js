@@ -1521,8 +1521,8 @@ function setAccessScope(scope) {
     if (baseUrlHelp) baseUrlHelp.textContent = 'Direct LAN / home server address on port 3001 (no domain required).';
     if (aiomHelp) aiomHelp.textContent = 'Direct LAN / home server address on port 4005 for rich external catalogs.';
   } else {
-    if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.';
-    if (aiomHelp) aiomHelp.textContent = 'Attach your aiometa subdomain to port 4005 for rich external catalogs & posters.';
+    if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player & streams.';
+    if (aiomHelp) aiomHelp.textContent = 'Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!';
   }
 }
 

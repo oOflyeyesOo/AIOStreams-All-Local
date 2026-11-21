@@ -259,10 +259,10 @@
 <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access</span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
 </div>
 </div>
-<label class="field-label" for="base-url">AIOStreams address (Port 3001) <span>REQUIRED</span></label>
-<input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help" id="base-url-help">Attach your aio subdomain to port 3001 on your tunnel or reverse proxy.</p>
-<label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>SUBDOMAIN</span></label>
-<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help" id="aiometa-url-help">Attach your aiometa subdomain to port 4005 for rich external catalogs &amp; posters.</p>
+<label class="field-label" for="base-url">AIOStreams / Web Player address (Port 3001) <span>REQUIRED</span></label>
+<input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false"><p class="field-help" id="base-url-help">Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player &amp; streams.</p>
+<label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>OPTIONAL SUBDOMAIN</span></label>
+<input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false"><p class="field-help" id="aiometa-url-help">Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!</p>
 <div class="streaming-mode-section">
 <label class="field-label">Streaming provider mode <span>BACKEND</span></label>
 <div class="mode-selector-pills" role="radiogroup" aria-label="Streaming Provider Mode">
@@ -749,7 +749,7 @@
       </div>
     </div>
     <div class="op-card-actions op-actions-split">
-      <select id="proxy-format" aria-label="Reverse proxy configuration format"><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option><option value="cloudflare">Cloudflare Tunnel</option></select>
+      <select id="proxy-format" aria-label="Reverse proxy configuration format"><option value="cloudflare">Cloudflare Tunnel (Zero-Trust)</option><option value="caddy">Caddy</option><option value="nginx">Nginx</option><option value="traefik">Traefik</option></select>
       <button id="generate-proxy" class="light-button" type="button">Generate snippet ↗</button>
       <button id="copy-proxy-config" class="light-button" type="button">Copy Config 📋</button>
     </div>

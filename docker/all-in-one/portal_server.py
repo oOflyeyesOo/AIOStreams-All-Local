@@ -785,14 +785,103 @@ def proxy_config(kind, base_url):
     base_url = normalize_base_url(base_url or "https://aio.yourdomain.com")
     aiometa = derive_aiometadata_host(base_url)
     hostname = urllib.parse.urlsplit(base_url).hostname or "aio.yourdomain.com"
+    meta_host = urllib.parse.urlsplit(aiometa).hostname or "aiometa.yourdomain.com"
+    aio_host = base_url.split('://', 1)[-1].split(':', 1)[0]
+    meta_slug = aiometa.split('://', 1)[-1].split(':', 1)[0]
+
     if kind == "caddy":
-        return f"{base_url.replace('https://', '').replace('http://', '')} {{\n  reverse_proxy aiostreams:3000\n}}\n\n{aiometa.replace('https://', '').replace('http://', '')} {{\n  reverse_proxy aiometadata:4005\n}}"
+        caddy_aio = base_url.replace('https://', '').replace('http://', '').rstrip('/')
+        caddy_meta = aiometa.replace('https://', '').replace('http://', '').rstrip('/')
+        return (
+            f"# ==============================================================================\n"
+            f"# Caddy Ingress: Web Player & AIOStreams (Single Host)\n"
+            f"# ==============================================================================\n"
+            f"{caddy_aio} {{\n"
+            f"  # Optional: redirect root visits directly to the embedded Web Player\n"
+            f"  @root path /\n"
+            f"  redir @root /jellyfin/web/ 302\n\n"
+            f"  reverse_proxy aiostreams:3000\n"
+            f"}}\n\n"
+            f"# AIOMetadata Ingress (Optional: only needed if using native Stremio app remotely)\n"
+            f"# Note: Keep local when using the Web Player! AIOMetadata stays private on stremio-net.\n"
+            f"{caddy_meta} {{\n"
+            f"  reverse_proxy aiometadata:4005\n"
+            f"}}"
+        )
     if kind == "nginx":
-        return f"location / {{\n  proxy_pass http://aiostreams:3000;\n  proxy_set_header Host $host;\n  proxy_set_header X-Forwarded-Proto $scheme;\n  proxy_read_timeout 3600s;\n  proxy_buffering off;\n}}\n\n# AIOMetadata host: {aiometa}"
+        return (
+            f"# ==============================================================================\n"
+            f"# Nginx Ingress: Web Player & AIOStreams (Single Host)\n"
+            f"# ==============================================================================\n"
+            f"server {{\n"
+            f"  server_name {hostname};\n"
+            f"  listen 443 ssl http2;\n\n"
+            f"  # Optional: redirect root visits directly to the embedded Web Player\n"
+            f"  location = / {{\n"
+            f"    return 302 /jellyfin/web/;\n"
+            f"  }}\n\n"
+            f"  location / {{\n"
+            f"    proxy_pass http://aiostreams:3000;\n"
+            f"    proxy_set_header Host $host;\n"
+            f"    proxy_set_header X-Forwarded-Proto $scheme;\n"
+            f"    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+            f"    proxy_read_timeout 3600s;\n"
+            f"    proxy_buffering off;\n"
+            f"  }}\n"
+            f"}}\n\n"
+            f"# AIOMetadata host (Optional: only needed if using native Stremio app remotely):\n"
+            f"# server {{ server_name {meta_host}; listen 443 ssl http2; location / {{ proxy_pass http://aiometadata:4005; }} }}"
+        )
     if kind == "traefik":
-        return f"labels:\n  - traefik.enable=true\n  - traefik.http.routers.aiostreams.rule=Host(`{hostname}`)\n  - traefik.http.services.aiostreams.loadbalancer.server.port=3000"
+        return (
+            f"# ==============================================================================\n"
+            f"# Traefik Ingress Labels: Web Player & AIOStreams (Single Host)\n"
+            f"# ==============================================================================\n"
+            f"labels:\n"
+            f"  - traefik.enable=true\n"
+            f"  - traefik.http.routers.aiostreams.rule=Host(`{hostname}`)\n"
+            f"  - traefik.http.services.aiostreams.loadbalancer.server.port=3000\n"
+            f"  # AIOMetadata stays private on stremio-net. If native external Stremio is needed:\n"
+            f"  # - traefik.http.routers.aiometadata.rule=Host(`{meta_host}`)\n"
+            f"  # - traefik.http.services.aiometadata.loadbalancer.server.port=4005"
+        )
     if kind == "cloudflare":
-        return f"tunnel: aio-local\ncredentials-file: /etc/cloudflared/credentials.json\n\ningress:\n  - hostname: {base_url.split('://', 1)[-1].split(':', 1)[0]}\n    service: http://aiostreams:3000\n  - hostname: {aiometa.split('://', 1)[-1].split(':', 1)[0]}\n    service: http://aiometadata:4005\n  - service: http_status:404"
+        subdomain = aio_host.split('.')[0] if '.' in aio_host else 'watch'
+        domain_part = '.'.join(aio_host.split('.')[1:]) if '.' in aio_host else aio_host
+        return (
+            f"# ==============================================================================\n"
+            f"# Cloudflare Zero Trust Tunnel Setup (Recommended — Zero Open Router Ports!)\n"
+            f"# ==============================================================================\n"
+            f"# 1. In Cloudflare Zero Trust Dashboard (dash.teams.cloudflare.com):\n"
+            f"#    Navigate to Networks -> Tunnels -> 'Add a tunnel'.\n"
+            f"# 2. Name your tunnel (e.g. 'aio-player') and copy the Tunnel Token.\n"
+            f"# 3. Add to your .env file:\n"
+            f"#    CLOUDFLARE_TUNNEL_TOKEN=<your-token-here>\n"
+            f"#    and start with: docker compose --profile tunnel up -d\n"
+            f"#\n"
+            f"# 4. In Cloudflare Dashboard, add 1 Public Hostname under your tunnel:\n"
+            f"#    • Subdomain: {subdomain}\n"
+            f"#    • Domain: {domain_part}\n"
+            f"#    • Type: HTTP\n"
+            f"#    • URL: aiostreams:3000 (or http://localhost:3001)\n"
+            f"#\n"
+            f"# 5. Access your Web Player anywhere:\n"
+            f"#    https://{aio_host}/jellyfin/web/\n"
+            f"#    (AIOMetadata, Prowlarr, Zilean, and Portal remain 100% LOCAL & private!)\n"
+            f"# ==============================================================================\n"
+            f"# Alternative: Local config.yml ingress rules (CLI / self-managed cloudflared)\n"
+            f"# ==============================================================================\n"
+            f"tunnel: aio-local\n"
+            f"credentials-file: /etc/cloudflared/credentials.json\n\n"
+            f"ingress:\n"
+            f"  # Web Player & AIOStreams Ingress (Single Host)\n"
+            f"  - hostname: {aio_host}\n"
+            f"    service: http://aiostreams:3000\n"
+            f"  # Optional: only if using native Stremio app remotely outside your home network\n"
+            f"  - hostname: {meta_slug}\n"
+            f"    service: http://aiometadata:4005\n"
+            f"  - service: http_status:404"
+        )
     raise ValueError("Unsupported proxy format")
 
 

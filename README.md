@@ -57,29 +57,32 @@ Import **`compose.manager.yml`** as a new stack. Set environment variables in th
 
 ---
 
-## 🔒 Remote Playback & Dual Subdomain Architecture
+## 🔒 Remote Playback & Ingress Architecture
 
-For remote playback, expose only these two endpoints through your reverse proxy or Cloudflare Tunnel:
+You can expose your stack for remote playback using either a **Single-Host Web Player setup** (recommended) or a **Dual-Subdomain Stremio setup**:
 
-1. **AIOStreams** — `aio.yourdomain.com` → Port `3001`: stream aggregation, scraper fan-out, BuiltinProxy, Debrid CDN handoff.
-2. **AIOMetadata** — `aiometa.yourdomain.com` → Port `4005`: catalogs, poster badges, anime metadata.
+### Mode 1: Web Player Ingress (Recommended — 1 Hostname, AIOMetadata Stays Local)
 
-All other services (Prowlarr, Zilean, Posters+, SubSense, Postgres, Redis, etc.) stay on the internal Docker network.
+If you watch via the embedded **AIOStreams Web Player** (`/jellyfin/web/`), you only need **one public hostname**:
+
+1. **Web Player & AIOStreams** — `watch.yourdomain.com` → Port `3001` (`http://aiostreams:3000`)
+
+> [!TIP]
+> **AIOMetadata stays 100% private and local!** AIOStreams connects to AIOMetadata directly over the internal Docker network (`stremio-net`). The client browser talks only to the Web Player. All scrapers, databases, and metadata services remain unexposed.
 
 ```mermaid
 flowchart LR
-    Player["📱 Player (Outside Home Network)"]
+    RemoteUser["📱 Browser / Web Player (Anywhere)"]
 
-    subgraph Ingress ["☁️ Cloudflare Tunnel / Reverse Proxy"]
-        TunnelAIO["aio.yourdomain.com (Port 3001)"]
-        TunnelMeta["aiometa.yourdomain.com (Port 4005)"]
+    subgraph Ingress ["☁️ Cloudflare Tunnel / Reverse Proxy (1 Hostname)"]
+        Tunnel["watch.yourdomain.com (Port 3001)"]
     end
 
-    AIO["⚡ AIOStreams (:3001)\nBuiltinProxy"]
-    AIOMeta["🎨 AIOMetadata (:4005)\nCatalogs & Overlays"]
+    AIO["⚡ AIOStreams (:3001)\nWeb Player (/jellyfin/web)\nBuiltinProxy"]
 
-    subgraph Internal ["🔒 stremio-net (private)"]
+    subgraph Internal ["🔒 stremio-net (100% Private & Local)"]
         direction TB
+        AIOMeta["🎨 AIOMetadata (:4005)"]
         Lumiere["LumiereDB (:8000)"]
         Zilean["Zilean DMM (:8181)"]
         Prowlarr["Prowlarr (:9696)"]
@@ -90,16 +93,24 @@ flowchart LR
 
     CDN["🚀 Debrid CDN"]
 
-    Player -->|Stream request| TunnelAIO
-    Player -->|Catalog / poster| TunnelMeta
-    TunnelAIO --> AIO
-    TunnelMeta --> AIOMeta
+    RemoteUser -->|Web Player & Streams| Tunnel
+    Tunnel --> AIO
+    AIO -->|Internal metadata| AIOMeta
     AIO -->|Scrape| Prowlarr & Zilean
     AIO -->|Title search| Lumiere
     AIOMeta -->|Poster cache| Posters
     AIO -->|302 redirect| CDN
-    AIO -->|HTTP 206| Player
+    AIO -->|HTTP 206| RemoteUser
 ```
+
+### Mode 2: Native Stremio Remote Addons (Optional — 2 Subdomains)
+
+Only needed if you install both addons into a standalone native Stremio app on a phone or Android TV operating outside your home network:
+
+1. **AIOStreams** — `aio.yourdomain.com` → Port `3001`: stream aggregation, scraper fan-out, BuiltinProxy, Debrid CDN handoff.
+2. **AIOMetadata** — `aiometa.yourdomain.com` → Port `4005`: catalogs, poster badges, anime metadata.
+
+See [docs/CLOUDFLARE-AND-WEB-PLAYER.md](docs/CLOUDFLARE-AND-WEB-PLAYER.md) for step-by-step instructions with Cloudflare Zero Trust (zero open router ports).
 
 **Network binding:** Set `INTERNAL_BIND_IP=127.0.0.1` (default) to block unauthenticated access on a public VPS. For a home NAS needing LAN dashboard access, set `INTERNAL_BIND_IP=0.0.0.0`.
 
