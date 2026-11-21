@@ -809,8 +809,10 @@ services:
     - stremio-net
     healthcheck:
       test:
-      - CMD-SHELL
-      - wget -q --spider http://localhost:8000/ || curl -fsSL http://localhost:8000/ > /dev/null 2>&1 || exit 1
+      - CMD
+      - python3
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)
       interval: 15s
       timeout: 5s
       retries: 3
@@ -851,9 +853,10 @@ services:
     - stremio-net
     healthcheck:
       test:
-      - CMD-SHELL
-      - node -e "http=require('http');http.get('http://localhost:3100/',r=>{process.exit(r.statusCode===200?0:1)})" || exit
-        1
+      - CMD
+      - node
+      - -e
+      - http=require('http');http.get('http://localhost:3100/',r=>{process.exit(r.statusCode===200?0:1)})
       interval: 15s
       timeout: 5s
       retries: 3
