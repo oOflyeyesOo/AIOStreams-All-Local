@@ -1505,11 +1505,14 @@ function setAccessScope(scope) {
   const aiomInput = document.getElementById('aiometadata-host');
   const baseUrlHelp = document.getElementById('base-url-help');
   const aiomHelp = document.getElementById('aiometa-url-help');
+  const guide = document.getElementById('remote-access-guide');
+  const guidePreview = document.getElementById('guide-player-preview');
   const env = (typeof cachedEnv !== 'undefined') ? cachedEnv : {};
   const aioPort = (env && env.ports && env.ports.aiostreams) || (env && env.PORT_AIOSTREAMS) || '3001';
   const aiomPort = (env && env.ports && env.ports.aiometadata) || (env && env.PORT_AIOMETADATA) || '4005';
 
   if (scope === 'local') {
+    if (guide && guide.style) guide.style.display = 'none';
     const localBase = `${location.protocol}//${location.hostname}:${aioPort}`;
     const localAiom = `${location.protocol}//${location.hostname}:${aiomPort}`;
     if (baseUrlInput && (!baseUrlInput.value || baseUrlInput.value.includes('yourdomain.com'))) {
@@ -1521,9 +1524,38 @@ function setAccessScope(scope) {
     if (baseUrlHelp) baseUrlHelp.textContent = 'Direct LAN / home server address on port 3001 (no domain required).';
     if (aiomHelp) aiomHelp.textContent = 'Direct LAN / home server address on port 4005 for rich external catalogs.';
   } else {
+    if (guide && guide.style) guide.style.display = 'block';
+    if (guidePreview) {
+      const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
+      guidePreview.textContent = `${val.replace(/\/+$/, '')}/jellyfin/web/`;
+    }
     if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player & streams.';
     if (aiomHelp) aiomHelp.textContent = 'Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!';
   }
+}
+
+function updateGuidePlayerPreview() {
+  const baseUrlInput = document.getElementById('base-url');
+  const preview = document.getElementById('guide-player-preview');
+  if (!preview) return;
+  const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
+  const clean = val.replace(/\/+$/, '');
+  preview.textContent = `${clean}/jellyfin/web/`;
+}
+
+const copyGuidePlayerBtn = document.getElementById('btn-copy-guide-player-url');
+if (copyGuidePlayerBtn) {
+  copyGuidePlayerBtn.addEventListener('click', (e) => {
+    const preview = document.getElementById('guide-player-preview');
+    if (preview && preview.textContent) {
+      copyToClipboard(preview.textContent, 'Remote Web Player URL copied!', e.currentTarget);
+    }
+  });
+}
+
+const baseUrlEl = document.getElementById('base-url');
+if (baseUrlEl) {
+  baseUrlEl.addEventListener('input', updateGuidePlayerPreview);
 }
 
 document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
