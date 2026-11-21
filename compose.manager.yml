@@ -807,16 +807,6 @@ services:
     - postersplus-data:/app/cache
     networks:
     - stremio-net
-    healthcheck:
-      test:
-      - CMD
-      - python3
-      - -c
-      - import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     depends_on:
       init-configs:
         condition: service_completed_successfully
@@ -851,19 +841,8 @@ services:
     - subsense-data:/app/data
     networks:
     - stremio-net
-    healthcheck:
-      test:
-      - CMD
-      - node
-      - -e
-      - http=require('http');http.get('http://localhost:3100/',r=>{process.exit(r.statusCode===200?0:1)})
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     depends_on:
-      shared-redis:
-        condition: service_healthy
+    - shared-redis
   shared-redis:
     image: redis:alpine
     restart: unless-stopped

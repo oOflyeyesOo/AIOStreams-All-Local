@@ -1842,20 +1842,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             f.pop("definitions", None)
             f.pop("definition", None)
 
-    # Ensure Tamtaro SEL & Regex URLs are present and verified (local portal first, GitHub fallback)
-    portal_host = os.environ.get("PORTAL_URL", "http://portal:8088").rstrip("/")
-    if reachable(f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-excluded-regex.json", timeout=1.0):
-        config["syncedExcludedRegexUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-excluded-regex.json"]
-        config["syncedRankedRegexUrls"] = [f"{portal_host}/templates/regex-rankings/vidhin-english-regexes.json"]
-        config["syncedPreferredStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-pse.json"]
-        config["syncedExcludedStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-ese-standard.json"]
-        config["syncedRankedStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/vidhin-english-expressions.json"]
-    else:
-        config["syncedExcludedRegexUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-excluded-regex.json"]
-        config["syncedRankedRegexUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json"]
-        config["syncedPreferredStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json"]
-        config["syncedExcludedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json"]
-        config["syncedRankedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json"]
+    # Ensure Tamtaro SEL & Regex URLs are present and verified
+    config["syncedExcludedRegexUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-excluded-regex.json"]
+    config["syncedRankedRegexUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json"]
+    config["syncedPreferredStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json"]
+    config["syncedExcludedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json"]
+    config["syncedRankedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json"]
     config["enableSeadex"] = True
 
     # Activate AIOStreams upstream features
