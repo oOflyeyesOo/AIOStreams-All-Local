@@ -125,7 +125,7 @@ HOST_PORT_MAP = {
     "bitmagnet": 3333, "jikan-api": 8001
 }
 SERVICE_UI_PATHS = {
-    "aiostreams": "/stremio/configure", "aiometadata": "/configure",
+    "aiostreams": "/configure", "aiometadata": "/configure",
     "prowlarr": "/", "infinidysk": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
     "anime-kitsu": "/", "bitmagnet": "/", "lumiere-db": "/stats",
@@ -1336,7 +1336,7 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         if getattr(self, "_is_proxy_response", False):
             super().end_headers()
             return
-        if hasattr(self, "path") and self.path in ("/", "/index.html", "/dashboard", "/dashboard.html"):
+        if hasattr(self, "path") and self.path in ("/", "/index.html", "/dashboard", "/admin", "/dashboard.html"):
             self.send_header("Set-Cookie", "active_service_proxy=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1727,7 +1727,7 @@ button:hover {{ background: #0369a1; }}
     def get_active_service_from_request(self):
         clean_path = urllib.parse.urlsplit(self.path).path
         if (clean_path.startswith("/assets/") or clean_path.startswith("/templates/")
-                or clean_path in ("/", "/index.html", "/dashboard", "/dashboard.html", "/app.webmanifest", "/favicon.ico")
+                or clean_path in ("/", "/index.html", "/dashboard", "/admin", "/dashboard.html", "/app.webmanifest", "/favicon.ico")
                 or clean_path in PORTAL_API_GET_PATHS or clean_path in PORTAL_API_POST_PATHS):
             return None, False
         referer = self.headers.get("Referer", "")
@@ -2031,7 +2031,7 @@ button:hover {{ background: #0369a1; }}
         if path.startswith("/api/") and path not in PORTAL_API_GET_PATHS:
             if self.check_proxy_referer_fallback(path, url_parts.query):
                 return
-        if (path.startswith("/api/") or path in ("/", "/index.html", "/dashboard", "/dashboard.html")) and not self.authorize():
+        if (path.startswith("/api/") or path in ("/", "/index.html", "/dashboard", "/admin", "/dashboard.html")) and not self.authorize():
             return
         if path == "/api/setup-status":
             try:
@@ -2206,7 +2206,7 @@ button:hover {{ background: #0369a1; }}
         if path in ("/", ""):
             self.path = "/index.html"
             return super().do_GET()
-        elif path == "/dashboard":
+        elif path in ("/dashboard", "/admin"):
             self.path = "/dashboard.html"
             return super().do_GET()
         elif path == "/manifest.json":
@@ -2762,8 +2762,8 @@ button:hover {{ background: #0369a1; }}
             "baseUrl": base_url,
             "directManifest": direct_manifest,
             "aliasManifest": alias_manifest,
-            "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/stremio/configure",
-            "aiostreamsDashboard": f"{base_url}/dashboard",
+            "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/configure",
+            "aiostreamsDashboard": f"{base_url}/admin",
             "watchUrl": "/watch/",
             "jellyfinServer": jellyfin_server,
             "jellyfinWebPlayer": jellyfin_web_player,

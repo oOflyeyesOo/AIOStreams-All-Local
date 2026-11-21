@@ -111,7 +111,8 @@ If you use client apps such as **Infuse**, **Swiftfin**, **Findroid**, or **Kodi
 The stack includes automatic root redirection (`AIO_ROOT_REDIRECT_TO_PLAYER=true` by default in `docker/aiostreams/entrypoint.sh`). When Jellyfin is enabled, opening `https://watch.yourdomain.com/` immediately redirects to the Web Player (`/jellyfin/web/`).
 
 - **No Folder Typing:** You do not need to append `/jellyfin/web/` or multiple path layers. Simply bookmark and share `https://watch.yourdomain.com`.
-- **Addon Config Still Accessible:** If you ever want to reconfigure your Stremio addon directly, open `https://watch.yourdomain.com/stremio/configure` or click the **Configure** button on the local Setup Portal (`:8088`).
+- **Configurator Still Accessible:** If you ever want to reconfigure your addon directly, open `https://watch.yourdomain.com/configure` or click the **Configure** button on the local Setup Portal (`:8088`).
+- **Admin Panel:** Open `https://watch.yourdomain.com/admin` to manage your streams, users, and caching.
 - **Edge Reverse Proxy Overrides (Optional):** If you prefer your edge reverse proxy (Cloudflare, Caddy, Nginx) to handle the redirect before traffic hits the container:
 
 ### Cloudflare Redirect Rule (Free & Instant)

@@ -234,7 +234,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(self.request('/api/maintenance',auth=False)[0],401)
 
     def test_public_health_and_pages(self):
-        for path in ("/healthz", "/", "/dashboard", "/assets/test.png"):
+        for path in ("/healthz", "/", "/dashboard", "/admin", "/assets/test.png"):
             with self.subTest(path=path):
                 self.assertEqual(self.request(path, auth=True)[0], 200)
 
@@ -268,7 +268,7 @@ class PortalTests(unittest.TestCase):
         # When PORTAL_AUTH_REQUIRED is false (default), portal opens freely without passwords or 503 errors
         with patch.dict(os.environ, {"PORTAL_AUTH_REQUIRED": "false", "ADDON_PASSWORD": ""}):
             with patch.object(portal.subprocess, "run", side_effect=OSError()), patch.object(portal.urllib.request, "urlopen", side_effect=OSError()):
-                for path in ("/", "/dashboard", "/api/env", "/api/status"):
+                for path in ("/", "/dashboard", "/admin", "/api/env", "/api/status"):
                     status, body, _ = self.request(path, auth=False)
                     self.assertEqual(status, 200, f"Path {path} failed with status {status}")
                 status, _, _ = self.request("/api/save-env", "POST", {"BASE_URL": "http://127.0.0.1:3001"}, auth=False)
@@ -397,7 +397,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data.get("aiometadataHost"), "https://aiometa.example.com")
         self.assertEqual(data.get("aiometadataManifest"), "https://aiometa.example.com/stremio/test-uuid-123/manifest.json")
         self.assertEqual(data["aiometadataConfigure"], "https://aiometa.example.com/stremio/test-uuid-123/configure")
-        self.assertEqual(data["aiostreamsDashboard"], "https://aio.example.com/dashboard")
+        self.assertEqual(data["aiostreamsDashboard"], "https://aio.example.com/admin")
         self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin")
         self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/web")
         self.assertEqual(data["jellyfinQuickConnect"], "https://aio.example.com/jellyfin/quickconnect")
@@ -449,7 +449,7 @@ class PortalTests(unittest.TestCase):
                 status, body, _ = self.request("/api/manifest-info", auth=True, headers={"Host": "192.168.1.20:8088"})
         self.assertEqual(status, 200)
         data = json.loads(body)
-        self.assertEqual(data["aiostreamsConfigure"], "http://192.168.1.20:13001/stremio/configure")
+        self.assertEqual(data["aiostreamsConfigure"], "http://192.168.1.20:13001/configure")
         self.assertEqual(data["aiometadataConfigure"], "http://192.168.1.20:4005/configure")
         self.assertIsNone(data["aiometadataManifest"])
 
@@ -1182,6 +1182,7 @@ class PortalTests(unittest.TestCase):
         endpoints = [
             ("/healthz", "GET", None, False, 200),
             ("/dashboard", "GET", None, True, 200),
+            ("/admin", "GET", None, True, 200),
             ("/nonexistent_path_404", "GET", None, False, 404),
             ("/api/save-env", "POST", {"STREAMING_MODE": "debrid"}, False, 401),
             ("/api/status", "GET", None, True, 200),

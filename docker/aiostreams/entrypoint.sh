@@ -232,27 +232,37 @@ case "$FANART_API_KEY" in
   ""|null|undefined) unset FANART_API_KEY ;;
 esac
 
-# 8. Auto-redirect bare root (/) to embedded Web Player when Jellyfin is enabled
-if [ "${JELLYFIN_ENABLED:-true}" != "false" ] && [ "${AIO_ROOT_REDIRECT_TO_PLAYER:-true}" != "false" ]; then
-  if [ -x "$NODE_EXEC" ] || command -v node >/dev/null 2>&1; then
-    "$NODE_EXEC" -e '
-      try {
-        const fs = require("fs");
-        const file = "/app/packages/server/dist/app.js";
-        if (fs.existsSync(file)) {
-          let content = fs.readFileSync(file, "utf8");
-          if (!content.includes("ROOT_REDIRECT_TO_PLAYER")) {
-            content = content.replace(
-              "app.get(\x27/configure\x27, (req, res) => {",
-              "app.get(\x27/\x27, (req, res) => { res.redirect(302, \x27/jellyfin/web/\x27); }); // ROOT_REDIRECT_TO_PLAYER\napp.get(\x27/configure\x27, (req, res) => {"
-            );
-            fs.writeFileSync(file, content, "utf8");
-            console.log("[AIOStreams] 🎬 Configured root (/) to default directly to Web Player (/jellyfin/web/)");
-          }
+# 8. Auto-redirect bare root (/) to embedded Web Player and (/admin) to (/dashboard)
+if [ -x "$NODE_EXEC" ] || command -v node >/dev/null 2>&1; then
+  "$NODE_EXEC" -e '
+    try {
+      const fs = require("fs");
+      const file = "/app/packages/server/dist/app.js";
+      if (fs.existsSync(file)) {
+        let content = fs.readFileSync(file, "utf8");
+        let modified = false;
+        if (!content.includes("ROOT_REDIRECT_TO_PLAYER") && process.env.JELLYFIN_ENABLED !== "false" && process.env.AIO_ROOT_REDIRECT_TO_PLAYER !== "false") {
+          content = content.replace(
+            "app.get(\x27/configure\x27, (req, res) => {",
+            "app.get(\x27/\x27, (req, res) => { res.redirect(302, \x27/jellyfin/web/\x27); }); // ROOT_REDIRECT_TO_PLAYER\napp.get(\x27/configure\x27, (req, res) => {"
+          );
+          modified = true;
+          console.log("[AIOStreams] 🎬 Configured root (/) to default directly to Web Player (/jellyfin/web/)");
         }
-      } catch (err) {}
-    ' 2>/dev/null || true
-  fi
+        if (!content.includes("ADMIN_REDIRECT_TO_DASHBOARD")) {
+          content = content.replace(
+            "app.get(\x27/configure\x27, (req, res) => {",
+            "app.get(\x27/admin\x27, (req, res) => { const q = req.url.includes(\x27?\x27) ? req.url.slice(req.url.indexOf(\x27?\x27)) : \x27\x27; res.redirect(302, \x27/dashboard\x27 + q); }); // ADMIN_REDIRECT_TO_DASHBOARD\napp.get(\x27/configure\x27, (req, res) => {"
+          );
+          modified = true;
+          console.log("[AIOStreams] ⚙️ Configured (/admin) to route directly to (/dashboard)");
+        }
+        if (modified) {
+          fs.writeFileSync(file, content, "utf8");
+        }
+      }
+    } catch (err) {}
+  ' 2>/dev/null || true
 fi
 
 echo "[AIOStreams] 🚀 Starting server with validated SECRET_KEY (${#SECRET_KEY} chars) and BASE_URL: $BASE_URL"
