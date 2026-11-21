@@ -1527,7 +1527,7 @@ function setAccessScope(scope) {
     if (guide && guide.style) guide.style.display = 'block';
     if (guidePreview) {
       const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
-      guidePreview.textContent = `${val.replace(/\/+$/, '')}/jellyfin/web/`;
+      guidePreview.textContent = val.replace(/\/+$/, '');
     }
     if (baseUrlHelp) baseUrlHelp.textContent = 'Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player & streams.';
     if (aiomHelp) aiomHelp.textContent = 'Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!';
@@ -1540,7 +1540,7 @@ function updateGuidePlayerPreview() {
   if (!preview) return;
   const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : 'https://watch.yourdomain.com';
   const clean = val.replace(/\/+$/, '');
-  preview.textContent = `${clean}/jellyfin/web/`;
+  preview.textContent = clean;
 }
 
 const copyGuidePlayerBtn = document.getElementById('btn-copy-guide-player-url');

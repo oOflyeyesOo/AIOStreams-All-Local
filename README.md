@@ -63,9 +63,11 @@ You can expose your stack for remote playback using either a **Single-Host Web P
 
 ### Mode 1: Web Player Ingress (Recommended — 1 Hostname, AIOMetadata Stays Local)
 
-If you watch via the embedded **AIOStreams Web Player** (`/jellyfin/web/`), you only need **one public hostname**:
+If you watch via the embedded **AIOStreams Web Player**, you only need **one public hostname**:
 
 1. **Web Player & AIOStreams** — `watch.yourdomain.com` → Port `3001` (`http://aiostreams:3000`)
+   - **No Subfolders Needed:** Visiting `https://watch.yourdomain.com/` automatically defaults directly to the Web Player (no need to remember or type `/jellyfin/web/`).
+   - **Stremio Addon Config:** Accessible at `/stremio/configure` or via the local Setup Portal.
 
 > [!TIP]
 > **AIOMetadata stays 100% private and local!** AIOStreams connects to AIOMetadata directly over the internal Docker network (`stremio-net`). The client browser talks only to the Web Player. All scrapers, databases, and metadata services remain unexposed.

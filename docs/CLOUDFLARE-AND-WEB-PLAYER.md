@@ -87,8 +87,9 @@ In the AIO Setup Portal (`http://localhost:8088`):
 
 Open your browser on any phone, tablet, laptop, or smart TV:
 ```
-https://watch.yourdomain.com/jellyfin/web/
+https://watch.yourdomain.com
 ```
+*(Visiting the bare root domain automatically redirects straight into the embedded Web Player &mdash; no folders or multiple path layers required!)*
 
 - **Username:** `admin`
 - **Password:** Your `ADDON_PASSWORD` (configured in portal or `.env`)
@@ -105,9 +106,13 @@ If you use client apps such as **Infuse**, **Swiftfin**, **Findroid**, or **Kodi
 
 ---
 
-## 4. Optional: Direct Root Redirection (`https://watch.yourdomain.com/`)
+## 4. Built-in Root Redirection (No Subfolders Needed!)
 
-By default, visiting `https://watch.yourdomain.com/` opens the AIOStreams configuration portal. If you want typing `watch.yourdomain.com` to immediately load the Web Player without typing `/jellyfin/web/`:
+The stack includes automatic root redirection (`AIO_ROOT_REDIRECT_TO_PLAYER=true` by default in `docker/aiostreams/entrypoint.sh`). When Jellyfin is enabled, opening `https://watch.yourdomain.com/` immediately redirects to the Web Player (`/jellyfin/web/`).
+
+- **No Folder Typing:** You do not need to append `/jellyfin/web/` or multiple path layers. Simply bookmark and share `https://watch.yourdomain.com`.
+- **Addon Config Still Accessible:** If you ever want to reconfigure your Stremio addon directly, open `https://watch.yourdomain.com/stremio/configure` or click the **Configure** button on the local Setup Portal (`:8088`).
+- **Edge Reverse Proxy Overrides (Optional):** If you prefer your edge reverse proxy (Cloudflare, Caddy, Nginx) to handle the redirect before traffic hits the container:
 
 ### Cloudflare Redirect Rule (Free & Instant)
 1. In Cloudflare Dashboard, go to your domain &rarr; **Rules** &rarr; **Redirect Rules**.
