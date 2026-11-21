@@ -238,12 +238,11 @@ TARGET_INDEXERS = [
     "torrentgalaxy",
     "limetorrents",
     "magnetdl",
-    "kickasstorrents-ws",
-    "badass-torrents",
-    "torrentdownload",
     "nyaasi",
     "tokyotosho"
 ]
+
+SCRAPER_TIMEOUT_MS = int(os.environ.get("SCRAPER_TIMEOUT_MS", "3000"))
 
 def make_request(url, method="GET", data=None, headers=None, timeout=12, max_redirects=5):
     default_headers = {
@@ -1549,7 +1548,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
                 continue
             opts["name"] = "Torrentio"
-            opts["timeout"] = 3500
+            opts["timeout"] = SCRAPER_TIMEOUT_MS
             custom_url = os.environ.get("TORRENTIO_URL") or os.environ.get("KNIGHTCRAWLER_URL", "")
             if custom_url:
                 opts["url"] = custom_url
@@ -1566,7 +1565,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("url", PROWLARR_URL)
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
-                opts["timeout"] = int(opts.get("timeout") or 4000)
+                opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
                 validated_presets.append(p)
@@ -1582,7 +1581,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
                 opts.setdefault("services", ["nzbdav"])
                 opts.setdefault("sources", ["usenet"])
-                opts["timeout"] = int(opts.get("timeout") or 4000)
+                opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
                 validated_presets.append(p)
             else:
                 validated_presets.append(p)
@@ -1594,7 +1593,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             p["enabled"] = True
             opts["name"] = "Knaben (Anime)"
             opts["mediaTypes"] = ["anime"]
-            opts["timeout"] = int(opts.get("timeout") or 4000)
+            opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
             validated_presets.append(p)
         elif ptype == "stremthruTorz":
             if pid:
@@ -1605,7 +1604,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            opts["timeout"] = 3000
+            opts["timeout"] = 2500
             if reachable(f"{STREMTHRU_URL}/stremio/store/manifest.json", timeout=1.0):
                 p["enabled"] = True
                 print("[AIOStreams Setup] ✓ StremThru Store (Debrid Cloud Library) is online and active.", flush=True)
@@ -1621,7 +1620,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['services']=['easynews']
             opts['useMultipleInstances']=False
             opts['paginate']=False
-            opts["timeout"] = 4000
+            opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
             opts["services"] = ["easynews"]
             if p["enabled"]:
                 print("[AIOStreams Setup] ✓ Easynews Search (Built-in) is active.", flush=True)
@@ -1645,7 +1644,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts['services']=selected
             opts['mediaTypes']=['anime']
             opts['useMultipleInstances']=False
-            opts["timeout"] = 4000
+            opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
             validated_presets.append(p)
         elif ptype == "zilean":
             if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
@@ -1653,7 +1652,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     removed_preset_ids.add(pid)
                 continue
             opts["url"] = ZILEAN_URL
-            opts["timeout"] = int(opts.get("timeout") or 2500)
+            opts["timeout"] = int(opts.get("timeout") or 2000)
             dmm_enabled = os.environ.get("ENABLE_DMM", "true").lower() != "false"
             if dmm_enabled and (not probe_services or reachable(f"{ZILEAN_URL}/dmm/filtered?query=ping", timeout=1.0)):
                 p["enabled"] = True
@@ -1669,7 +1668,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
-            opts["timeout"] = int(opts.get("timeout") or 3500)
+            opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
             bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
             api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
             torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
@@ -1843,12 +1842,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             f.pop("definitions", None)
             f.pop("definition", None)
 
-    # Ensure Tamtaro SEL & Regex URLs are present and verified
-    config["syncedExcludedRegexUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-excluded-regex.json"]
-    config["syncedRankedRegexUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json"]
-    config["syncedPreferredStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json"]
-    config["syncedExcludedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json"]
-    config["syncedRankedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json"]
+    # Ensure Tamtaro SEL & Regex URLs are present and verified (local portal first, GitHub fallback)
+    portal_host = os.environ.get("PORTAL_URL", "http://portal:8088").rstrip("/")
+    if reachable(f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-excluded-regex.json", timeout=1.0):
+        config["syncedExcludedRegexUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-excluded-regex.json"]
+        config["syncedRankedRegexUrls"] = [f"{portal_host}/templates/regex-rankings/vidhin-english-regexes.json"]
+        config["syncedPreferredStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-pse.json"]
+        config["syncedExcludedStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/tamtaro-synced-ese-standard.json"]
+        config["syncedRankedStreamExpressionUrls"] = [f"{portal_host}/templates/filtering-and-expressions/vidhin-english-expressions.json"]
+    else:
+        config["syncedExcludedRegexUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-excluded-regex.json"]
+        config["syncedRankedRegexUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/regexes.json"]
+        config["syncedPreferredStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-PSEs.json"]
+        config["syncedExcludedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/AIOStreams-SyncedURLs/Tamtaro-synced-ESEs-standard.json"]
+        config["syncedRankedStreamExpressionUrls"] = ["https://raw.githubusercontent.com/Vidhin05/Releases-Regex/main/English/expressions.json"]
     config["enableSeadex"] = True
 
     # Activate AIOStreams upstream features
@@ -1934,6 +1941,24 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     if isinstance(config.get('failover'),dict):
         config['failover']['parallel']=2
         config['failover']['precacheFailover']=False
+
+    # Sync user player preferences (audio and subtitle languages)
+    prefs_path = os.path.join(os.environ.get("WEB_ROOT", "."), "data", "player_preferences.json")
+    if not os.path.isfile(prefs_path):
+        prefs_path = os.path.join("data", "player_preferences.json")
+    if os.path.isfile(prefs_path):
+        try:
+            with open(prefs_path, "r", encoding="utf-8") as pf:
+                prefs_data = json.load(pf)
+                user_audio = prefs_data.get("audioLanguage") or prefs_data.get("audio_language")
+                user_sub = prefs_data.get("subtitleLanguage") or prefs_data.get("subtitle_language")
+                if user_audio:
+                    config["preferredLanguages"] = [user_audio]
+                if user_sub:
+                    config["preferredSubtitleLanguages"] = [user_sub]
+        except Exception:
+            pass
+
     # TVDB is consumed by AIOMetadata. Do not make AIOStreams registration
     # depend on an optional TVDB endpoint or key being reachable.
 

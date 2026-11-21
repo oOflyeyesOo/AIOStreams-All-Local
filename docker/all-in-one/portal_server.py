@@ -1116,6 +1116,7 @@ PORTAL_API_GET_PATHS = {
     "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
     "/api/aniskip", "/api/health-stream", "/api/player-preferences",
+    "/api/config-bundle-raw",
 }
 
 PORTAL_API_POST_PATHS = {
@@ -1154,32 +1155,82 @@ def get_player_preferences():
     global _PLAYER_PREFS_MEMORY_CACHE
     if _PLAYER_PREFS_MEMORY_CACHE is not None:
         return dict(_PLAYER_PREFS_MEMORY_CACHE)
+    data = {}
     if os.path.isfile(PREFERENCES_FILE):
         try:
             with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                _PLAYER_PREFS_MEMORY_CACHE = data
-                return data
         except Exception:
             pass
-    return {
-        "audioLanguage": "eng",
-        "audioFallback": "jpn",
-        "subtitleMode": "forced",
-        "subtitleLanguage": "eng",
-        "fontScale": 100
+    audio = data.get("audioLanguage") or data.get("audio_language") or "eng"
+    audio_fb = data.get("audioFallback") or data.get("audio_fallback") or "jpn"
+    sub_mode = data.get("subtitleMode") or data.get("subtitle_mode") or "forced"
+    sub_lang = data.get("subtitleLanguage") or data.get("subtitle_language") or "eng"
+    font_scale = data.get("fontScale") or data.get("font_scale") or 100
+
+    normalized = {
+        "audioLanguage": audio,
+        "audio_language": audio,
+        "audioFallback": audio_fb,
+        "audio_fallback": audio_fb,
+        "subtitleMode": sub_mode,
+        "subtitle_mode": sub_mode,
+        "subtitleLanguage": sub_lang,
+        "subtitle_language": sub_lang,
+        "fontScale": font_scale,
+        "font_scale": font_scale,
     }
+    _PLAYER_PREFS_MEMORY_CACHE = normalized
+    return dict(normalized)
 
 def save_player_preferences(prefs):
     global _PLAYER_PREFS_MEMORY_CACHE
-    _PLAYER_PREFS_MEMORY_CACHE = dict(prefs)
+    audio = prefs.get("audioLanguage") or prefs.get("audio_language") or "eng"
+    audio_fb = prefs.get("audioFallback") or prefs.get("audio_fallback") or "jpn"
+    sub_mode = prefs.get("subtitleMode") or prefs.get("subtitle_mode") or "forced"
+    sub_lang = prefs.get("subtitleLanguage") or prefs.get("subtitle_language") or "eng"
+    font_scale = prefs.get("fontScale") or prefs.get("font_scale") or 100
+
+    normalized = {
+        "audioLanguage": audio,
+        "audio_language": audio,
+        "audioFallback": audio_fb,
+        "audio_fallback": audio_fb,
+        "subtitleMode": sub_mode,
+        "subtitle_mode": sub_mode,
+        "subtitleLanguage": sub_lang,
+        "subtitle_language": sub_lang,
+        "fontScale": font_scale,
+        "font_scale": font_scale,
+    }
+    _PLAYER_PREFS_MEMORY_CACHE = normalized
     try:
         os.makedirs(os.path.dirname(PREFERENCES_FILE), exist_ok=True)
         with open(PREFERENCES_FILE, "w", encoding="utf-8") as f:
-            json.dump(prefs, f, indent=2)
+            json.dump(normalized, f, indent=2)
     except OSError:
         pass
-    return dict(prefs)
+
+    # Asynchronously sync language preferences to AIOStreams if running
+    def _sync_to_aiostreams():
+        try:
+            aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+            auth_bytes = f"admin:{read_saved_env().get('ADDON_PASSWORD', 'admin')}".encode("utf-8")
+            headers = {
+                "Authorization": f"Basic {base64.b64encode(auth_bytes).decode('ascii')}",
+                "Content-Type": "application/json"
+            }
+            req_data = json.dumps({
+                "preferredLanguages": [audio],
+                "preferredSubtitleLanguages": [sub_lang]
+            }).encode("utf-8")
+            req = urllib.request.Request(f"{aio_url}/api/v1/user", data=req_data, headers=headers, method="PATCH")
+            urllib.request.urlopen(req, timeout=2)
+        except Exception:
+            pass
+    threading.Thread(target=_sync_to_aiostreams, daemon=True).start()
+
+    return dict(normalized)
 
 
 class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
@@ -2120,6 +2171,9 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/player-preferences":
             self.handle_api_player_preferences_get()
             return
+        elif path == "/api/config-bundle-raw":
+            self.handle_api_config_bundle_raw()
+            return
         elif path in ("/api/zilean", "/api/zilean-stats"):
             self.handle_api_zilean_stats()
             return
@@ -3034,6 +3088,18 @@ button:hover {{ background: #0369a1; }}
             self.json_response({"success": True, "preferences": saved})
         except Exception as e:
             self.json_response({"error": f"Failed to save preferences: {e}"}, 500)
+
+    def handle_api_config_bundle_raw(self):
+        if not self.authorize():
+            return
+        env_vars = read_saved_env()
+        prefs = get_player_preferences()
+        self.json_response({
+            "env": env_vars,
+            "player_preferences": prefs,
+            "version": "aio-bundle-v2",
+            "exported_at": datetime.now(timezone.utc).isoformat()
+        })
 
     def handle_api_zilean_stats(self):
         try:

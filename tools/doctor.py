@@ -294,12 +294,48 @@ def print_cli_report(diag: dict):
     print("=" * 60)
 
 
+def run_repair(diag: dict) -> None:
+    print("[*] Initiating stack self-repair procedures...")
+    # 1. Database repair
+    pg = diag.get("postgres", {})
+    if pg.get("status") == "ok":
+        missing_dbs = [db for db, ok in pg.get("databases", {}).items() if not ok]
+        if missing_dbs:
+            print(f"[*] Missing PostgreSQL databases detected: {missing_dbs}. Executing init-dbs...")
+            init_sql = Path(__file__).resolve().parent.parent / "init/postgres/01-init-dbs.sql"
+            if init_sql.is_file():
+                try:
+                    subprocess.run(
+                        ["docker", "exec", "-i", "shared-postgres", "psql", "-U", "postgres", "-f", "/docker-entrypoint-initdb.d/01-init-dbs.sql"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    print(" [✓] PostgreSQL init-dbs re-executed successfully.")
+                except Exception as e:
+                    print(f" [✗] Failed to execute PostgreSQL init: {e}")
+    # 2. Container restarts for unhealthy containers
+    cnts = diag.get("containers", {}).get("containers", {})
+    unhealthy = [name for name, c in cnts.items() if not c.get("healthy")]
+    if unhealthy:
+        print(f"[*] Unhealthy/stopped containers detected: {unhealthy}. Attempting restart...")
+        try:
+            subprocess.run(["docker", "restart"] + unhealthy, capture_output=True, text=True, timeout=15)
+            print(" [✓] Container restart command dispatched.")
+        except Exception as e:
+            print(f" [✗] Failed to restart containers: {e}")
+    print("[✓] Repair routines finished.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="AIO Stack Diagnostics & Health Doctor")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+    parser.add_argument("--repair", action="store_true", help="Attempt automatic self-repair on detected issues")
     args = parser.parse_args()
 
     diag = run_diagnostics()
+    if args.repair:
+        run_repair(diag)
+        diag = run_diagnostics()
+
     if args.json:
         print(json.dumps(diag, indent=2))
     else:

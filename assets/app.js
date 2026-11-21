@@ -2655,12 +2655,16 @@ async function initPlayerPreferences() {
   try {
     const prefs = await api('/api/player-preferences');
     if (prefs) {
-      if (audioSel && prefs.audio_language) audioSel.value = prefs.audio_language;
-      if (subSel && prefs.subtitle_language) subSel.value = prefs.subtitle_language;
-      if (modeSel && prefs.subtitle_mode) modeSel.value = prefs.subtitle_mode;
-      if (fontSel && prefs.font_scale) fontSel.value = String(prefs.font_scale);
+      const audio = prefs.audio_language || prefs.audioLanguage;
+      const sub = prefs.subtitle_language || prefs.subtitleLanguage;
+      const mode = prefs.subtitle_mode || prefs.subtitleMode;
+      const scale = prefs.font_scale || prefs.fontScale;
+      if (audioSel && audio) audioSel.value = audio;
+      if (subSel && sub) subSel.value = sub;
+      if (modeSel && mode) modeSel.value = mode;
+      if (fontSel && scale) fontSel.value = String(scale);
       if (outPre) {
-        outPre.textContent = `Loaded preferences: audio=${prefs.audio_language || 'eng'}, subtitles=${prefs.subtitle_language || 'eng'} (${prefs.subtitle_mode || 'forced'}), scale=${prefs.font_scale || 100}%`;
+        outPre.textContent = `Loaded preferences: audio=${audio || 'eng'}, subtitles=${sub || 'eng'} (${mode || 'forced'}), scale=${scale || 100}%`;
       }
     }
   } catch (err) {
@@ -2719,7 +2723,7 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
-async function deriveAesGcmKey(passphrase, saltBytes) {
+async function deriveAesGcmKey(passphrase, saltBytes, iterations = 600000) {
   const enc = new TextEncoder();
   const rawKey = await window.crypto.subtle.importKey(
     'raw',
@@ -2732,7 +2736,7 @@ async function deriveAesGcmKey(passphrase, saltBytes) {
     {
       name: 'PBKDF2',
       salt: saltBytes,
-      iterations: 100000,
+      iterations: iterations,
       hash: 'SHA-256'
     },
     rawKey,
@@ -2762,8 +2766,9 @@ function initEncryptedBundle() {
     exportBtn.disabled = true;
     exportBtn.textContent = 'Encrypting…';
     try {
-      const envData = await api('/api/env').catch(() => ({}));
-      const prefsData = await api('/api/player-preferences').catch(() => ({}));
+      const rawBundle = await api('/api/config-bundle-raw').catch(() => null);
+      const envData = (rawBundle && rawBundle.env) || await api('/api/env').catch(() => ({}));
+      const prefsData = (rawBundle && rawBundle.player_preferences) || await api('/api/player-preferences').catch(() => ({}));
       const bundlePayload = {
         env: envData,
         player_preferences: prefsData,
@@ -2773,7 +2778,7 @@ function initEncryptedBundle() {
 
       const salt = window.crypto.getRandomValues(new Uint8Array(16));
       const iv = window.crypto.getRandomValues(new Uint8Array(12));
-      const key = await deriveAesGcmKey(passphrase, salt);
+      const key = await deriveAesGcmKey(passphrase, salt, 600000);
 
       const enc = new TextEncoder();
       const encodedPayload = enc.encode(JSON.stringify(bundlePayload));
@@ -2786,6 +2791,7 @@ function initEncryptedBundle() {
       const exportObject = {
         format: 'aio-bundle-v2',
         algorithm: 'AES-256-GCM',
+        iterations: 600000,
         salt: arrayBufferToBase64(salt),
         iv: arrayBufferToBase64(iv),
         ciphertext: arrayBufferToBase64(ciphertext),
@@ -2847,13 +2853,28 @@ function initEncryptedBundle() {
       const salt = base64ToArrayBuffer(bundle.salt);
       const iv = base64ToArrayBuffer(bundle.iv);
       const ciphertext = base64ToArrayBuffer(bundle.ciphertext);
-      const key = await deriveAesGcmKey(passphrase, new Uint8Array(salt));
-
-      const decryptedBytes = await window.crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: new Uint8Array(iv) },
-        key,
-        ciphertext
-      );
+      const iterations = bundle.iterations || 600000;
+      let key;
+      let decryptedBytes;
+      try {
+        key = await deriveAesGcmKey(passphrase, new Uint8Array(salt), iterations);
+        decryptedBytes = await window.crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: new Uint8Array(iv) },
+          key,
+          ciphertext
+        );
+      } catch (decryptErr) {
+        if (iterations !== 100000) {
+          key = await deriveAesGcmKey(passphrase, new Uint8Array(salt), 100000);
+          decryptedBytes = await window.crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: new Uint8Array(iv) },
+            key,
+            ciphertext
+          );
+        } else {
+          throw decryptErr;
+        }
+      }
 
       const dec = new TextDecoder();
       const decryptedJson = dec.decode(decryptedBytes);
@@ -3043,6 +3064,23 @@ function initShortcutsAndHUD() {
         e.preventDefault();
         notify('Refreshing stack health ↻');
         refreshHealthTelemetry();
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        const testBtn = document.getElementById('btn-test-playback');
+        const openPlayerBtn = document.getElementById('aiostreams-player-action');
+        if (testBtn && !testBtn.disabled) {
+          testBtn.click();
+        } else if (openPlayerBtn && openPlayerBtn.style.display !== 'none') {
+          openPlayerBtn.click();
+        }
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        const bundleCard = document.getElementById('card-encrypted-bundle');
+        if (bundleCard) {
+          bundleCard.scrollIntoView({ behavior: 'smooth' });
+          const pass = document.getElementById('bundle-passphrase');
+          if (pass) pass.focus();
+        }
       } else if (navMap[e.key]) {
         e.preventDefault();
         const target = document.querySelector(navMap[e.key]);

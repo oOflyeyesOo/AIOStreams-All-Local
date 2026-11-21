@@ -747,6 +747,12 @@ services:
       - ./data/postersplus:/app/cache
     networks:
       - stremio-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/ || curl -fsSL http://localhost:8000/ > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       init-configs:
         condition: service_completed_successfully
@@ -780,8 +786,15 @@ services:
       - ./data/subsense:/app/data
     networks:
       - stremio-net
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"http=require('http');http.get('http://localhost:3100/',r=>{process.exit(r.statusCode===200?0:1)})\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - shared-redis
+      shared-redis:
+        condition: service_healthy
 
   # ============================================================================
   # 9. SUPPORTING SHARED DATABASES
@@ -791,8 +804,8 @@ services:
     container_name: shared-redis
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: ${REDIS_MEM_LIMIT:-256m}
-    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
+    mem_limit: ${REDIS_MEM_LIMIT:-384m}
+    command: redis-server --maxmemory 300mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
     volumes:
       - ./data/redis:/data
     healthcheck:

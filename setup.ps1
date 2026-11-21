@@ -27,6 +27,8 @@ param (
     [switch]$Benchmark,
     [switch]$BuildAppliance,
     [switch]$CleanCache,
+    [switch]$Doctor,
+    [switch]$Repair,
     [switch]$Resources,
     [switch]$Stats,
     [string]$Profile = "",
@@ -584,6 +586,10 @@ if ($Portal -or $Serve) {
     Build-AllInOneImage
 } elseif ($CleanCache) {
     Invoke-CleanCache
+} elseif ($Doctor -or $Repair) {
+    $doctorArgs = @("tools/doctor.py")
+    if ($Repair) { $doctorArgs += "--repair" }
+    & python @doctorArgs
 } elseif ($Resources -or $Stats) {
     Show-StackResources
 } else {
