@@ -69,7 +69,7 @@ def main():
             if not run_gate(f"Compose Config Validation ({cf})", ["docker", "compose", "--env-file", ".env.example", "-f", cf, "config", "--quiet"]):
                 return 1
 
-        for profile in ["core", "anime", "tunnel", "all"]:
+        for profile in ["core", "anime", "tunnel", "all", "scrapers"]:
             if not run_gate(f"Compose Profile Validation ({profile})", ["docker", "compose", "--env-file", ".env.example", "--profile", profile, "config", "--quiet"]):
                 return 1
 

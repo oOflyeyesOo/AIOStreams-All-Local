@@ -1005,6 +1005,23 @@ class PortalTests(unittest.TestCase):
             mock_save.assert_called_once()
             self.assertEqual(mock_save.call_args[0][0]["COMPOSE_PROFILES"], "core")
 
+    def test_scrapers_profile_enables_all_core_services_in_probe_integration(self):
+        core_services = [
+            ("aiometadata", 4005, "Metadata"),
+            ("postersplus", 8000, "Metadata"),
+            ("subsense", 3100, "Subtitles"),
+            ("lumiere-db", 8000, "Metadata"),
+            ("prowlarr", 9696, "Indexers"),
+            ("flaresolverr", 8191, "Tools"),
+            ("bitmagnet", 3333, "Indexers"),
+            ("zilean", 8181, "Indexers"),
+            ("stremthru", 8080, "Debrid"),
+        ]
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "scrapers"}), patch("socket.create_connection"):
+            for service, port, group in core_services:
+                result = portal.probe_integration((service.title(), service, port, group))
+                self.assertTrue(result["enabled"], f"{service} should be enabled under COMPOSE_PROFILES='scrapers'")
+
     @patch.object(portal, "playback_readiness", return_value={"ready": True})
     def test_test_playback_endpoint(self, _readiness):
         # 1. When NNTP login fails

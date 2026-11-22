@@ -59,6 +59,11 @@ class ApplianceTests(unittest.TestCase):
             values = dict(line.split('=', 1) for line in (data / '.env').read_text().splitlines() if '=' in line)
             self.assertEqual(values['COMPOSE_PROFILES'], 'core')
 
+            # Incoming COMPOSE_PROFILES='scrapers' in environment dict migrates to core
+            prepare_env.prepare(root, data, {'COMPOSE_PROFILES': 'scrapers'})
+            values = dict(line.split('=', 1) for line in (data / '.env').read_text().splitlines() if '=' in line)
+            self.assertEqual(values['COMPOSE_PROFILES'], 'core')
+
     def test_entrypoint_uses_networked_portal_and_single_controller_setup(self):
         script = (ROOT / 'docker/all-in-one/entrypoint.sh').read_text()
         self.assertNotIn('--scale portal=0', script)

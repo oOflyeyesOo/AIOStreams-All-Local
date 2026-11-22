@@ -108,6 +108,13 @@ class ControllerTests(unittest.TestCase):
                'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
         config = {'services': {
             'prowlarr': {'profiles': ['core', 'scrapers', 'all']},
+            'zilean': {'profiles': ['core', 'scrapers', 'all']},
+            'bitmagnet': {'profiles': ['core', 'scrapers', 'all']},
+            'flaresolverr': {'profiles': ['core', 'scrapers', 'all']},
+            'stremthru': {'profiles': ['core', 'scrapers', 'all']},
+            'aiometadata': {'profiles': ['core', 'scrapers', 'all']},
+            'postersplus': {'profiles': ['core', 'scrapers', 'all']},
+            'lumiere-db': {'profiles': ['core', 'scrapers', 'all']},
             'anime-kitsu': {'profiles': ['anime', 'anime-db', 'scrapers', 'all']},
             'jikan-api': {'profiles': ['anime', 'anime-db', 'all']},
         }}
@@ -124,6 +131,6 @@ class ControllerTests(unittest.TestCase):
                  patch.object(controller, 'log_command', side_effect=command):
                 controller.apply()
 
-        self.assertIn('prowlarr', started)
-        self.assertIn('anime-kitsu', started)
+        for svc in ['prowlarr', 'zilean', 'bitmagnet', 'flaresolverr', 'stremthru', 'aiometadata', 'postersplus', 'lumiere-db', 'anime-kitsu']:
+            self.assertIn(svc, started)
         self.assertNotIn('jikan-api', started)
