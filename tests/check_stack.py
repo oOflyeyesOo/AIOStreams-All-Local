@@ -13,7 +13,6 @@ HTTP_CHECKS = {
     "aiostreams": ("http://aiostreams:3000/api/v1/status", False),
     "anime-kitsu": ("http://anime-kitsu:7000/manifest.json", True),
     "aiometadata": ("http://aiometadata:4005/health/live", False),
-    "infinidysk": ("http://infinidysk:3000/healthz", False),
     "prowlarr": ("http://prowlarr:9696/ping", False),
 }
 TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{

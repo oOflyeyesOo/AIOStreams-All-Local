@@ -10,7 +10,6 @@ import tempfile
 import threading
 from collections import deque
 from tools.release_manager import apply_images, decode_lock
-from tools.usenet_config import apply_to_compose
 
 ROOT = Path('/workspace')
 COMPOSE_FILE = os.environ.get('AIO_COMPOSE_FILE', 'docker-compose.yml')
@@ -105,10 +104,6 @@ def apply():
                                   if line.startswith('AIO_RELEASE_LOCK_B64=')), '')
         if release_value:
             rendered = apply_images(rendered, decode_lock(release_value))
-        values={}
-        if (ROOT/'.env').exists():
-            values=dict(line.split('=',1) for line in (ROOT/'.env').read_text().splitlines() if '=' in line and not line.startswith('#'))
-        rendered=apply_to_compose(rendered,values)
         descriptor, temporary = tempfile.mkstemp(suffix='.json')
         with os.fdopen(descriptor, 'w') as output:
             json.dump(rendered, output)

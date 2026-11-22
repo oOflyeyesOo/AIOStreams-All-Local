@@ -65,7 +65,7 @@ for kind,ident in cases:
   allowed=set()
   if instance in allowed:report['measurements'].append(measure(instance+' direct '+kind,prefix+f'/stream/{kind}/{ident}.json'))
 
-services=[s for s in profile.get('services',[]) if s.get('enabled') and s.get('credentials',{}).get('apiKey') and s.get('id')!='nzbdav']
+services=[s for s in profile.get('services',[]) if s.get('enabled') and s.get('credentials',{}).get('apiKey') and s.get('id') not in ('nzbdav', 'aiostreams')]
 if services:
  comet={'debridServices':[{'service':s['id'],'apiKey':s['credentials']['apiKey']} for s in services],
         'enableTorrent':False,'scrapeDebridAccountTorrents':False,'cachedOnly':False,'removeTrash':True,

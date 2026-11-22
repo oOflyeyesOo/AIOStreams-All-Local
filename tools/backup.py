@@ -4,7 +4,7 @@
 Creates clean, lightweight, compressed archives (.tar.gz) of:
   • PostgreSQL database cluster (atomic pg_dumpall of zilean, aiometadata)
   • Primary SQLite databases (AIOStreams db.sqlite, Debrid Search)
-  • Essential service configurations (Prowlarr, InfiniDysk, Stremio Web)
+  • Essential service configurations (Prowlarr, Stremio Web)
   • Environment settings (.env)
 
 Excludes ephemeral cache directories (stremthru hashlists, redis dumps, stremthru.db cache)
@@ -192,7 +192,6 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("aiostreams/instance-id", False),
             ("prowlarr/config.xml", False),
             ("prowlarr/prowlarr.db", False),
-            ("infinidysk", True),
             ("postersplus", True),
             ("subsense", True)
         ]

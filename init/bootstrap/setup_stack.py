@@ -3,10 +3,10 @@
 AIOStreams All-Local Unified Stack Bootstrapper & Auto-Provisioner
 Automates zero-touch configuration across all stack services upon launch:
 1. Prowlarr: Registers FlareSolverr Cloudflare bypass and auto-seeds top public torrent trackers.
-2. InfiniDysk: Validates connectivity and provisions master admin credentials.
+2. Usenet: Synchronizes native Usenet provider credentials with AIOStreams.
 3. AIOStreams: Automatically compiles and registers our ready-to-stream 'All-Local Self-Hosted'
-   template (Prowlarr, Knaben, Torrentio, AIOMetadata, SubSense, InfiniDysk,
-   and StremThru Store) with Debrid & InfiniDysk credentials, mapped to alias '/stremio/u/local/manifest.json'.
+   template (Prowlarr, Knaben, Torrentio, AIOMetadata, SubSense,
+   and StremThru Store) with Debrid & Usenet credentials, mapped to alias '/stremio/u/local/manifest.json'.
 4. Diagnostic Verification: Tests manifest and stream resolution on the internal Stremio engine.
 """
 import os
@@ -29,7 +29,7 @@ for parent in (*Path(__file__).resolve().parents, Path('/app')):
     if (parent / 'tools' / 'usenet_config.py').is_file():
         sys.path.insert(0, str(parent))
         break
-from tools.usenet_config import newznab_indexers
+from tools.usenet_config import newznab_indexers, credential, extra_sources
 
 def load_env_file():
     if os.environ.get("AIO_SKIP_ENV_FILE") == "true":
@@ -132,7 +132,6 @@ PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/"
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
 PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "prowlarr_internal_secret_key_99")
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
-INFINIDYSK_URL = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
 AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
@@ -656,158 +655,121 @@ def setup_usenet_indexer():
 
 
 # ==============================================================================
-# 2. INFINIDYSK STATUS & ADMIN SETUP
+# 2. AIOSTREAMS NATIVE USENET PROVIDER SYNC
 # ==============================================================================
-def ensure_infinidysk_admin(addon_password=ADDON_PASSWORD):
-    """
-    Ensures InfiniDysk has an administrator account provisioned with ADDON_PASSWORD.
-    1. Resolves candidate reachable endpoints (internal docker hostname & host port mappings).
-    2. Tests if the existing admin account authenticates with addon_password via /api/authenticate.
-    3. If authentication fails, checks /api/is-onboarding or reconciles stale database accounts
-       so that admin is reliably configured with addon_password across fresh installs and upgrades.
-    4. Automatically completes/skips the initial setup wizard.
-    """
+def sync_aiostreams_native_usenet():
+    """Synchronizes Usenet NNTP provider credentials directly into AIOStreams native usenet engine."""
     candidates = [
-        INFINIDYSK_URL,
-        "http://127.0.0.1:3005",
-        "http://localhost:3005",
+        AIOSTREAMS_URL,
+        "http://127.0.0.1:3001",
+        "http://localhost:3001",
     ]
     seen = set()
     unique_candidates = [c for c in candidates if not (c in seen or seen.add(c))]
 
-    infinidysk_url = None
+    aio_url = None
     for cand in unique_candidates:
         if is_url_reachable(cand, timeout=1.0):
-            infinidysk_url = cand
+            aio_url = cand
             break
 
-    if not infinidysk_url:
+    if not aio_url:
         return False
 
-    def check_auth(url):
-        try:
-            auth_data = urllib.parse.urlencode({
-                "username": "admin",
-                "password": addon_password,
-                "type": "admin"
-            }).encode("utf-8")
-            auth_req = urllib.request.Request(
-                f"{url}/api/authenticate",
-                data=auth_data,
-                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
-            )
-            with urllib.request.urlopen(auth_req, timeout=3) as a_resp:
-                auth_res = json.loads(a_resp.read().decode("utf-8", errors="ignore"))
-                return isinstance(auth_res, dict) and auth_res.get("authenticated") is True
-        except Exception:
-            return False
+    active = (os.environ.get('USENET_ENABLED', 'true') != 'false' and os.environ.get('USENET_HOST')
+              and (os.environ.get('USENET_USER') or os.environ.get('USENET_USER_B64'))
+              and (os.environ.get('USENET_PASS') or os.environ.get('USENET_PASS_B64')))
+    if not active:
+        auth_headers = get_aiostreams_auth_headers(aio_url)
+        make_request(f"{aio_url}/api/v1/dashboard/usenet/providers", method="PUT", headers=auth_headers, data={"providers": []}, timeout=5)
+        return False
 
-    def skip_wizard(url):
-        try:
-            state_req = urllib.request.Request(
-                f"{url}/api/setup-wizard-state",
-                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
-            )
-            with urllib.request.urlopen(state_req, timeout=3) as resp:
-                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-                if isinstance(data, dict) and data.get("setupRequired"):
-                    skip_req = urllib.request.Request(
-                        f"{url}/api/setup-wizard/skip",
-                        data=b"",
-                        headers={"x-api-key": SECRET_KEY, "Content-Type": "application/json"},
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(skip_req, timeout=3) as s_resp:
-                        pass
-                    print("[InfiniDysk Setup] ✓ Setup wizard completed and skipped.", flush=True)
-        except Exception:
-            pass
+    host = os.environ.get('USENET_HOST', '').strip()
+    user = credential(os.environ, 'USENET_USER') or os.environ.get('USENET_USER', '')
+    password = credential(os.environ, 'USENET_PASS') or os.environ.get('USENET_PASS', '')
+    if not host or not user or not password:
+        auth_headers = get_aiostreams_auth_headers(aio_url)
+        make_request(f"{aio_url}/api/v1/dashboard/usenet/providers", method="PUT", headers=auth_headers, data={"providers": []}, timeout=5)
+        return False
 
-    # 1. If admin already authenticates with addon_password, just ensure wizard is skipped
-    if check_auth(infinidysk_url):
-        skip_wizard(infinidysk_url)
-        return True
-
-    # 2. Check if InfiniDysk is in fresh onboarding state
-    is_onboarding = False
     try:
-        req = urllib.request.Request(
-            f"{infinidysk_url}/api/is-onboarding",
-            headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            if isinstance(data, dict) and data.get("isOnboarding"):
-                is_onboarding = True
-    except Exception:
-        pass
+        port = int(os.environ.get('USENET_PORT') or 563)
+    except (ValueError, TypeError):
+        port = 563
 
-    # 3. If authentication failed and not in onboarding, an admin account exists with a
-    # stale/mismatched password. Clear Accounts table in db.sqlite to force reconciliation.
-    if not is_onboarding:
-        db_candidates = [
-            resolve_path("data/infinidysk/db.sqlite", "data/infinidysk/db.sqlite"),
-            "/data/infinidysk/db.sqlite",
-            "/config/db.sqlite",
-        ]
-        db_cleared = False
-        for db_file in db_candidates:
-            if os.path.isfile(db_file):
-                try:
-                    import sqlite3
-                    conn = sqlite3.connect(db_file, timeout=5)
-                    conn.execute("DELETE FROM Accounts")
-                    conn.execute("DELETE FROM SetupWizardStates")
-                    conn.commit()
-                    conn.close()
-                    db_cleared = True
-                    break
-                except Exception:
-                    pass
+    try:
+        max_connections = int(os.environ.get('USENET_CONNECTIONS') or 30)
+    except (ValueError, TypeError):
+        max_connections = 30
+    max_connections = max(1, min(max_connections, 50))
 
-        if db_cleared:
-            import shutil, subprocess
-            if shutil.which("docker"):
-                try:
-                    subprocess.run(["docker", "restart", "infinidysk"], capture_output=True, timeout=15)
-                    for _ in range(15):
-                        time.sleep(1)
-                        try:
-                            req = urllib.request.Request(
-                                f"{infinidysk_url}/api/is-onboarding",
-                                headers={"x-api-key": SECRET_KEY, "Accept": "application/json"}
-                            )
-                            with urllib.request.urlopen(req, timeout=2) as resp:
-                                d = json.loads(resp.read().decode("utf-8", errors="ignore"))
-                                if isinstance(d, dict) and d.get("isOnboarding"):
-                                    is_onboarding = True
-                                    break
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+    use_ssl = str(port) in ("563", "443") or os.environ.get('USENET_SSL', 'true').lower() == 'true'
 
-    # 4. Provision admin account with master password
-    if is_onboarding:
-        try:
-            create_data = urllib.parse.urlencode({
-                "username": "admin",
-                "password": addon_password,
-                "confirmPassword": addon_password
-            }).encode("utf-8")
-            create_req = urllib.request.Request(
-                f"{infinidysk_url}/onboarding",
-                data=create_data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
-            )
-            with urllib.request.urlopen(create_req, timeout=5) as c_resp:
-                pass
-            print("[InfiniDysk Setup] ✓ Provisioned admin account with master password.", flush=True)
-        except Exception:
-            pass
+    slug = host.split('.')[1] if '.' in host and len(host.split('.')) > 2 else host.split('.')[0]
+    provider_id = slug.lower().replace('-', '_')
 
-    skip_wizard(infinidysk_url)
-    return True
+    providers = [
+        {
+            "id": provider_id,
+            "name": f"{slug.capitalize()} High-Speed",
+            "host": host,
+            "port": port,
+            "tls": use_ssl,
+            "username": user,
+            "password": password,
+            "maxConnections": max_connections,
+            "priority": 0,
+            "isBackup": False,
+            "enabled": True,
+            "pipelineDepth": 2
+        }
+    ]
+
+    # Handle any extra usenet servers
+    try:
+        extras = extra_sources(os.environ, 'USENET_EXTRA_SERVERS')
+        for idx, ex in enumerate(extras):
+            e_host = str(ex.get('host') or '').strip()
+            e_user = str(ex.get('username') or '').strip()
+            e_pass = str(ex.get('password') or '').strip()
+            if not e_host or not e_user or not e_pass:
+                continue
+            try:
+                e_port = int(ex.get('port') or 563)
+            except (ValueError, TypeError):
+                e_port = 563
+            try:
+                e_conns = int(ex.get('connections') or 10)
+            except (ValueError, TypeError):
+                e_conns = 10
+            e_slug = e_host.split('.')[1] if '.' in e_host and len(e_host.split('.')) > 2 else e_host.split('.')[0]
+            providers.append({
+                "id": f"{e_slug.lower()}_{idx + 1}",
+                "name": f"{e_slug.capitalize()} {'Backup' if ex.get('backupOnly') else 'Secondary'}",
+                "host": e_host,
+                "port": e_port,
+                "tls": bool(ex.get('tls', True)),
+                "username": e_user,
+                "password": e_pass,
+                "maxConnections": max(1, min(e_conns, 50)),
+                "priority": 1 if ex.get('backupOnly') else 0,
+                "isBackup": bool(ex.get('backupOnly', False)),
+                "enabled": True,
+                "pipelineDepth": 2
+            })
+    except Exception as e:
+        print(f"[Usenet Setup] Note parsing extra usenet servers: {e}", flush=True)
+
+    auth_headers = get_aiostreams_auth_headers(aio_url)
+    payload = {"providers": providers}
+    endpoint = f"{aio_url}/api/v1/dashboard/usenet/providers"
+    res = make_request(endpoint, method="PUT", headers=auth_headers, data=payload, timeout=10)
+    if isinstance(res, dict) and res.get("success"):
+        print(f"[Usenet Setup] ✓ Synchronized {len(providers)} native Usenet provider(s) into AIOStreams engine.", flush=True)
+        return True
+    else:
+        print(f"[Usenet Setup] Note syncing native Usenet providers: {res}", flush=True)
+        return False
 
 
 def wait_for_postersplus(max_attempts=20, interval=2):
@@ -1145,17 +1107,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         )
     ))
 
-    # Ensure services are populated with InfiniDysk nzbdav and any provided Debrid keys
-    nzbdav_key = SECRET_KEY if SECRET_KEY else "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09"
+    # Ensure services are populated with native AIOStreams usenet and any provided Debrid keys
     services = [
         {
-            "id": "nzbdav",
+            "id": "aiostreams",
             "enabled": True,
             "credentials": {
-                "apiKey": nzbdav_key,
-                "url": "http://infinidysk:3000",
-                "username": "admin",
-                "password": ADDON_PASSWORD
+                "aiostreamsAuth": f"admin:{ADDON_PASSWORD}"
             }
         }
     ]
@@ -1479,7 +1437,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                             "url": api_url,
                             "apiKey": row.get('apiKey', '')
                         },
-                        "services": ["nzbdav"],
+                        "services": ["aiostreams"],
                         "timeout": 8000,
                         "resources": ["stream"],
                         "useMultipleInstances": False
@@ -1490,7 +1448,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts = existing.setdefault("options", {})
                 opts["name"] = f"{label} (Newznab Direct)"
                 opts["api"] = {"url": api_url, "apiKey": row.get("apiKey", "")}
-                opts["services"] = ["nzbdav"]
+                opts["services"] = ["aiostreams"]
                 opts["timeout"] = int(opts.get("timeout") or 8000)
                 opts["resources"] = ["stream"]
 
@@ -1528,7 +1486,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             }
         })
 
-    if any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+    if any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
         if not any(p.get("type") == "stremthruStore" for p in presets):
             presets.append({
                 "type": "stremthruStore",
@@ -1614,7 +1572,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         pid = p.get("instanceId", "")
         opts = p.setdefault("options", {})
         if ptype == "torrentio":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav','easynews') for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                 continue
             opts["name"] = "Torrentio"
             opts["timeout"] = SCRAPER_TIMEOUT_MS
@@ -1632,15 +1590,14 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 continue
             p["enabled"] = True
             opts["timeout"] = int(opts.get("timeout") or 8000)
-            if not opts.get("services"):
-                opts["services"] = ["nzbdav"]
+            opts["services"] = ["aiostreams"]
             opts["resources"] = ["stream"]
             print(f"[AIOStreams Setup] ✓ Direct Newznab indexer active: {opts.get('name', pid)}", flush=True)
             validated_presets.append(p)
         elif ptype == "prowlarr":
             sources = opts.get("sources", [])
             if "torrent" in sources:
-                if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+                if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                     continue
                 opts.setdefault("name", "Prowlarr Torrents")
                 opts.setdefault("url", PROWLARR_URL)
@@ -1666,17 +1623,17 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                         removed_preset_ids.add(pid)
                     continue
                 p["enabled"] = True
-                opts.setdefault("name", "Usenet (Prowlarr → InfiniDysk)")
+                opts.setdefault("name", "Usenet (Prowlarr → AIOStreams)")
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
-                opts.setdefault("services", ["nzbdav"])
+                opts.setdefault("services", ["aiostreams"])
                 opts.setdefault("sources", ["usenet"])
                 opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
                 validated_presets.append(p)
             else:
                 validated_presets.append(p)
         elif ptype == "knaben":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
@@ -1690,7 +1647,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 removed_preset_ids.add(pid)
             continue
         elif ptype == "stremthruStore":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
@@ -1719,7 +1676,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             validated_presets.append(p)
         elif ptype in ("anime-tosho-new", "tsukihime", "neko-bt"):
             compatible={'alldebrid','debrider','debridlink','easydebrid','offcloud','premiumize','pikpak','realdebrid','torbox','torrin'}
-            if ptype=='tsukihime':compatible.add('nzbdav')
             selected=[s['id'] for s in services if s.get('enabled') and s['id'] in compatible]
             anime_flag = (
                 os.environ.get('ENABLE_ANIME_SOURCES', 'false').lower() == 'true'
@@ -1737,7 +1693,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
             validated_presets.append(p)
         elif ptype == "zilean":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
@@ -1754,7 +1710,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 if pid:
                     removed_preset_ids.add(pid)
         elif ptype == "torznab":
-            if not any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services):
+            if not any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services):
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
@@ -1819,7 +1775,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts["resources"] = ["stream"]
                 opts["resultPassthrough"] = False
                 enable_bento = os.environ.get("ENABLE_BENTO", "true").lower() != "false"
-                has_debrid = any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services)
+                has_debrid = any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services)
                 if not enable_bento:
                     print(f"[AIOStreams Setup] ℹ️ Bento Anime Indexer disabled via configuration.", flush=True)
                 elif not has_debrid:
@@ -1848,6 +1804,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 removed_preset_ids.add(p["type"])
 
     validated_presets = [p for p in validated_presets if not is_deprecated_preset(p)]
+    # Order Usenet presets first so NZB indexers are queried and resolved with priority
+    usenet_presets = [p for p in validated_presets if p.get("type") == "newznab" or p.get("instanceId") == "prowlarr-usenet"]
+    other_presets = [p for p in validated_presets if p not in usenet_presets]
+    validated_presets = usenet_presets + other_presets
     valid_preset_ids = {p.get("instanceId") for p in validated_presets if isinstance(p, dict) and p.get("instanceId")}
     valid_preset_types = {p.get("type") for p in validated_presets if isinstance(p, dict) and p.get("type")}
 
@@ -1868,7 +1828,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         "enabled": proxy_is_public,
         "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
         "credentials": proxy_creds,
-        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "nzbdav", "none"]
+        "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "aiostreams", "none"]
     }
 
     config["addonName"] = "AIOStreams (All-Local Self-Hosted - Tamtaro SEL)"
@@ -1947,7 +1907,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     config["precacheSelector"] = "[]"
     config.pop('precacheCondition',None)
     config.pop('alwaysPrecache',None)
-    has_debrid_active = any(s.get('enabled') and s.get('id') not in ('nzbdav', 'easynews') for s in services)
+    has_debrid_active = any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services)
     if not has_debrid_active and usenet_active:
         config.setdefault("cacheAndPlay", {"enabled": True, "streamTypes": ["usenet"]})
     else:
@@ -1984,6 +1944,9 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             "fields": ["languages", "seadex", "library", "subtitles", "sizes", "idMatched"],
         })
 
+    # Ensure preferredStreamTypes prioritizes Usenet streams ahead of Debrid for playback stability
+    config["preferredStreamTypes"] = ["usenet", "stremio-usenet", "debrid"]
+
     if "sortCriteria" in config and isinstance(config["sortCriteria"], dict):
         glob_sort = config["sortCriteria"].get("global", [])
         if isinstance(glob_sort, list):
@@ -1999,7 +1962,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     glob_sort.insert(cached_idx + 1, library_entry)
                 else:
                     glob_sort.insert(0, library_entry)
-                config["sortCriteria"]["global"] = glob_sort
+
+            has_stream_type = any(item.get("key") == "streamType" for item in glob_sort if isinstance(item, dict))
+            if not has_stream_type:
+                ref_idx = -1
+                for i, item in enumerate(glob_sort):
+                    if isinstance(item, dict) and item.get("key") in ("library", "cached"):
+                        ref_idx = i
+                stream_type_entry = {"key": "streamType", "direction": "desc"}
+                if ref_idx >= 0:
+                    glob_sort.insert(ref_idx + 1, stream_type_entry)
+                else:
+                    glob_sort.insert(0, stream_type_entry)
+            config["sortCriteria"]["global"] = glob_sort
 
     # Inject metadata API keys into AIOStreams user configuration
     global TMDB_API_KEY, TVDB_API_KEY
@@ -2101,14 +2076,15 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
 
     return config
 
-def get_aiostreams_auth_headers():
+def get_aiostreams_auth_headers(base_url=None):
+    target = (base_url or AIOSTREAMS_URL).rstrip("/")
     auth_bytes = f"admin:{ADDON_PASSWORD}".encode("utf-8")
     headers = {
         "Authorization": f"Basic {base64.b64encode(auth_bytes).decode('ascii')}",
         "Content-Type": "application/json"
     }
     try:
-        login_url = f"{AIOSTREAMS_URL}/api/v1/auth/login"
+        login_url = f"{target}/api/v1/auth/login"
         login_payload = json.dumps({"username": "admin", "password": ADDON_PASSWORD}).encode("utf-8")
         req = urllib.request.Request(login_url, data=login_payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -2418,13 +2394,13 @@ def main():
         except Exception as e:
             print(f"[Prowlarr Setup] Error: {e}", flush=True)
 
-    # 2. InfiniDysk Admin Setup
+    # 2. Native AIOStreams Usenet Provider Sync
     try:
-        ensure_infinidysk_admin()
+        sync_aiostreams_native_usenet()
     except Exception as e:
-        print(f"[InfiniDysk Setup] Note: {e}", flush=True)
+        print(f"[Usenet Setup] Note: {e}", flush=True)
 
-    # 4. Posters+ & AIOMetadata (Tamtaro + Posters+)
+    # 3. Posters+ & AIOMetadata (Tamtaro + Posters+)
     aiometadata_manifest = None
     try:
         aiometadata_manifest = setup_optional_metadata()

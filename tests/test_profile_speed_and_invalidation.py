@@ -120,9 +120,9 @@ class ProfileSpeedAndInvalidationTests(unittest.TestCase):
         ]
 
         # User disables debrid and switches to Usenet Only
-        services_usenet = [{"id": "nzbdav", "enabled": True, "credentials": {"apiKey": "nzb_key"}}]
+        services_usenet = [{"id": "aiostreams", "enabled": True, "credentials": {"aiostreamsAuth": "admin:key"}}]
         # Torrent presets and StremThruStore must be omitted or disabled when no debrid is active
-        has_debrid = any(s.get("enabled") and s.get("id") not in ("nzbdav", "easynews") for s in services_usenet)
+        has_debrid = any(s.get("enabled") and s.get("id") not in ("aiostreams", "easynews") for s in services_usenet)
         self.assertFalse(has_debrid)
 
 

@@ -1,28 +1,25 @@
 {
   "metadata": {
     "id": "builtin.usenet-only",
-    "name": "Usenet Only (NNTP InfiniDysk & Direct Newznab - No Debrid)",
-    "description": "Streamlined all-local Usenet pipeline routing via direct Newznab presets in AIOStreams, InfiniDysk NNTP on-demand streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime.",
+    "name": "Usenet Only (Native NNTP & Direct Newznab - No Debrid)",
+    "description": "Streamlined all-local Usenet pipeline routing via direct Newznab presets in AIOStreams, native NNTP on-demand streaming, AIOMetadata, SubSense subtitles, and anime scrapers.",
     "source": "community",
     "author": "AIOStreams-All-Local",
     "version": "1.0.0",
     "category": "Usenet",
     "serviceRequired": true,
     "services": [
-      "nzbdav",
+      "aiostreams",
       "easynews"
     ]
   },
   "config": {
     "services": [
       {
-        "id": "nzbdav",
+        "id": "aiostreams",
         "enabled": true,
         "credentials": {
-          "apiKey": "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09",
-          "url": "http://infinidysk:3000",
-          "username": "admin",
-          "password": "admin"
+          "aiostreamsAuth": "admin:admin"
         }
       }
     ],
@@ -32,14 +29,14 @@
         "instanceId": "prowlarr-usenet",
         "enabled": true,
         "options": {
-          "name": "Usenet (Prowlarr → InfiniDysk)",
+          "name": "Usenet (Prowlarr → AIOStreams)",
           "prowlarrUrl": "http://prowlarr:9696",
           "prowlarrApiKey": "prowlarr_internal_secret_key_99",
           "sources": [
             "usenet"
           ],
           "services": [
-            "nzbdav"
+            "aiostreams"
           ],
           "resources": [
             "stream"
@@ -100,7 +97,7 @@
             "anime"
           ],
           "services": [
-            "nzbdav"
+            "aiostreams"
           ],
           "useMultipleInstances": false
         }
@@ -112,7 +109,7 @@
       "url": "http://localhost:3001",
       "credentials": "admin:admin",
       "proxiedServices": [
-        "nzbdav",
+        "aiostreams",
         "easynews",
         "none"
       ]
@@ -150,10 +147,23 @@
     "excludedVisualTags": [
       "3D"
     ],
+    "preferredStreamTypes": [
+      "usenet",
+      "stremio-usenet",
+      "debrid"
+    ],
     "sortCriteria": {
       "global": [
         {
           "key": "cached",
+          "direction": "desc"
+        },
+        {
+          "key": "library",
+          "direction": "desc"
+        },
+        {
+          "key": "streamType",
           "direction": "desc"
         },
         {

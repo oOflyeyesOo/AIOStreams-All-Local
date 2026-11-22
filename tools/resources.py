@@ -23,7 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 AIO_CONTAINERS = {
     "aiostreams", "zilean", "prowlarr",
-    "flaresolverr", "stremthru", "infinidysk", "cloudflared",
+    "flaresolverr", "stremthru", "cloudflared",
     "aio-tunnel", "anime-kitsu", "aiometadata", "postersplus", "stremio-subsense",
     "shared-redis", "shared-postgres", "lumiere-db",
     "aio-portal", "stack-bootstrap", "init-configs", "init-postgres", "aio-stack"

@@ -200,11 +200,3 @@ def public_settings(values):
             'USENET_SSL':values.get('USENET_SSL','true'),'USENET_CONNECTIONS':values.get('USENET_CONNECTIONS') or '10',
             'USENET_PASSWORD_SAVED':bool(credential(values,'USENET_PASS')),'NZB_INDEXER_URL':values.get('NZB_INDEXER_URL','')}
 
-def apply_to_compose(config,values):
-    # Keep installations configured outside the portal unchanged until explicitly managed.
-    if values.get('USENET_MANAGED')=='1' or enabled(values):
-        text=json.dumps(provider_config(values),separators=(',',':')).replace('$','$$')
-        service=config['services'].get('infinidysk')
-        if service is None:raise ValueError('Usenet downloader is missing from this stack')
-        service.setdefault('environment',{})['NZBDAV_CONFIG__USENET__PROVIDERS']=text
-    return config

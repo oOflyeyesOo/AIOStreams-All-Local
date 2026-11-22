@@ -15,7 +15,7 @@
 | Artwork | AIOMetadata → Posters+ `/poster?stremio_id=…` | Explicit render key; portal password is not reused |
 | Personal Cloud Library | AIOStreams → StremThru Store (:8080) | Real-Debrid / TorBox / Premiumize cloud downloads mounted directly |
 | Transport & Ban Shield | AIOStreams BuiltinProxy (:3001) | Outbound connections originate from server IP only; HTTP 206 partial content |
-| Usenet | AIOStreams → Direct Newznab Presets (~250ms) → InfiniDysk (:3005) | Parallel native Newznab queries bypass Prowlarr; on-demand NNTP article streaming via InfiniDysk |
+| Usenet | AIOStreams → Direct Newznab Presets (~250ms) → Native NNTP Engine | Parallel native Newznab queries bypass Prowlarr; on-demand NNTP article streaming via AIOStreams native engine |
 
 Installing both the combined manifest and its optional standalone metadata manifest
 can duplicate catalogs. The page now says so. Public scrapers behind different
@@ -118,4 +118,4 @@ duplicate-free traffic or every integration being end-to-end verified.
 
 ## Optional-source follow-up
 
-The current default adds native Torrentio, direct Prowlarr torrent indexing (Prowlarr is 100% dedicated to torrents), direct Newznab presets in AIOStreams (~250ms latency), and Zilean DMM caching, routing Usenet downloads on-demand to InfiniDysk. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.
+The current default adds native Torrentio, direct Prowlarr torrent indexing (Prowlarr is 100% dedicated to torrents), direct Newznab presets in AIOStreams (~250ms latency), and Zilean DMM caching, routing Usenet downloads on-demand through AIOStreams's native NNTP engine. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.

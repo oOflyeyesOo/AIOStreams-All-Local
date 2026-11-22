@@ -78,7 +78,6 @@ services:
     - bitmagnet-data:/app/data/bitmagnet
     - prowlarr-data:/app/data/prowlarr
     - aiometadata-data:/app/data/aiometadata
-    - infinidysk-data:/app/data/infinidysk
     - postersplus-data:/app/data/postersplus
     - lumiere-db-data:/app/data/lumiere-db
     - stremthru-data:/app/data/stremthru
@@ -121,7 +120,6 @@ services:
     - PORT_PROWLARR=${PORT_PROWLARR:-9696}
     - PORT_FLARESOLVERR=${PORT_FLARESOLVERR:-8191}
     - PORT_STREMTHRU=${PORT_STREMTHRU:-8080}
-    - PORT_INFINIDYSK=${PORT_INFINIDYSK:-3005}
     - PORT_ANIME_KITSU=${PORT_ANIME_KITSU:-7005}
     - PORT_AIOMETADATA=${PORT_AIOMETADATA:-4005}
     - PORT_JIKAN_API=${PORT_JIKAN_API:-8001}
@@ -199,7 +197,7 @@ services:
     - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
     - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
     - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
-    - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
+    - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
     - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-1800}
     - PIPELINE_CACHE_TTL=${PIPELINE_CACHE_TTL:-300}
     - ENCRYPT_STREMTHRU_URLS=false
@@ -211,7 +209,7 @@ services:
     - FETCH_TRAKT_ALIASES=true
     - EASYNEWS_USER=${EASYNEWS_USER:-}
     - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
-    - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY:-}\nrealdebrid.apiKey=${REALDEBRID_API_KEY:-}\nalldebrid.apiKey=${ALLDEBRID_API_KEY:-}\ntorbox.apiKey=${TORBOX_API_KEY:-}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY:-}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
+    - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY:-}\nrealdebrid.apiKey=${REALDEBRID_API_KEY:-}\nalldebrid.apiKey=${ALLDEBRID_API_KEY:-}\ntorbox.apiKey=${TORBOX_API_KEY:-}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY:-}
     - TEMPLATE_URLS=${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}
     - TEMPLATE_REFRESH_INTERVAL=${TEMPLATE_REFRESH_INTERVAL:-3600}
     - WHITELISTED_SYNC_REFRESH_INTERVAL=${WHITELISTED_SYNC_REFRESH_INTERVAL:-3600}
@@ -336,19 +334,17 @@ services:
     volumes:
     - prowlarr-data:/prowlarr
     - aiometadata-data:/aiometadata
-    - infinidysk-data:/infinidysk
     - postersplus-data:/postersplus
     - aiostreams-data:/aiostreams
     - lumiere-db-data:/lumiere-db
-    command: "sh -c \"\n  mkdir -p /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;\n  if grep -q\
-      \ '\\\"uuid\\\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json;\
-      \ fi;\n  if [ ! -f /prowlarr/config.xml ]; then\n    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
+    command: "sh -c \"\n  mkdir -p /prowlarr /aiometadata /postersplus /aiostreams /lumiere-db;\n  if grep -q '\\\"uuid\\\"\
+      : *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json; fi;\n  if\
+      \ [ ! -f /prowlarr/config.xml ]; then\n    echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>'\
       \ > /prowlarr/config.xml;\n  else\n    sed -i 's|<ApiKey>.*</ApiKey>|<ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey>|g'\
       \ /prowlarr/config.xml;\n    sed -i 's|<AuthenticationMethod>.*</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod>|g'\
       \ /prowlarr/config.xml;\n    if ! grep -q '<AuthenticationRequired>' /prowlarr/config.xml; then\n      sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g'\
-      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /aiometadata /infinidysk /postersplus /aiostreams\
-      \ /lumiere-db 2>/dev/null || true;\n  if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null\
-      \ || true; fi;\n\"\n"
+      \ /prowlarr/config.xml;\n    fi;\n  fi;\n  chmod -R 777 /prowlarr /aiometadata /postersplus /aiostreams /lumiere-db\
+      \ 2>/dev/null || true;\n\"\n"
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     restart: unless-stopped
@@ -532,50 +528,6 @@ services:
     - stremio-net
     depends_on:
     - shared-redis
-  infinidysk:
-    image: ghcr.io/infinidysk/infinidysk:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '3'
-        compress: 'true'
-    mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
-    ports:
-    - ${INTERNAL_BIND_IP:-127.0.0.1}:${PORT_INFINIDYSK:-3005}:3000
-    environment:
-    - PUID=1000
-    - PGID=1000
-    - TZ=Etc/UTC
-    - TRUST_PROXY=1
-    - RESET_ADMIN_PASSWORD=${RESET_ADMIN_PASSWORD:-false}
-    - FRONTEND_BACKEND_API_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-    - NZBDAV_CONFIG__API__KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-    - NZBDAV_CONFIG__WEBDAV__USER=admin
-    - NZBDAV_CONFIG__WEBDAV__PASS=${ADDON_PASSWORD:-admin}
-    - WEBDAV_USER=admin
-    - WEBDAV_PASSWORD=${ADDON_PASSWORD:-admin}
-    - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696
-    - NZBDAV_CONFIG__PROWLARR__API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-    - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true
-    - NZBDAV_CONFIG__USENET__PROVIDERS=${INFINIDYSK_USENET_PROVIDERS:-}
-    - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1
-      interval: 30s
-      retries: 3
-      start_period: 60s
-      timeout: 5s
-    volumes:
-    - infinidysk-data:/config
-    networks:
-    - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
   cloudflared:
     image: cloudflare/cloudflared:latest
     profiles:
@@ -933,7 +885,6 @@ volumes:
   bitmagnet-data: {}
   prowlarr-data: {}
   aiometadata-data: {}
-  infinidysk-data: {}
   postersplus-data: {}
   lumiere-db-data: {}
   stremthru-data: {}

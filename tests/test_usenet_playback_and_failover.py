@@ -4,7 +4,7 @@ Verifies:
 1. Usenet-only streaming mode stays strictly on the NZB path.
 2. Hybrid mode configures cross-type failover between Debrid and Usenet.
 3. Byte-range seeking and Matroska/WebM container headers.
-4. Direct EasyNews route separation from InfiniDysk NNTP/NZB streaming.
+4. Direct EasyNews route separation from native AIOStreams usenet.
 """
 import io
 import json
@@ -51,7 +51,9 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         # Check services
         services = config.get("services", [])
         service_ids = [s["id"] for s in services if s.get("enabled")]
-        self.assertIn("nzbdav", service_ids)
+        self.assertIn("aiostreams", service_ids)
+        self.assertNotIn("nzbdav", service_ids)
+        self.assertNotIn("infinidysk", service_ids)
         self.assertNotIn("realdebrid", service_ids)
         self.assertNotIn("premiumize", service_ids)
 
@@ -80,7 +82,9 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
 
         services = config.get("services", [])
         service_ids = [s["id"] for s in services if s.get("enabled")]
-        self.assertIn("nzbdav", service_ids)
+        self.assertIn("aiostreams", service_ids)
+        self.assertNotIn("nzbdav", service_ids)
+        self.assertNotIn("infinidysk", service_ids)
         self.assertIn("premiumize", service_ids)
 
         # Check failover settings: allowCrossType must be True
@@ -90,7 +94,7 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         self.assertIn("debrid", failover.get("contentTypes", []))
         self.assertIn("usenet", failover.get("contentTypes", []))
 
-    def test_direct_easynews_route_distinct_from_nzbdav(self):
+    def test_direct_easynews_route_distinct_from_aiostreams_usenet(self):
         """Direct EasyNews provides its own HTTP search and streaming preset."""
         with patch.object(bootstrap, 'EASYNEWS_USER', 'easyuser'), \
              patch.object(bootstrap, 'EASYNEWS_PASSWORD', 'easypass'), \
@@ -110,7 +114,9 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         services = config.get("services", [])
         service_ids = [s["id"] for s in services if s.get("enabled")]
         self.assertIn("easynews", service_ids)
-        self.assertIn("nzbdav", service_ids)
+        self.assertIn("aiostreams", service_ids)
+        self.assertNotIn("nzbdav", service_ids)
+        self.assertNotIn("infinidysk", service_ids)
 
         presets = config.get("presets", [])
         easynews_preset = next((p for p in presets if p.get("type") == "easynews-search"), None)
@@ -156,7 +162,7 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         self.assertIsNotNone(althub)
         self.assertTrue(althub.get("enabled"))
         self.assertEqual(althub.get("options", {}).get("api", {}).get("apiKey"), "test_althub_key")
-        self.assertEqual(althub.get("options", {}).get("services"), ["nzbdav"])
+        self.assertEqual(althub.get("options", {}).get("services"), ["aiostreams"])
 
         # Verify Prowlarr presets never include usenet sources
         prowlarr_presets = [p for p in presets if p.get("type") == "prowlarr"]

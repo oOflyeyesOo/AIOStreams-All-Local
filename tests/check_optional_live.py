@@ -1,6 +1,6 @@
 """Run inside a disposable package portal; never use a personal installation.
 
-Exercises real Compose interpolation, InfiniDysk NNTP authentication and Prowlarr
+Exercises real Compose interpolation, AIOStreams native NNTP authentication and Prowlarr
 Newznab provisioning. This does not simulate article decoding or paid playback.
 """
 import base64
@@ -30,11 +30,6 @@ def request(url,data=None,headers=None,method=None):
 
 def portal(path,data=None):
     return request('http://127.0.0.1:8088'+path,data,{'Authorization':'Basic '+auth,'Content-Type':'application/json'})
-
-def container(service):
-    names=subprocess.check_output(['docker','ps','-q','--filter','label=com.docker.compose.project='+PROJECT,'--filter','label=com.docker.compose.service='+service],text=True).split()
-    assert len(names)==1,'Fixture service must have exactly one container: '+service
-    return json.loads(subprocess.check_output(['docker','inspect',names[0]]))[0]
 
 def apply():
     assert portal('/api/setup',{})['success']
@@ -108,24 +103,33 @@ try:
     assert PASSWORD not in Path('/app/.env').read_text()
     apply()
     config=installed_profile()
-    route=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
-    assert route['options']['sources']==['usenet'] and route['options']['services']==['nzbdav']
+    route=next(p for p in config['presets'] if p.get('type')=='newznab' and 'portal' in p.get('instanceId',''))
+    assert route['options']['services']==['aiostreams']
     assert not any(p['type'] in ('torrentio','comet') for p in config['presets'])
-    env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
-    provider,backup=json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])['Providers']
-    assert provider['User']==USER and provider['Pass']==PASSWORD and provider['MaxConnections']==2
-    assert backup['Port']==18885 and backup['Type']==3 and backup['Pass']==PASSWORD
-    key=env['NZBDAV_CONFIG__API__KEY']
-    effective=request('http://infinidysk:3000/api/get-config',urllib.parse.urlencode({'config-keys':'usenet.providers'}).encode(),{'x-api-key':key,'Content-Type':'application/x-www-form-urlencoded'})
-    items=effective.get('configItems') or effective.get('ConfigItems')
-    assert items,'InfiniDysk must expose effective saved settings'
-    item=items[0];providers=json.loads(item.get('configValue') or item['ConfigValue'])['Providers']
-    assert [(p['Host'],p['Port'],p['Type']) for p in providers]==[('portal',18883,1),('portal',18885,3)]
-    for p in providers:
-        test=request('http://infinidysk:3000/api/test-usenet-connection',urllib.parse.urlencode({'host':p['Host'],'port':p['Port'],'user':p['User'],'pass':p['Pass'],'use-ssl':'false'}).encode(),{'x-api-key':key,'Content-Type':'application/x-www-form-urlencoded'})
-        assert test.get('connected') or test.get('Connected'),'NNTP fixture authentication failed'
+
+    def aiostreams_dashboard_headers():
+        login_data=json.dumps({'username':'admin','password':os.environ.get('ADDON_PASSWORD','package-test-only-password')}).encode()
+        req=urllib.request.Request('http://aiostreams:3000/api/v1/auth/login',data=login_data,headers={'Content-Type':'application/json'})
+        with urllib.request.urlopen(req,timeout=10) as resp:
+            cookie=resp.headers.get('Set-Cookie').split(';')[0]
+        return {'Cookie':cookie,'Content-Type':'application/json','Accept':'application/json'}
+
+    dash_headers=aiostreams_dashboard_headers()
+    prov_data=request('http://aiostreams:3000/api/v1/dashboard/usenet/providers',headers=dash_headers)
+    providers=prov_data.get('data',{}).get('providers',[])
+    assert len(providers)>=2,'AIOStreams native usenet engine must configure primary and secondary providers'
+    provider=next(p for p in providers if p['port']==18883)
+    backup=next(p for p in providers if p['port']==18885)
+    assert provider['host']=='portal' and provider['username']==USER and provider['maxConnections']==2 and provider['hasPassword']
+    assert backup['host']=='portal' and backup['username']==USER and backup['isBackup'] and backup['hasPassword']
+
+    for p in (provider,backup):
+        test_res=request('http://aiostreams:3000/api/v1/dashboard/usenet/providers/test',
+                         data={'id':p['id'],'host':p['host'],'port':p['port'],'tls':p.get('tls',False),'username':p['username']},
+                         headers=dash_headers,method='POST')
+        assert test_res.get('data',{}).get('ok'),f"NNTP fixture authentication failed for {p['host']}:{p['port']}: {test_res}"
     assert counts['authenticated']>=2 and counts['rejected']==0
-    print('PASS: InfiniDysk authenticates both the pool and backup NNTP servers',flush=True)
+    print('PASS: AIOStreams native usenet engine authenticates both the pool and backup NNTP servers',flush=True)
     def indexers():return request('http://prowlarr:9696/api/v1/indexer',headers={'X-Api-Key':'prowlarr_internal_secret_key_99'})
     def matches(port=18884):
         return [x for x in indexers() if x.get('implementation')=='Newznab' and any(
@@ -138,10 +142,11 @@ try:
     print('PASS: repeated setup retains password and does not duplicate Newznab',flush=True)
     assert portal('/api/save-env',{'USENET_ENABLED':'false','USENET_EXTRA_INDEXERS':[]})['success']
     apply()
-    env=dict(line.split('=',1) for line in container('infinidysk')['Config']['Env'])
-    assert json.loads(env['NZBDAV_CONFIG__USENET__PROVIDERS'])=={'Providers':[]}
+    dash_headers=aiostreams_dashboard_headers()
+    prov_data=request('http://aiostreams:3000/api/v1/dashboard/usenet/providers',headers=dash_headers)
+    assert prov_data.get('data',{}).get('providers')==[],'Native Usenet providers must be cleared when USENET_ENABLED is false'
     assert portal('/api/env')['USENET_PASSWORD_SAVED']
-    assert not any(p['instanceId']=='prowlarr-usenet' for p in installed_profile()['presets'])
+    assert not any(p.get('type')=='newznab' and 'portal' in p.get('instanceId','') for p in installed_profile()['presets'])
     assert len(matches())==1 and not matches()[0]['enable'],'Disabled managed NZB indexer must not poll in the background'
     assert not any(item['enable'] for item in matches(18886)), 'Removed indexer is still enabled'
     print('PASS: disabling stops optional service and NNTP provider while retaining credentials',flush=True)

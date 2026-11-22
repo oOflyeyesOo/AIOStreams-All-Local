@@ -231,9 +231,11 @@ class BootstrapTests(unittest.TestCase):
                  'EASYNEWS_PASSWORD': '',
              }):
             config = bootstrap.build_default_config(probe_services=False)
-        self.assertTrue(any(s['id']=='nzbdav' for s in config['services']))
+        self.assertTrue(any(s['id']=='aiostreams' for s in config['services']))
+        self.assertFalse(any(s['id']=='nzbdav' for s in config['services']))
+        self.assertFalse(any(s['id']=='infinidysk' for s in config['services']))
         preset=next(p for p in config['presets'] if p['instanceId']=='prowlarr-usenet')
-        self.assertEqual(preset['options']['sources'],['usenet']);self.assertEqual(preset['options']['services'],['nzbdav'])
+        self.assertEqual(preset['options']['sources'],['usenet']);self.assertEqual(preset['options']['services'],['aiostreams'])
         self.assertFalse(any(p['type']=='comet' for p in config['presets']))
         self.assertFalse(any(p['type']=='torrentio' for p in config['presets']))
 
@@ -314,7 +316,9 @@ class BootstrapTests(unittest.TestCase):
         with patch.object(bootstrap, "BASE_URL", "https://aio.example.test"):
             config = bootstrap.build_default_config()
         self.assertTrue(config["proxy"]["enabled"])
-        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "nzbdav", "none"])
+        self.assertEqual(config["proxy"].get("proxiedServices"), ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "aiostreams", "none"])
+        self.assertNotIn("nzbdav", config["proxy"].get("proxiedServices"))
+        self.assertNotIn("infinidysk", config["proxy"].get("proxiedServices"))
 
     def test_stremthru_store_preset_configured_with_debrid(self):
         with patch.object(bootstrap, "PREMIUMIZE_API_KEY", "mock-prem-key"):
@@ -381,7 +385,7 @@ class BootstrapTests(unittest.TestCase):
             config=bootstrap.build_default_config(probe_services=False)
         sources={p['type']:p for p in config['presets'] if p['type'] in ('anime-tosho-new','neko-bt','tsukihime')}
         self.assertFalse(sources['anime-tosho-new']['enabled']);self.assertFalse(sources['neko-bt']['enabled'])
-        self.assertTrue(sources['tsukihime']['enabled']);self.assertEqual(sources['tsukihime']['options']['services'],['nzbdav'])
+        self.assertFalse(sources['tsukihime']['enabled']);self.assertEqual(sources['tsukihime']['options']['services'],[])
 
     def test_anime_sources_auto_enabled_via_template_and_env(self):
         # 1. Auto-enable when AIOMETADATA_TEMPLATE contains 'anime'
@@ -452,8 +456,12 @@ class BootstrapTests(unittest.TestCase):
                  'EASYNEWS_PASSWORD': '',
              }):
             config = bootstrap.build_default_config(probe_services=False)
-        self.assertTrue(any(s['id'] == 'nzbdav' for s in config['services']))
-        self.assertIn('nzbdav', config['proxy']['proxiedServices'])
+        self.assertTrue(any(s['id'] == 'aiostreams' for s in config['services']))
+        self.assertFalse(any(s['id'] == 'nzbdav' for s in config['services']))
+        self.assertFalse(any(s['id'] == 'infinidysk' for s in config['services']))
+        self.assertIn('aiostreams', config['proxy']['proxiedServices'])
+        self.assertNotIn('nzbdav', config['proxy']['proxiedServices'])
+        self.assertNotIn('infinidysk', config['proxy']['proxiedServices'])
         self.assertEqual(config['cacheAndPlay']['streamTypes'], ['usenet'])
         self.assertEqual(config['failover']['contentTypes'], ['usenet'])
         self.assertFalse(config['failover']['allowCrossType'])
@@ -463,7 +471,7 @@ class BootstrapTests(unittest.TestCase):
         usenet_p = next(p for p in config['presets'] if p['instanceId'] == 'prowlarr-usenet')
         self.assertTrue(usenet_p['enabled'])
         self.assertEqual(usenet_p['options']['sources'], ['usenet'])
-        self.assertEqual(usenet_p['options']['services'], ['nzbdav'])
+        self.assertEqual(usenet_p['options']['services'], ['aiostreams'])
 
     def test_prowlarr_scraper_preset_and_knaben_anime(self):
         with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', 'valid-mock-key'), \
@@ -540,104 +548,38 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("anirena", provisioned_defs)
         self.assertIn("bakabt", provisioned_defs)
 
-    def test_ensure_infinidysk_admin_provisions_and_skips_wizard(self):
-        called_urls = []
-        def mock_urlopen(req, timeout=None):
-            url = req.full_url if hasattr(req, 'full_url') else str(req)
-            called_urls.append(url)
-            from unittest.mock import MagicMock
-            mock_resp = MagicMock()
-            if "is-onboarding" in url:
-                mock_resp.read.return_value = b'{"isOnboarding": true, "status": true}'
-            elif "setup-wizard-state" in url:
-                mock_resp.read.return_value = b'{"setupRequired": true, "status": true}'
-            else:
-                mock_resp.read.return_value = b'{"status": true}'
-            mock_resp.__enter__.return_value = mock_resp
-            return mock_resp
+    def test_infinidysk_admin_provisioner_removed(self):
+        self.assertFalse(hasattr(bootstrap, "ensure_infinidysk_admin"))
+
+    def test_sync_aiostreams_native_usenet_provisions_providers(self):
+        called_endpoints = []
+        def mock_request(url, method="GET", headers=None, data=None, timeout=10):
+            called_endpoints.append((url, method, data))
+            return {"success": True}
 
         with patch.object(bootstrap, 'is_url_reachable', return_value=True), \
-             patch('urllib.request.urlopen', side_effect=mock_urlopen):
-            res = bootstrap.ensure_infinidysk_admin(addon_password="admin")
+             patch.object(bootstrap, 'get_aiostreams_auth_headers', return_value={"Authorization": "Basic test"}), \
+             patch.object(bootstrap, 'make_request', side_effect=mock_request), \
+             patch.dict(bootstrap.os.environ, {
+                 'USENET_ENABLED': 'true',
+                 'USENET_HOST': 'news.example.com',
+                 'USENET_USER': 'testuser',
+                 'USENET_PASS': 'testpass',
+                 'USENET_PORT': '563',
+             }):
+            res = bootstrap.sync_aiostreams_native_usenet()
             self.assertTrue(res)
-            self.assertTrue(any("is-onboarding" in u for u in called_urls))
-            self.assertTrue(any("onboarding" in u for u in called_urls))
-            self.assertTrue(any("setup-wizard-state" in u for u in called_urls))
-            self.assertTrue(any("setup-wizard/skip" in u for u in called_urls))
+            self.assertEqual(len(called_endpoints), 1)
+            url, method, data = called_endpoints[0]
+            self.assertIn("/api/v1/dashboard/usenet/providers", url)
+            self.assertEqual(method, "PUT")
+            self.assertEqual(data["providers"][0]["host"], "news.example.com")
+            self.assertEqual(data["providers"][0]["username"], "testuser")
+            self.assertTrue(data["providers"][0]["tls"])
 
-    def test_ensure_infinidysk_admin_skips_when_already_authenticated(self):
-        called_urls = []
-        def mock_urlopen(req, timeout=None):
-            url = req.full_url if hasattr(req, 'full_url') else str(req)
-            called_urls.append(url)
-            from unittest.mock import MagicMock
-            mock_resp = MagicMock()
-            if "api/authenticate" in url:
-                mock_resp.read.return_value = b'{"authenticated": true, "status": true}'
-            elif "setup-wizard-state" in url:
-                mock_resp.read.return_value = b'{"setupRequired": false, "status": true}'
-            else:
-                mock_resp.read.return_value = b'{"status": true}'
-            mock_resp.__enter__.return_value = mock_resp
-            return mock_resp
-
-        with patch.object(bootstrap, 'is_url_reachable', return_value=True), \
-             patch('urllib.request.urlopen', side_effect=mock_urlopen):
-            res = bootstrap.ensure_infinidysk_admin(addon_password="admin")
-            self.assertTrue(res)
-            self.assertTrue(any("api/authenticate" in u for u in called_urls))
-            self.assertFalse(any("onboarding" in u for u in called_urls))
-
-    def test_ensure_infinidysk_admin_reconciles_stale_account(self):
-        import tempfile, sqlite3
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            db_file = os.path.join(tmp_dir, "db.sqlite")
-            conn = sqlite3.connect(db_file)
-            conn.execute("CREATE TABLE Accounts (Type INTEGER, Username TEXT, PasswordHash TEXT, RandomSalt TEXT)")
-            conn.execute("CREATE TABLE SetupWizardStates (Id INTEGER PRIMARY KEY, Disposition INTEGER)")
-            conn.execute("INSERT INTO Accounts VALUES (1, 'admin', 'stale_hash', 'salt')")
-            conn.commit()
-            conn.close()
-
-            called_urls = []
-            onboarding_calls = 0
-            def mock_urlopen(req, timeout=None):
-                nonlocal onboarding_calls
-                url = req.full_url if hasattr(req, 'full_url') else str(req)
-                called_urls.append(url)
-                from unittest.mock import MagicMock
-                mock_resp = MagicMock()
-                if "api/authenticate" in url:
-                    mock_resp.read.return_value = b'{"authenticated": false, "status": true}'
-                elif "is-onboarding" in url:
-                    onboarding_calls += 1
-                    # First check is not onboarding (stale account exists), subsequent check after clear is onboarding
-                    is_onb = "true" if onboarding_calls > 1 else "false"
-                    mock_resp.read.return_value = f'{{"isOnboarding": {is_onb}, "status": true}}'.encode('utf-8')
-                elif "setup-wizard-state" in url:
-                    mock_resp.read.return_value = b'{"setupRequired": false, "status": true}'
-                else:
-                    mock_resp.read.return_value = b'{"status": true}'
-                mock_resp.__enter__.return_value = mock_resp
-                return mock_resp
-
-            try:
-                with patch.object(bootstrap, 'is_url_reachable', return_value=True), \
-                     patch.object(bootstrap, 'resolve_path', return_value=db_file), \
-                     patch('shutil.which', return_value=None), \
-                     patch('urllib.request.urlopen', side_effect=mock_urlopen):
-                    res = bootstrap.ensure_infinidysk_admin(addon_password="admin")
-                    self.assertTrue(res)
-                    # Verify Accounts table was cleared for re-onboarding
-                    check_conn = sqlite3.connect(db_file)
-                    try:
-                        cur = check_conn.cursor()
-                        cur.execute("SELECT COUNT(*) FROM Accounts")
-                        self.assertEqual(cur.fetchone()[0], 0)
-                    finally:
-                        check_conn.close()
-            finally:
-                pass
+    def test_sync_aiostreams_native_usenet_skips_when_usenet_disabled(self):
+        with patch.dict(bootstrap.os.environ, {'USENET_ENABLED': 'false'}):
+            self.assertFalse(bootstrap.sync_aiostreams_native_usenet())
 
     def test_jikan_api_base_resolution(self):
         # Default should return Tenrai

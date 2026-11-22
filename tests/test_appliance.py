@@ -22,7 +22,7 @@ class ApplianceTests(unittest.TestCase):
                 (root / 'probe').unlink()
             except OSError:
                 self.skipTest('Symlink creation requires OS permission')
-            (root / '.env.example').write_text('COMPOSE_PROFILES=scrapers\nUSENET_ENABLED=false\nUSENET_HOST=\nUSENET_USER=\nUSENET_PASS=\nPREMIUMIZE_API_KEY=\n')
+            (root / '.env.example').write_text('COMPOSE_PROFILES=core\nUSENET_ENABLED=false\nUSENET_HOST=\nUSENET_USER=\nUSENET_PASS=\nPREMIUMIZE_API_KEY=\n')
             (root / '.env').write_text('PREMIUMIZE_API_KEY=fixture-saved\n')
             password = "fixture$pass'\""
             prepare_env.prepare(root, data, {'COMPOSE_PROFILES': 'core', 'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture', 'USENET_USER': 'fixture-user', 'USENET_PASS': password})

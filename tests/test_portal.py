@@ -36,13 +36,14 @@ class PortalTests(unittest.TestCase):
         result=json.loads(body);self.assertTrue(result['USENET_PASSWORD_SAVED']);self.assertEqual(result['USENET_USER'],'fixture-user')
 
     def test_integration_probes_use_container_ports(self):
-        self.assertEqual(len(portal.INTEGRATIONS), 12)
+        self.assertEqual(len(portal.INTEGRATIONS), 11)
         expected = {
             "anime-kitsu": 7000,
             "postersplus": 8000,
         }
         actual = {host: port for _, host, port, _ in portal.INTEGRATIONS}
         self.assertEqual({host: actual[host] for host in expected}, expected)
+        self.assertNotIn("infinidysk", actual)
 
     def test_diagnostics_redacts_provider_values(self):
         with patch.object(portal, "probe_integration", return_value={
@@ -940,9 +941,6 @@ class PortalTests(unittest.TestCase):
     def test_core_profile_marks_excluded_services_off(self):
         with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core"}), patch("socket.create_connection") as connect:
             for service, port, group in [
-                ("zilean", 8181, "Indexers"),
-                ("bitmagnet", 3333, "Indexers"),
-                ("flaresolverr", 8191, "Indexers"),
                 ("anime-kitsu", 7000, "Metadata"),
                 ("jikan-api", 8080, "Metadata"),
             ]:
@@ -950,7 +948,7 @@ class PortalTests(unittest.TestCase):
                 self.assertFalse(result["enabled"])
             connect.assert_not_called()
 
-        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "core,anime-db"}), patch("socket.create_connection"):
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "anime"}), patch("socket.create_connection"):
             result = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
             self.assertTrue(result["enabled"])
             result = portal.probe_integration(("Jikan API", "jikan-api", 8080, "Metadata"))
@@ -1536,48 +1534,10 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(status, 302)
             self.assertIn("tab=settings&access_key=supersecretkey", headers.get("Location", ""))
 
-    def test_service_proxy_infinidysk_session_cookie_injection(self):
-        mock_resp = MagicMock()
-        mock_resp.status = 200
-        mock_resp.headers = {"Content-Type": "text/html; charset=utf-8"}
-        mock_resp.read.return_value = b"<html><head></head><body>InfiniDysk Dashboard</body></html>"
-        mock_resp.__enter__.return_value = mock_resp
-
-        captured_requests = []
-        def mock_open(req, *args, **kwargs):
-            captured_requests.append(req)
-            return mock_resp
-
-        with patch.object(portal, "get_infinidysk_session_cookie", return_value="__session=test-jwt-session-token"), \
-             patch.object(portal._PROXY_OPENER, "open", side_effect=mock_open):
-            status, body, headers = self.request("/service-proxy/infinidysk/overview", auth=True)
-            self.assertEqual(status, 200)
-            self.assertIn(b"InfiniDysk Dashboard", body)
-            # Response Set-Cookie header contains __session
-            set_cookie = headers.get("Set-Cookie", "")
-            self.assertIn("__session=test-jwt-session-token", set_cookie)
-            # Forwarded request contains Cookie header
-            self.assertTrue(len(captured_requests) > 0)
-            forward_cookie = captured_requests[0].headers.get("Cookie", "")
-            self.assertIn("__session=test-jwt-session-token", forward_cookie)
-
-    def test_service_proxy_infinidysk_recovers_from_login_redirect(self):
-        # When backend redirects to /login (e.g. stale cookie), proxy intercepts, gets fresh session and attaches Set-Cookie
-        mock_redirect = MagicMock()
-        mock_redirect.status = 302
-        mock_redirect.headers = {"Location": "/login", "Content-Type": "text/plain"}
-        mock_redirect.read.return_value = b""
-        mock_redirect.__enter__.return_value = mock_redirect
-
-        def mock_get_session(force_refresh=False):
-            return "__session=refreshed-jwt-session-token"
-
-        with patch.object(portal, "get_infinidysk_session_cookie", side_effect=mock_get_session), \
-             patch.object(portal._PROXY_OPENER, "open", return_value=mock_redirect):
-            status, body, headers = self.request("/service-proxy/infinidysk/", auth=True)
-            self.assertEqual(status, 302)
-            set_cookie = headers.get("Set-Cookie", "")
-            self.assertIn("__session=refreshed-jwt-session-token", set_cookie)
+    def test_service_proxy_infinidysk_is_not_routed(self):
+        status, body, headers = self.request("/service-proxy/infinidysk/overview", auth=True)
+        self.assertEqual(status, 404)
+        self.assertFalse(hasattr(portal, "get_infinidysk_session_cookie"))
 
     def test_service_proxy_prowlarr_rewrites_urlbase_and_injects_apikey(self):
         # 1. HTML rewrite
@@ -1641,18 +1601,10 @@ class PortalTests(unittest.TestCase):
         # 5. Cookie fallback for SPA routes when Referer is absent or lost
         captured.clear()
         with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
-            status, body, _ = self.request("/queue", auth=False, headers={"Cookie": "active_service_proxy=infinidysk"})
+            status, body, _ = self.request("/activity/queue", auth=False, headers={"Cookie": "active_service_proxy=prowlarr"})
             self.assertEqual(status, 200)
             self.assertTrue(len(captured) > 0)
-            self.assertEqual(captured[0].selector, "/queue")
-
-        # 6. Non-portal API pass-through for InfiniDysk
-        captured.clear()
-        with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
-            status, body, _ = self.request("/api/get-overview-stats", auth=False, headers={"Cookie": "active_service_proxy=infinidysk"})
-            self.assertEqual(status, 200)
-            self.assertTrue(len(captured) > 0)
-            self.assertEqual(captured[0].selector, "/api/get-overview-stats")
+            self.assertEqual(captured[0].selector, "/activity/queue")
 
     def test_app_webmanifest(self):
         status, body, headers = self.request("/app.webmanifest")
@@ -1721,14 +1673,14 @@ class PortalTests(unittest.TestCase):
             # Templates directory and webmanifest are also isolated from proxying
             status, body, _ = self.request(
                 "/templates/test.json",
-                headers={"Cookie": "active_service_proxy=infinidysk"},
+                headers={"Cookie": "active_service_proxy=prowlarr"},
             )
             mock_open.assert_not_called()
             self.assertEqual(status, 200)
 
             status, body, _ = self.request(
                 "/app.webmanifest",
-                headers={"Cookie": "active_service_proxy=infinidysk"},
+                headers={"Cookie": "active_service_proxy=prowlarr"},
             )
             mock_open.assert_not_called()
             self.assertEqual(status, 200)

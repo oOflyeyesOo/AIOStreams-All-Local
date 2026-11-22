@@ -174,15 +174,20 @@ def test_subsense():
         record("11. SubSense Subtitles Hub", False, str(e))
 
 
-def test_infinidysk():
+def test_aiostreams_native_usenet():
     try:
-        with urllib.request.urlopen("http://infinidysk:3000/healthz", timeout=5) as resp:
-            if resp.status == 200:
-                record("13. InfiniDysk Usenet Engine", True, "Healthz 200 OK (WebDAV & NNTP streaming daemon active)")
+        with urllib.request.urlopen("http://aiostreams:3000/api/v1/dashboard/usenet/providers", timeout=5) as resp:
+            if resp.status in (200, 401):
+                record("13. Native AIOStreams Usenet Engine", True, "Native Usenet engine active")
             else:
-                record("13. InfiniDysk Usenet Engine", False, f"Status {resp.status}")
+                record("13. Native AIOStreams Usenet Engine", False, f"Status {resp.status}")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            record("13. Native AIOStreams Usenet Engine", True, "Native Usenet engine active (auth required)")
+        else:
+            record("13. Native AIOStreams Usenet Engine", False, str(e))
     except Exception as e:
-        record("13. InfiniDysk Usenet Engine", False, str(e))
+        record("13. Native AIOStreams Usenet Engine", False, str(e))
 
 
 def test_anime_kitsu():
@@ -311,7 +316,7 @@ def main():
     test_aiometadata()
     test_postersplus()
     test_subsense()
-    test_infinidysk()
+    test_aiostreams_native_usenet()
     test_anime_kitsu()
     test_stremthru()
     test_lumiere_db()

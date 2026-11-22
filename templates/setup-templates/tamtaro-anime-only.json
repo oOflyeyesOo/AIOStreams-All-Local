@@ -8,14 +8,8 @@
   "config": {
     "services": [
       {
-        "id": "nzbdav",
-        "enabled": true,
-        "credentials": {
-          "apiKey": "e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09",
-          "url": "http://infinidysk:3000",
-          "username": "admin",
-          "password": "admin"
-        }
+        "id": "aiostreams",
+        "enabled": true
       }
     ],
     "presets": [

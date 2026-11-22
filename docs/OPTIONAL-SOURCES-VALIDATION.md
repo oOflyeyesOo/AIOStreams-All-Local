@@ -77,24 +77,24 @@ The stack has been streamlined to a high-speed local indexing and caching archit
 ## Usenet setup
 
 The single-page form accepts server, port, username, password, TLS and connection
-count, plus an optional Newznab URL/API key. Connect my stack supplies the current
-InfiniDysk headless JSON schema and provisions direct Newznab presets in AIOStreams
+count, plus an optional Newznab URL/API key. Connect my stack provisions native NNTP
+providers directly into the AIOStreams engine (`/api/v1/dashboard/usenet/providers`) and provisions direct Newznab presets in AIOStreams
 for sub-second parallel searches (~250ms latency), bypassing Prowlarr. The installed
 indexer manager configures Prowlarr indexers strictly filtered to `protocol == torrent`,
 keeping Prowlarr 100% dedicated to torrent indexing. On-demand NNTP downloads and
-WebDAV streaming are handled by InfiniDysk.
+streaming are handled natively by AIOStreams.
 
 Credentials are stored in the private local environment file. Base64 encoding
 protects Compose syntax; it is not encryption. Passwords and configured manifest
 URLs are not returned by the portal settings API. Protect the installation and
-backup files. Enabling the form makes it authoritative over InfiniDysk's provider
-list; unmanaged installations retain their existing JSON/UI configuration.
+backup files. Enabling the form makes it authoritative over AIOStreams's native provider
+list; unmanaged installations retain their existing configuration.
 
-The real packaged controller, InfiniDysk and Prowlarr passed a local NNTP/Newznab
+The real packaged controller, AIOStreams and Prowlarr passed a local NNTP/Newznab
 fixture test:
 
 - Passwords containing dollar signs, quotes and `#` survived both Compose passes;
-  InfiniDysk authenticated against the fixture (three successes, zero rejections).
+  AIOStreams authenticated against the fixture (three successes, zero rejections).
 - Reapplying without retyping the password preserved it and created no duplicate
   Newznab indexer. Managed address changes update existing indexers in place.
 - Optional Usenet route switched on, reached healthy state, and switched off again.

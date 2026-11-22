@@ -20,14 +20,12 @@ mkdir -p /data/aiostreams \
          /data/postgres \
          /data/aiometadata \
          /data/postersplus \
-         /data/infinidysk \
          /var/log \
          /etc/docker \
          /etc/containerd \
          /var/lib/docker
 
 [ -f /app/init/postgres/init-databases.sh ] && chmod +x /app/init/postgres/init-databases.sh 2>/dev/null || true
-[ -f /data/infinidysk/session.key ] && chmod 600 /data/infinidysk/session.key 2>/dev/null || true
 
 # Link /app/data to /data if external volume mounted to /data
 if [ -d "/data" ]; then
@@ -183,7 +181,6 @@ if [ "$daemon_ready" = "true" ]; then
     echo " • AIOMetadata:           http://localhost:4005"
     echo " • Posters+:              http://localhost:9039"
     echo " • SubSense Subtitles:    http://localhost:3100"
-    echo " • InfiniDysk Usenet:     http://localhost:3005"
     echo " • Anime Kitsu:           http://localhost:7005"
     echo " • Prowlarr Indexers:     http://localhost:9696"
     echo " • Zilean Hash Cache:     http://localhost:8181"

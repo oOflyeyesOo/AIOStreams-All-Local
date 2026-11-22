@@ -25,8 +25,6 @@ jobs:
             target: "flaresolverr:latest"
           - source: "muniftanjim/stremthru:latest"
             target: "stremthru:latest"
-          - source: "ghcr.io/infinidysk/infinidysk:latest"
-            target: "infinidysk:latest"
           - source: "ghcr.io/jigsawfr/aiometadata-docker:latest"
             target: "aiometadata:latest"
           - source: "nepiraw/stremio-subsense:latest"

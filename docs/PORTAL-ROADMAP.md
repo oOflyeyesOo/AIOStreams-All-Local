@@ -8,7 +8,7 @@
 ## Architecture Principles
 
 - **Single Ingress:** Only AIOStreams (`:3001`) and AIOMetadata (`:4005`) are exposed externally for remote streaming. All background daemons and database services bind to `127.0.0.1` on `stremio-net`.
-- **Zero-Exposure Embedded Management:** Upstream service web dashboards (Prowlarr, InfiniDysk, Posters+, StremThru, Anime Kitsu) are accessed through the portal's authenticated reverse proxy (`/service-proxy/<service>/`) without opening extra host ports.
+- **Zero-Exposure Embedded Management:** Upstream service web dashboards (Prowlarr, Posters+, StremThru, Anime Kitsu) are accessed through the portal's authenticated reverse proxy (`/service-proxy/<service>/`) without opening extra host ports.
 - **Atomic Operations:** Configuration saves and container provisioning use file-locking and scalar validation to prevent corruption.
 
 ---
@@ -29,9 +29,10 @@
 
 ### 3. Usenet & Multi-Provider Ingress
 *Status: Completed*
-- Dedicated Usenet (NNTP) configuration for InfiniDysk on-demand streaming.
+- Native AIOStreams NNTP streaming engine configured as zero-hop primary byte-server with automatic connection pooling and failover.
+- Auto-synchronization of Usenet provider credentials (`news.newshosting.com:563`, etc.) directly into AIOStreams dashboard (`/api/v1/dashboard/usenet/providers`) on stack initialization.
 - Automated direct Newznab preset provisioning in AIOStreams (~250ms latency) and dedicating Prowlarr strictly to torrent indexers.
-- Automatic cross-protocol failover between Debrid and Usenet sources.
+- Automatic cross-protocol failover between Debrid and Usenet sources with 2 concurrent candidate probes.
 
 ### 4. Consolidated Logs & Diagnostics
 *Status: Completed*

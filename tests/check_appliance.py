@@ -14,7 +14,7 @@ def main():
     name = 'aio-appliance-smoke'
     created = run(['docker', 'run', '-d', '--privileged', '--name', name,
                    '-p', '127.0.0.1::3001', '-p', '127.0.0.1::9696',
-                   '-e', 'COMPOSE_PROFILES=scrapers', '-e', 'ADDON_PASSWORD=appliance-test-password',
+                   '-e', 'COMPOSE_PROFILES=core', '-e', 'ADDON_PASSWORD=appliance-test-password',
                    '-e', 'BASE_URL=http://127.0.0.1:3001', image])
     if created.returncode:
         raise RuntimeError('Could not start disposable appliance')
@@ -25,9 +25,9 @@ p=importlib.util.module_from_spec(s); s.loader.exec_module(p)
 assert os.environ.get('COMPOSE_CONTROL_SOCKET') == '/runtime/control.sock'
 assert os.environ.get('AIO_STARTUP_ONLY') != 'true'
 assert os.path.realpath('/app/.env') == '/data/.env'
-for host in ('aiostreams', 'lumiere-db', 'aiometadata', 'postersplus', 'subsense', 'prowlarr', 'infinidysk', 'stremthru', 'zilean'):
+for host in ('aiostreams', 'lumiere-db', 'aiometadata', 'postersplus', 'subsense', 'prowlarr', 'stremthru', 'zilean'):
     socket.getaddrinfo(host, None)
-for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping', 'http://infinidysk:3000/healthz'):
+for url in ('http://aiostreams:3000/api/v1/status', 'http://prowlarr:9696/ping'):
     urllib.request.urlopen(url, timeout=5).close()
 job=p.setup_snapshot()
 if job['status'] == 'failed':

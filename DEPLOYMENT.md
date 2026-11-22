@@ -69,9 +69,9 @@ volumes keeps its data available for redeployment under the same project name.
 
 When deploying from source, profiles let you run only the components you need:
 
-- **`core`** (default lean stack): AIOStreams, AIOMetadata, Posters+, SubSense, Anime Kitsu, StremThru Store, LumiereDB, and backing databases/cache.
-- **`scrapers`** (recommended for full indexing): Adds Prowlarr, Flaresolverr/Byparr, Zilean DMM hash cache, and InfiniDysk Usenet.
-- **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`).
+- **`core`** (default stack): AIOStreams, AIOMetadata, LumiereDB, Posters+, SubSense, Prowlarr (torrents), Zilean DMM hash cache, Bitmagnet, StremThru, FlareSolverr, and backing databases/cache. Usenet streaming is handled natively by AIOStreams.
+- **`anime`**: Adds Anime Kitsu and Jikan API / MongoDB for anime metadata and fillers.
+- **`tunnel`**: Automated Cloudflare Tunnel ingress (`cloudflared`). Can be deployed afterwards for remote access.
 - **`all`**: Activates all continuous services simultaneously.
 
 ### Packaged Manager Deployment (`compose.manager.yml`)
@@ -85,7 +85,7 @@ via `PORT_<SERVICE>` environment variables.
 Clone the repository and use `docker-compose.yml` for custom settings or local builds:
 
 ```sh
-docker compose --profile scrapers up -d --build --remove-orphans
+docker compose --profile core up -d --build --remove-orphans
 ```
 
 To build the manager images locally, tag all targets consistently:

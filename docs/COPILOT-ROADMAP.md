@@ -168,7 +168,7 @@ documentation link, and an explicit “optional if unavailable” policy.
 | Subtitles | SubSense, OpenSubtitles, SubDL, SubSource, Wyzie/YIFY paths | test language selection, fallback ordering, and missing-key behavior |
 | Discovery | Prowlarr, FlareSolverr, Zilean, Comet, Search Broker, Torrentio, RemuxDB | fixture indexers; live test only one controlled indexer |
 | Proxies | BuiltinProxy, StremThru | test signed URLs, redirects, HTTP 206, and multi-IP shield boundaries |
-| Usenet | InfiniDysk, NNTP credentials, NZB/indexer path | complete provider setup and playback or label as experimental |
+| Usenet | Native AIOStreams NNTP engine, Newznab Direct presets | complete provider setup and playback or label as experimental |
 | Players | Stremio, Stremio Web, Nuvio Web | test install links, profiles, CORS, range requests, and mobile layouts |
 | Sync | Trakt, Simkl, AniList | test auth lifecycle, token storage, revoke, and conflict behavior |
 | Remote access | Cloudflare Tunnel plus reverse proxies | publish only AIOStreams/AIOMetadata and verify DNS/TLS instructions |

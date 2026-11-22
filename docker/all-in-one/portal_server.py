@@ -121,12 +121,12 @@ def launch_setup():
 HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
-    "subsense": 3100, "infinidysk": 3005, "stremthru": 8080, "lumiere-db": 8000,
+    "subsense": 3100, "stremthru": 8080, "lumiere-db": 8000,
     "bitmagnet": 3333, "jikan-api": 8001
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/configure", "aiometadata": "/configure",
-    "prowlarr": "/", "infinidysk": "/",
+    "prowlarr": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
     "anime-kitsu": "/", "bitmagnet": "/", "lumiere-db": "/stats",
     "jikan-api": "/v4",
@@ -142,7 +142,6 @@ INTERNAL_SERVICE_TARGETS = {
     "subsense": ("stremio-subsense", 3100, 3100),
     "stremthru": ("stremthru", 8080, 8080),
     "anime-kitsu": ("anime-kitsu", 7000, 7005),
-    "infinidysk": ("infinidysk", 3000, 3005),
     "lumiere-db": ("lumiere-db", 8000, 8000),
     "bitmagnet": ("bitmagnet", 3333, 3333),
     "jikan-api": ("jikan-api", 8080, 8001),
@@ -158,21 +157,22 @@ def probe_integration(item):
     import socket
     name, host, port, group = item
     env_vars = read_saved_env()
-    profiles = {p.strip() for p in env_vars.get("COMPOSE_PROFILES", "scrapers").split(",") if p.strip()}
+    profiles = {p.strip() for p in env_vars.get("COMPOSE_PROFILES", "core").split(",") if p.strip()}
     service_profiles = {
-        "aiometadata": {"core", "scrapers", "all"},
-        "postersplus": {"core", "scrapers", "all"},
-        "subsense": {"core", "scrapers", "all"},
-        "lumiere-db": {"core", "scrapers", "all"},
-        "bitmagnet": {"scrapers", "all"},
-        "zilean": {"scrapers", "all"},
-        "flaresolverr": {"scrapers", "all"},
-        "anime-kitsu": {"scrapers", "anime-db", "all"},
-        "jikan-api": {"anime-db", "all"},
+        "aiometadata": {"core", "all"},
+        "postersplus": {"core", "all"},
+        "subsense": {"core", "all"},
+        "lumiere-db": {"core", "all"},
+        "prowlarr": {"core", "all"},
+        "flaresolverr": {"core", "all"},
+        "bitmagnet": {"core", "all"},
+        "zilean": {"core", "all"},
+        "stremthru": {"core", "all"},
+        "anime-kitsu": {"anime", "all"},
+        "jikan-api": {"anime", "all"},
+        "jikan-mongo": {"anime", "all"},
     }
-    enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"scrapers", "all"}))
-    if host == "infinidysk" and env_vars.get("USENET_ENABLED", "false") != "true" and env_vars.get("STREAMING_MODE", "debrid") == "debrid":
-        enabled = False
+    enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"core", "all"}))
 
     reachable = False
     if enabled:
@@ -471,11 +471,9 @@ def playback_readiness():
     env = read_saved_env()
     aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
     targets = [("Configured streaming manifest", aio_url + "/stremio/u/local/manifest.json", True)]
-    profiles = set(env.get("COMPOSE_PROFILES", "scrapers").split(","))
-    if profiles & {"core", "scrapers", "all"}:
+    profiles = set(env.get("COMPOSE_PROFILES", "core").split(","))
+    if profiles & {"core", "all"}:
         targets += [("Prowlarr", "http://prowlarr:9696/ping", False)]
-    if env.get("STREAMING_MODE") in ("usenet", "hybrid") or env.get("USENET_ENABLED") == "true":
-        targets.append(("Usenet backend", "http://infinidysk:3000/healthz", False))
     def check_http(target):
         name, url, manifest = target
         try:
@@ -1174,53 +1172,6 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
         return False, str(e)
 
 _STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
-_INFINIDYSK_SESSION = None
-_INFINIDYSK_SESSION_LAST_ATTEMPT = 0.0
-
-def get_infinidysk_session_cookie(force_refresh=False):
-    global _INFINIDYSK_SESSION, _INFINIDYSK_SESSION_LAST_ATTEMPT
-    now = time.monotonic()
-    if _INFINIDYSK_SESSION and not force_refresh:
-        return _INFINIDYSK_SESSION
-    if not force_refresh and not _INFINIDYSK_SESSION and (now - _INFINIDYSK_SESSION_LAST_ATTEMPT < 10.0):
-        return None
-    _INFINIDYSK_SESSION_LAST_ATTEMPT = now
-    env = read_saved_env()
-    addon_pw = env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
-    configured_url = os.environ.get("INFINIDYSK_URL", "http://infinidysk:3000").rstrip("/")
-    candidates = [configured_url, "http://127.0.0.1:3005", "http://localhost:3005"]
-    seen = set()
-    unique_candidates = [c for c in candidates if not (c in seen or seen.add(c))]
-
-    login_payload = urllib.parse.urlencode({"username": "admin", "password": addon_pw}).encode("utf-8")
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            return None
-    opener = urllib.request.build_opener(NoRedirect)
-
-    for base in unique_candidates:
-        login_url = f"{base}/login"
-        req = urllib.request.Request(
-            login_url,
-            data=login_payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        try:
-            try:
-                resp = opener.open(req, timeout=1.0)
-                headers = resp.headers
-            except urllib.error.HTTPError as e:
-                headers = e.headers
-
-            cookie_header = headers.get("Set-Cookie")
-            if cookie_header:
-                match = re.search(r"(__session=[^;]+)", cookie_header)
-                if match:
-                    _INFINIDYSK_SESSION = match.group(1)
-                    return _INFINIDYSK_SESSION
-        except Exception:
-            continue
-    return _INFINIDYSK_SESSION
 
 
 PORTAL_API_GET_PATHS = {
@@ -1551,14 +1502,6 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         forward_headers["X-Forwarded-Host"] = self.headers.get("Host", "localhost")
         forward_headers["Accept-Encoding"] = "identity"
 
-        infinidysk_auto_cookie = None
-        if service == "infinidysk":
-            existing_cookie = self.headers.get("Cookie", "")
-            if "__session" not in existing_cookie:
-                infinidysk_auto_cookie = get_infinidysk_session_cookie()
-                if infinidysk_auto_cookie:
-                    forward_headers["Cookie"] = f"{existing_cookie}; {infinidysk_auto_cookie}".strip("; ") if existing_cookie else infinidysk_auto_cookie
-
         if service == "prowlarr":
             if "x-api-key" not in [k.lower() for k in forward_headers]:
                 prowlarr_key = env_vars.get("PROWLARR_API_KEY") or os.environ.get("PROWLARR_API_KEY") or "prowlarr_internal_secret_key_99"
@@ -1713,17 +1656,7 @@ button:hover {{ background: #0369a1; }}
                     continue
                 self.send_header(k, v)
 
-            if service == "infinidysk":
-                # Intercept redirects back to login (indicating stale/expired session)
-                if status_code in (302, 303, 307) and location and "/login" in location:
-                    _INFINIDYSK_SESSION = None
-                    fresh_cookie = get_infinidysk_session_cookie(force_refresh=True)
-                    if fresh_cookie:
-                        infinidysk_auto_cookie = fresh_cookie
-
             self.send_header("Set-Cookie", f"active_service_proxy={service}; Path=/service-proxy/; SameSite=Lax")
-            if service == "infinidysk" and infinidysk_auto_cookie:
-                self.send_header("Set-Cookie", f"{infinidysk_auto_cookie}; Path=/; SameSite=Lax")
 
             if "x-frame-options" not in [k.lower() for k in resp_headers.keys()]:
                 self.send_header("X-Frame-Options", "SAMEORIGIN")
@@ -2212,7 +2145,7 @@ button:hover {{ background: #0369a1; }}
             except (OSError, StopIteration, ValueError):
                 memory_kb = 0
             memory_gb = memory_kb / 1024 / 1024
-            profile = "core" if memory_gb and memory_gb < 4 else "scrapers" if memory_gb < 8 else "all"
+            profile = "core" if memory_gb and memory_gb < 8 else "all"
             self.json_response({"recommendedProfile": profile, "memoryGb": round(memory_gb, 1), "cpuCount": os.cpu_count() or 1})
             return
         if path == "/api/update-plan":
@@ -2514,7 +2447,7 @@ button:hover {{ background: #0369a1; }}
                     normalize_base_url(supplied["BASE_URL"])
                 if "COMPOSE_PROFILES" in supplied:
                     profiles = {profile.strip() for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip()}
-                    if not profiles or not profiles.issubset({"core", "scrapers", "proxies", "web", "usenet", "tunnel", "all"}):
+                    if not profiles or not profiles.issubset({"core", "anime", "tunnel", "all"}):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
                 updates = supplied
@@ -2858,7 +2791,7 @@ button:hover {{ background: #0369a1; }}
 
         safe_containers = {
             "aiostreams", "portal", "controller", "flaresolverr",
-            "infinidysk", "prowlarr", "zilean", "shared-postgres", "shared-redis",
+            "prowlarr", "zilean", "shared-postgres", "shared-redis",
             "postersplus", "anime-kitsu", "subsense",
             "stremthru", "aiometadata", "lumiere-db", "setup",
             "bitmagnet", "jikan-api"

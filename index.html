@@ -467,7 +467,7 @@
     <div class="section-divider"><span>Primary Usenet Account <strong style="color:var(--accent-gold);font-size:12px;margin-left:6px;font-weight:700;">(1 SERVER NEEDED TO START)</strong></span></div>
     <div class="usenet-primary-card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-        <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet &amp; InfiniDysk on-demand streaming</label>
+        <label class="optional-service" style="margin:0;"><input id="enable-usenet" type="checkbox" checked> Enable Usenet on-demand streaming</label>
         <button type="button" id="test-saved-usenet-btn" class="mini-action-btn">Test saved primary server</button>
       </div>
       <h3>Primary Usenet server</h3>
@@ -520,7 +520,7 @@
           </fieldset>
         </template>
       </div>
-      <p class="field-help" style="margin-top:10px">Streams are fetched on-demand by InfiniDysk via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
+      <p class="field-help" style="margin-top:10px">Streams are fetched on-demand natively via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
     </div>
   </div>
 </div>
@@ -980,7 +980,7 @@
   </div>
   <div class="log-dialog-toolbar">
     <label for="logs-container-select">Service</label>
-    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="infinidysk">InfiniDysk (Usenet On-Demand)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
+    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
     <button type="button" id="btn-fetch-logs" class="text-button">Refresh</button>
     <button type="button" id="copy-service-logs" class="text-button" disabled>Copy logs</button>
   </div>

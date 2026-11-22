@@ -74,7 +74,7 @@ If you watch via the embedded **AIOStreams Web Player**, you only need **one pub
 > **AIOMetadata stays 100% private and local!** AIOStreams connects to AIOMetadata directly over the internal Docker network (`stremio-net`). The client browser talks only to the Web Player. All scrapers, databases, and metadata services remain unexposed.
 
 > [!NOTE]
-> **Indexer & Scraper Architecture:** Prowlarr (`:9696`) is **100% dedicated to torrent indexing**. Usenet searches query Newznab indexers directly via native AIOStreams presets (~250ms parallel resolution), completely bypassing Prowlarr, while InfiniDysk (`:3005`) handles on-demand NNTP downloads.
+> **Indexer & Scraper Architecture:** Prowlarr (`:9696`) is **100% dedicated to torrent indexing**. Usenet searches query Newznab indexers directly via native AIOStreams presets (~250ms parallel resolution), completely bypassing Prowlarr, while the native AIOStreams NNTP engine handles high-throughput on-demand article streaming.
 
 ```mermaid
 flowchart LR
@@ -128,9 +128,10 @@ See [docs/CLOUDFLARE-AND-WEB-PLAYER.md](docs/CLOUDFLARE-AND-WEB-PLAYER.md) for s
 
 | Profile | Command | RAM | What runs |
 | :--- | :--- | :--- | :--- |
-| **`core`** | `docker compose --profile core up -d` | ~1.1 GB | AIOStreams, AIOMetadata, LumiereDB, Posters+, SubSense, Postgres, Redis, Portal |
-| **`scrapers`** | `docker compose --profile scrapers up -d` | ~2.8 GB | `core` + Prowlarr, Zilean, Anime Kitsu, StremThru, InfiniDysk, FlareSolverr |
-| **`all`** | `docker compose --profile all up -d` | ~3.1 GB | Full stack including optional integrations |
+| **`core`** (default) | `docker compose --profile core up -d` | ~1.6 GB | AIOStreams, AIOMetadata, LumiereDB, Posters+, SubSense, Prowlarr, Zilean, Bitmagnet, StremThru, FlareSolverr, Postgres, Redis, Portal |
+| **`anime`** | `docker compose --profile anime up -d` | ~2.4 GB | `core` + Anime Kitsu, Jikan API, Jikan MongoDB |
+| **`tunnel`** | `docker compose --profile tunnel up -d` | ~50 MB | Cloudflared secure remote ingress tunnel (can be enabled separately) |
+| **`all`** | `docker compose --profile all up -d` | ~2.5 GB | Full stack including core and anime services |
 
 Set a default in `.env` with `COMPOSE_PROFILES=core` or pass the profile to `setup.sh`/`setup.ps1` directly.
 
@@ -152,7 +153,7 @@ See [docs/ANIME-AND-PROFILES.md](docs/ANIME-AND-PROFILES.md) for application-lev
 | **Subtitles** | SubSense (`:3100`) | Multi-provider subtitle aggregator (OpenSubtitles, SubSource, SubDL, YIFY) |
 | **Anime Metadata** | Anime Kitsu (`:7005`) | Kitsu → IMDb/TVDB ID mapping for correct scraper lookups |
 | **Debrid Store** | StremThru (`:8080`) | Personal debrid cloud library catalog + stream proxying |
-| **Usenet** | InfiniDysk (`:3005`), Native Newznab | Usenet searches run directly via native Newznab presets in AIOStreams (~250ms latency); InfiniDysk provides high-throughput NNTP / WebDAV on-demand streaming |
+| **Usenet** | AIOStreams Native Engine, Native Newznab | Usenet searches run directly via native Newznab presets in AIOStreams (~250ms latency); native AIOStreams engine provides high-throughput NNTP on-demand streaming |
 | **Databases** | PostgreSQL 16, Redis 7 | Shared backends for Zilean and AIOMetadata |
 
 Trakt, Simkl, AniList, and subtitle/debrid providers are configured through the bundled services — not additional containers.

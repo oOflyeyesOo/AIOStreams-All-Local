@@ -9,7 +9,7 @@ enter keys on one page, receive manifests for compatible players.
 - Movie and episode HTTP range reads and 15-second media decode verified.
 - Immutable release/recovery, backup/restore, and upgrade-rollback paths tested.
 - 123 Python tests, 12 browser checks, and source release CI passing.
-- Native Torrentio, RemuxDB, DMM, Usenet (InfiniDysk), and EasyNews integrations
+- Native Torrentio, RemuxDB, DMM, Usenet (Native Engine & Newznab Direct), and EasyNews integrations
   present; real paid NNTP decoding and ARM/NAS compatibility remain unverified.
 
 ## What's next

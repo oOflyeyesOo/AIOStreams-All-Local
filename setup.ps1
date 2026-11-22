@@ -63,7 +63,6 @@ function Ensure-Directories {
         "data/postgres",
         "data/aiometadata",
         "data/postersplus",
-        "data/infinidysk",
         "init/postgres",
         "templates/setup-templates",
         "templates/formatters",
@@ -128,7 +127,6 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" }
         @{ Port = 4005; Service = "AIOMetadata" }
         @{ Port = 3100; Service = "SubSense Subtitles" }
-        @{ Port = 3005; Service = "InfiniDysk (Usenet Stream Engine)" }
         @{ Port = 3333; Service = "Bitmagnet DHT Crawler" }
     )
 
@@ -393,7 +391,6 @@ function Show-StremioLinks {
     Write-Host "  • Debrid Cloud Search:   http://localhost:3011"
     Write-Host "  • AIOMetadata:           http://localhost:4005"
     Write-Host "  • SubSense Subtitles:    http://localhost:3100"
-    Write-Host "  • InfiniDysk Usenet:     http://localhost:3005"
     Write-Host "  • Anime Kitsu:           http://localhost:7005"
     Write-Host "  • Prowlarr Indexers:     http://localhost:9696"
     Write-Host "  • Zilean Hash Cache:     http://localhost:8181"

@@ -28,7 +28,6 @@ ensure_directories() {
              data/postgres \
              data/aiometadata \
              data/postersplus \
-             data/infinidysk \
              init/postgres \
              templates/setup-templates \
              templates/formatters \
@@ -37,7 +36,6 @@ ensure_directories() {
              templates/aiometadata-configs \
              templates/builtin
     chmod +x init/postgres/init-databases.sh 2>/dev/null || true
-    [ -f data/infinidysk/session.key ] && chmod 600 data/infinidysk/session.key 2>/dev/null || true
     [ -d .git ] && git config core.hooksPath .githooks 2>/dev/null || true
     echo -e "${GREEN}[✓] Directories ready.${NC}"
 }
@@ -71,7 +69,7 @@ check_prerequisites() {
     fi
 
     echo -e "${CYAN}[i] Testing port availability...${NC}"
-    local ports=(3000 3001 3005 3100 4005 7005 8000 8080 8088 8181 9696)
+    local ports=(3000 3001 3100 4005 7005 8000 8080 8088 8181 9696)
     local conflicts=0
 
     for port in "${ports[@]}"; do
@@ -175,7 +173,6 @@ show_links() {
     echo -e "  • Debrid Cloud Search:   http://localhost:3011"
     echo -e "  • AIOMetadata:           http://localhost:4005"
     echo -e "  • SubSense Subtitles:    http://localhost:3100"
-    echo -e "  • InfiniDysk Usenet:     http://localhost:3005"
     echo -e "  • Anime Kitsu:           http://localhost:7005"
     echo -e "  • Prowlarr Indexers:     http://localhost:9696"
     echo -e "  • Zilean Hash Cache:     http://localhost:8181"

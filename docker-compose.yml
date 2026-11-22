@@ -167,7 +167,7 @@ services:
       - FORCE_PROXY_ID=${FORCE_PROXY_ID:-builtin}
       - FORCE_PROXY_URL=${BASE_URL:-http://localhost:3000}
       - FORCE_PROXY_CREDENTIALS=admin:${ADDON_PASSWORD:-admin}
-      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","nzbdav","none"]
+      - FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","debridlink","easynews","none"]
       - STREAM_CACHE_TTL=${STREAM_CACHE_TTL:-1800}
       - PIPELINE_CACHE_TTL=${PIPELINE_CACHE_TTL:-300}
       - ENCRYPT_STREMTHRU_URLS=false
@@ -181,7 +181,7 @@ services:
       - FETCH_TRAKT_ALIASES=true
       - EASYNEWS_USER=${EASYNEWS_USER:-}
       - EASYNEWS_PASSWORD=${EASYNEWS_PASSWORD:-}
-      - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY:-}\nrealdebrid.apiKey=${REALDEBRID_API_KEY:-}\nalldebrid.apiKey=${ALLDEBRID_API_KEY:-}\ntorbox.apiKey=${TORBOX_API_KEY:-}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY:-}\nnzbdav.apiKey=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}\nnzbdav.url=http://infinidysk:3000\nnzbdav.username=admin\nnzbdav.password=${ADDON_PASSWORD:-admin}
+      - DEFAULT_SERVICE_CREDENTIALS=premiumize.apiKey=${PREMIUMIZE_API_KEY:-}\nrealdebrid.apiKey=${REALDEBRID_API_KEY:-}\nalldebrid.apiKey=${ALLDEBRID_API_KEY:-}\ntorbox.apiKey=${TORBOX_API_KEY:-}\ndebridlink.apiKey=${DEBRIDLINK_API_KEY:-}
 
       # --- Community Templates & SEL Auto-Sync (Tam-Taro & Vidhin05) ---
       - TEMPLATE_URLS=${TEMPLATE_URLS:-["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-and-Sorting/refs/heads/main/Tamtaro-All-Templates-for-AIOStreams.json","https://raw.githubusercontent.com/Vidhin05/Releases-Regex/refs/heads/main/all-templates.json"]}
@@ -210,7 +210,7 @@ services:
   zilean:
     image: ipromknight/zilean:latest
     container_name: zilean
-    profiles: ["scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
@@ -249,7 +249,7 @@ services:
   bitmagnet:
     image: ghcr.io/bitmagnet-io/bitmagnet:latest
     container_name: bitmagnet
-    profiles: ["scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
@@ -303,13 +303,12 @@ services:
     volumes:
       - ./data/prowlarr:/prowlarr
       - ./data/aiometadata:/aiometadata
-      - ./data/infinidysk:/infinidysk
       - ./data/postersplus:/postersplus
       - ./data/aiostreams:/aiostreams
       - ./data/lumiere-db:/lumiere-db
     command: >
       sh -c "
-        mkdir -p /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db;
+        mkdir -p /prowlarr /aiometadata /postersplus /aiostreams /lumiere-db;
         if grep -q '\"uuid\": *null' /aiostreams/aiostreams_install.json 2>/dev/null; then rm -f /aiostreams/aiostreams_install.json; fi;
         if [ ! -f /prowlarr/config.xml ]; then
           echo '<Config><Port>9696</Port><UrlBase></UrlBase><BindAddress>*</BindAddress><ApiKey>${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}</ApiKey><AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired><LogLevel>info</LogLevel><Branch>master</Branch><LaunchBrowser>False</LaunchBrowser><UpdateMechanism>BuiltIn</UpdateMechanism></Config>' > /prowlarr/config.xml;
@@ -320,14 +319,13 @@ services:
             sed -i 's|<AuthenticationMethod>External</AuthenticationMethod>|<AuthenticationMethod>External</AuthenticationMethod><AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>|g' /prowlarr/config.xml;
           fi;
         fi;
-        chmod -R 777 /prowlarr /aiometadata /infinidysk /postersplus /aiostreams /lumiere-db 2>/dev/null || true;
-        if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;
+        chmod -R 777 /prowlarr /aiometadata /postersplus /aiostreams /lumiere-db 2>/dev/null || true;
       "
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
-    profiles: ["scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${PROWLARR_MEM_LIMIT:-384m}
@@ -427,7 +425,7 @@ services:
     image: ghcr.io/thephaseless/byparr:latest
     shm_size: "1gb"
     container_name: flaresolverr
-    profiles: ["scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -452,7 +450,7 @@ services:
   stremthru:
     image: muniftanjim/stremthru:latest
     container_name: stremthru
-    profiles: ["scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${STREMTHRU_MEM_LIMIT:-768m}
@@ -497,47 +495,6 @@ services:
     depends_on:
       - shared-redis
 
-  # InfiniDysk (On-demand Usenet streaming engine & WebDAV provider)
-  infinidysk:
-    image: ghcr.io/infinidysk/infinidysk:latest
-    container_name: infinidysk
-    profiles: ["scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${INFINIDYSK_MEM_LIMIT:-384m}
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:3005:3000"
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - TRUST_PROXY=1
-      - RESET_ADMIN_PASSWORD=${RESET_ADMIN_PASSWORD:-false}
-      - FRONTEND_BACKEND_API_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - NZBDAV_CONFIG__API__KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
-      - NZBDAV_CONFIG__WEBDAV__USER=admin
-      - NZBDAV_CONFIG__WEBDAV__PASS=${ADDON_PASSWORD:-admin}
-      - WEBDAV_USER=admin
-      - WEBDAV_PASSWORD=${ADDON_PASSWORD:-admin}
-      - NZBDAV_CONFIG__PROWLARR__URL=http://prowlarr:9696
-      - NZBDAV_CONFIG__PROWLARR__API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__ENABLED=true
-      - NZBDAV_CONFIG__USENET__PROVIDERS=${INFINIDYSK_USENET_PROVIDERS:-}
-      - NZBDAV_CONFIG__USENET__SEGMENT_CACHE__MAX_GB=15
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL http://localhost:3000/healthz > /dev/null || exit 1"]
-      interval: 30s
-      retries: 3
-      start_period: 60s
-      timeout: 5s
-    volumes:
-      - ./data/infinidysk:/config
-    networks:
-      - stremio-net
-    depends_on:
-      init-configs:
-        condition: service_completed_successfully
-
   # Cloudflare Tunnel (Optional Zero-Trust HTTPS ingress without opening router ports)
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -558,7 +515,7 @@ services:
       context: .
       dockerfile: docker/anime-kitsu/Dockerfile
     container_name: anime-kitsu
-    profiles: ["scrapers", "all"]
+    profiles: ["anime", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${KITSU_MEM_LIMIT:-256m}
@@ -584,7 +541,7 @@ services:
   aiometadata:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
-    profiles: ["core", "scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
@@ -647,7 +604,7 @@ services:
   lumiere-db:
     image: ghcr.io/0xconstant1/lumiere-db:latest
     container_name: lumiere-db
-    profiles: ["core", "scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     stop_grace_period: 75s
     logging: *default-logging
@@ -679,7 +636,7 @@ services:
   jikan-mongo:
     image: mongo:7-jammy
     container_name: jikan-mongo
-    profiles: ["anime-db", "all"]
+    profiles: ["anime", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${JIKAN_MONGO_MEM_LIMIT:-512m}
@@ -698,7 +655,7 @@ services:
   jikan-api:
     image: ghcr.io/jikan-me/jikan-rest:latest
     container_name: jikan-api
-    profiles: ["anime-db", "all"]
+    profiles: ["anime", "all"]
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -729,7 +686,7 @@ services:
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
     container_name: postersplus
-    profiles: ["core", "scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
@@ -755,7 +712,7 @@ services:
   subsense:
     image: nepiraw/stremio-subsense:latest
     container_name: stremio-subsense
-    profiles: ["core", "scrapers", "all"]
+    profiles: ["core", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${SUBSENSE_MEM_LIMIT:-384m}

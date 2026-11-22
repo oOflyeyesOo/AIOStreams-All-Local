@@ -506,17 +506,6 @@
 
 
 
-              <!-- InfiniDysk Usenet Engine -->
-              <label class="service-card p-3 rounded-xl border border-[#2c3235] bg-[#121719]/40 hover:bg-[#121719]/80 cursor-pointer flex items-start justify-between gap-2 transition">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-sm">InfiniDysk</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">:3005</span>
-                  </div>
-                  <p class="text-[11px] text-[#929b9f] mt-1">High-performance on-demand Usenet streaming & WebDAV.</p>
-                </div>
-                <input type="checkbox" id="svc-infinidysk" checked onchange="handleServiceChange()" class="mt-1 w-4 h-4 rounded text-[#e6a56b]">
-              </label>
             </div>
           </div>
 
@@ -727,8 +716,7 @@
         kitsu: true,
         aiometadata: true,
         subsense: true,
-        stremthru: true,
-        infinidysk: true
+        stremthru: true
       },
       currentTab: 'compose'
     };
@@ -743,7 +731,6 @@
       state.services.aiometadata = document.getElementById('svc-aiometadata').checked;
       state.services.subsense = document.getElementById('svc-subsense').checked;
       state.services.stremthru = document.getElementById('svc-stremthru').checked;
-      state.services.infinidysk = document.getElementById('svc-infinidysk') ? document.getElementById('svc-infinidysk').checked : true;
 
       updateOutputs();
     }
@@ -761,8 +748,7 @@
           kitsu: false,
           aiometadata: true,
           subsense: false,
-          stremthru: true,
-          infinidysk: false
+          stremthru: true
         };
       } else if (presetName === 'catalogs') {
         state.services = {
@@ -774,8 +760,7 @@
           kitsu: true,
           aiometadata: true,
           subsense: true,
-          stremthru: true,
-          infinidysk: false
+          stremthru: true
         };
       } else if (presetName === 'minimal') {
         state.services = {
@@ -787,8 +772,7 @@
           kitsu: false,
           aiometadata: true,
           subsense: false,
-          stremthru: true,
-          infinidysk: false
+          stremthru: true
         };
       }
 
@@ -801,7 +785,6 @@
       document.getElementById('svc-aiometadata').checked = state.services.aiometadata;
       document.getElementById('svc-subsense').checked = state.services.subsense;
       document.getElementById('svc-stremthru').checked = state.services.stremthru;
-      if (document.getElementById('svc-infinidysk')) document.getElementById('svc-infinidysk').checked = state.services.infinidysk;
 
       updateOutputs();
     }
@@ -848,7 +831,7 @@
         needsPostgres: s.zilean || s.aiometadata,
         needsRedis: s.aiometadata || s.subsense || s.stremthru,
         needsMongo: false,
-        needsInitConfigs: s.prowlarr || s.aiometadata || s.infinidysk || s.stremioWeb
+        needsInitConfigs: s.prowlarr || s.aiometadata || s.stremioWeb
       };
     }
 
@@ -982,7 +965,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       if (s.stremthru) {
         lines.push(`\n      # --- Local Debrid Proxy & Store Router ---`);
         const proxiedServices = ["realdebrid","premiumize","alldebrid","torbox","debridlink"];
-        if (s.infinidysk) proxiedServices.push("nzbdav");
         const proxiedJson = JSON.stringify(proxiedServices);
 
         if (s.stremthru) {
@@ -1033,7 +1015,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
       if (s.lumiere) aiostreamsDeps.push('lumiere-db');
       if (s.stremthru) aiostreamsDeps.push('stremthru');
       if (s.prowlarr) aiostreamsDeps.push('prowlarr');
-      if (s.infinidysk) aiostreamsDeps.push('infinidysk');
 
       if (aiostreamsDeps.length > 0) {
         lines.push(`    depends_on:`);
@@ -1090,13 +1071,11 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           lines.push(`    volumes:`);
           if (s.prowlarr) lines.push(`      - ./data/prowlarr:/prowlarr`);
           if (s.aiometadata) lines.push(`      - ./data/aiometadata:/aiometadata`);
-          if (s.infinidysk) lines.push(`      - ./data/infinidysk:/infinidysk`);
                     
           let cmdParts = [];
           let dirs = [];
           if (s.prowlarr) dirs.push('/prowlarr');
           if (s.aiometadata) dirs.push('/aiometadata');
-          if (s.infinidysk) dirs.push('/infinidysk');
                     if (dirs.length > 0) cmdParts.push(`mkdir -p ${dirs.join(' ')};`);
 
           if (s.prowlarr) {
@@ -1104,9 +1083,6 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
           }
           if (dirs.length > 0) {
             cmdParts.push(`chmod -R 777 ${dirs.join(' ')} 2>/dev/null || true;`);
-          }
-          if (s.infinidysk) {
-            cmdParts.push(`if [ -f /infinidysk/session.key ]; then chmod 600 /infinidysk/session.key 2>/dev/null || true; fi;`);
           }
           lines.push(`    command: >`);
           lines.push(`      sh -c "${cmdParts.join(' ')}"`);
@@ -1147,10 +1123,10 @@ WHITELISTED_SEL_URLS=["https://raw.githubusercontent.com/Tam-Taro/SEL-Filtering-
         }
       }
 
-      // 5. PROXIES & USENET ENGINES
-      if (s.stremthru || s.infinidysk) {
+      // 5. PROXIES
+      if (s.stremthru) {
         lines.push(`\n  # ============================================================================`);
-        lines.push(`  # 5. STREAM PROXIES, ROUTERS & USENET STREAMING ENGINE`);
+        lines.push(`  # 5. STREAM PROXIES & ROUTERS`);
         lines.push(`  # ============================================================================`);
         if (s.stremthru) {
           lines.push(`  stremthru:`);
@@ -1317,8 +1293,7 @@ docker run -d \\
         { name: 'StremThru Proxy', port: '8080', enabled: s.stremthru },
         { name: 'Anime Kitsu', port: '7005', enabled: s.kitsu },
         { name: 'AIOMetadata', port: '4005', enabled: s.aiometadata },
-        { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense },
-        { name: 'InfiniDysk (Usenet)', port: '3005', enabled: s.infinidysk }
+        { name: 'SubSense (Subtitles)', port: '3100', enabled: s.subsense }
       ];
 
       const portsTable = document.getElementById('ports-table');
