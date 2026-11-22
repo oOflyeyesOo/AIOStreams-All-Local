@@ -47,7 +47,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.6.0")
 if WEB_ROOT not in sys.path:
     sys.path.insert(0, WEB_ROOT)
 from init.service_inventory import APPLICATION_SERVICE_COUNT, INTEGRATIONS
-from tools.usenet_config import EXTRA_SOURCES, extra_sources, form_updates, public_settings, credential
+from tools.usenet_config import EXTRA_SOURCES, extra_sources, form_updates, public_settings, credential, newznab_indexers
 from tools.metadata_config import prepare_metadata_template, request_metadata, MetadataRequestError
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
@@ -409,7 +409,7 @@ PROVIDER_VALIDATORS = {
 }
 
 
-def validate_provider(provider, key=None):
+def validate_provider(provider, key=None, url=None, indexer_id=None):
     provider = str(provider or "").lower().strip()
     if provider == "usenet":
         env_vars = read_saved_env()
@@ -428,12 +428,70 @@ def validate_provider(provider, key=None):
 
     if provider == "nzb":
         env_vars = read_saved_env()
-        base_url = (env_vars.get("NZB_INDEXER_URL") or "https://api.althub.co.za").strip().rstrip("/")
-        if not key or key == "saved":
-            key = env_vars.get("NZB_INDEXER_API_KEY") or os.environ.get("NZB_INDEXER_API_KEY")
-        if not isinstance(key, str) or not key.strip():
+        raw_url = (url or "").strip() if isinstance(url, str) else ""
+        if raw_url:
+            base_url = raw_url.rstrip("/")
+        else:
+            base_url = (env_vars.get("NZB_INDEXER_URL") or "https://api.althub.co.za").strip().rstrip("/")
+
+        clean_key = (key or "").strip() if isinstance(key, str) else ""
+        if not clean_key or clean_key.lower() == "saved":
+            matched_key = None
+            try:
+                indexers = newznab_indexers(env_vars)
+            except Exception:
+                indexers = []
+            if not indexers and "USENET_EXTRA_INDEXERS" in env_vars:
+                raw_extra = env_vars.get("USENET_EXTRA_INDEXERS")
+                if isinstance(raw_extra, list):
+                    indexers = raw_extra
+                elif isinstance(raw_extra, str) and raw_extra.strip():
+                    try:
+                        parsed = json.loads(raw_extra)
+                        if isinstance(parsed, list):
+                            indexers = parsed
+                    except Exception:
+                        pass
+
+            target_netloc = urllib.parse.urlsplit(base_url).netloc.lower()
+            if not target_netloc and "://" not in base_url and base_url:
+                target_netloc = urllib.parse.urlsplit(f"http://{base_url}").netloc.lower()
+            target_domain = target_netloc.split(":")[0]
+
+            if indexer_id:
+                for idx in indexers:
+                    if isinstance(idx, dict) and str(idx.get("id") or "").strip() == str(indexer_id).strip():
+                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
+                        if matched_key:
+                            break
+
+            if not matched_key and (target_netloc or target_domain):
+                for idx in indexers:
+                    if not isinstance(idx, dict):
+                        continue
+                    idx_url = (idx.get("url") or "").strip()
+                    idx_netloc = urllib.parse.urlsplit(idx_url).netloc.lower()
+                    if not idx_netloc and "://" not in idx_url and idx_url:
+                        idx_netloc = urllib.parse.urlsplit(f"http://{idx_url}").netloc.lower()
+                    idx_domain = idx_netloc.split(":")[0]
+                    if target_netloc and idx_netloc and target_netloc == idx_netloc:
+                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
+                        if matched_key:
+                            break
+                    if target_domain and idx_domain and (target_domain == idx_domain or target_domain.endswith("." + idx_domain) or idx_domain.endswith("." + target_domain)):
+                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
+                        if matched_key:
+                            break
+
+            if matched_key:
+                clean_key = str(matched_key).strip()
+            else:
+                fallback_key = env_vars.get("NZB_INDEXER_API_KEY") or os.environ.get("NZB_INDEXER_API_KEY") or ""
+                clean_key = str(fallback_key).strip()
+
+        if not clean_key:
             return {"status": "invalid", "detail": "No NZB API key configured."}
-        clean_key = key.strip()
+
         clean_base = base_url if base_url.endswith("/api") else f"{base_url}/api"
         test_url = f"{clean_base}?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
         headers = {"User-Agent": "AIO-Local/1.0", "Accept": "*/*"}
@@ -2581,7 +2639,12 @@ button:hover {{ background: #0369a1; }}
         if path in ("/api/validate-provider", "/api/test-provider"):
             try:
                 payload = self.read_json_body()
-                self.json_response(validate_provider(payload.get("provider"), payload.get("key")))
+                self.json_response(validate_provider(
+                    payload.get("provider"),
+                    payload.get("key"),
+                    payload.get("url"),
+                    payload.get("id") or payload.get("indexer_id")
+                ))
             except ValueError as e:
                 self.json_response({"status": "invalid", "detail": str(e)}, 400)
             except Exception:

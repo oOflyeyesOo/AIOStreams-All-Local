@@ -1112,6 +1112,117 @@ class PortalTests(unittest.TestCase):
             req2 = mock_url.call_args[0][0]
             self.assertIn("token=tb-secret-token", req2.full_url)
 
+    def test_validate_provider_nzb_drunkenslug_explicit_url_and_key(self):
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b"<caps><searching></searching></caps>"
+            mock_resp.status = 200
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request(
+                "/api/test-provider", "POST",
+                {
+                    "provider": "nzb",
+                    "url": "https://drunkenslug.com",
+                    "key": "slug-custom-api-key"
+                },
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            self.assertIn("drunkenslug.com", data.get("detail", ""))
+
+            req = mock_url.call_args[0][0]
+            self.assertEqual(req.full_url, "https://drunkenslug.com/api?t=caps&apikey=slug-custom-api-key")
+
+            # Also verify if URL already ends in /api/
+            status, body, _ = self.request(
+                "/api/validate-provider", "POST",
+                {
+                    "provider": "nzb",
+                    "url": "https://drunkenslug.com/api/",
+                    "key": "slug-custom-api-key"
+                },
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            req2 = mock_url.call_args[0][0]
+            self.assertEqual(req2.full_url, "https://drunkenslug.com/api?t=caps&apikey=slug-custom-api-key")
+
+    def test_validate_provider_nzb_drunkenslug_saved_key_via_extra_indexers(self):
+        slug_indexer = [
+            {"id": "ds-slug-1", "url": "https://drunkenslug.com", "apiKey": "saved-slug-token"}
+        ]
+        portal.save_env_updates({
+            "USENET_EXTRA_INDEXERS_B64": base64.b64encode(json.dumps(slug_indexer).encode()).decode()
+        })
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b"<caps><server version=\"1.0\"/></caps>"
+            mock_resp.status = 200
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            # 1. Lookup by id with key="saved"
+            status, body, _ = self.request(
+                "/api/test-provider", "POST",
+                {
+                    "provider": "nzb",
+                    "url": "https://drunkenslug.com",
+                    "key": "saved",
+                    "id": "ds-slug-1"
+                },
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            self.assertIn("drunkenslug.com", data.get("detail", ""))
+            req = mock_url.call_args[0][0]
+            self.assertEqual(req.full_url, "https://drunkenslug.com/api?t=caps&apikey=saved-slug-token")
+
+            # 2. Lookup by domain without key (key=None or empty) and without id
+            status, body, _ = self.request(
+                "/api/validate-provider", "POST",
+                {
+                    "provider": "nzb",
+                    "url": "https://drunkenslug.com/api"
+                },
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            req2 = mock_url.call_args[0][0]
+            self.assertEqual(req2.full_url, "https://drunkenslug.com/api?t=caps&apikey=saved-slug-token")
+
+            # 3. Lookup via USENET_EXTRA_INDEXERS directly in env
+            portal.save_env_updates({
+                "USENET_EXTRA_INDEXERS_B64": "",
+                "USENET_EXTRA_INDEXERS": json.dumps([
+                    {"id": "ds-slug-direct", "url": "https://drunkenslug.com", "apiKey": "direct-saved-slug-token"}
+                ])
+            })
+            status, body, _ = self.request(
+                "/api/test-provider", "POST",
+                {
+                    "provider": "nzb",
+                    "url": "https://drunkenslug.com",
+                    "key": "saved",
+                    "indexer_id": "ds-slug-direct"
+                },
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            req3 = mock_url.call_args[0][0]
+            self.assertEqual(req3.full_url, "https://drunkenslug.com/api?t=caps&apikey=direct-saved-slug-token")
+
     def test_flaresolverr_status_endpoint(self):
         with patch.object(portal.urllib.request, "urlopen") as mock_url:
             mock_resp = unittest.mock.MagicMock()
