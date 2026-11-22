@@ -1842,20 +1842,60 @@ let cachedCloudflareStatus = null;
 
 function parseClientTunnelToken(token) {
   if (!token || typeof token !== 'string') return null;
+  let str = token.trim();
+  if (!str) return null;
+
+  // 1. Direct JSON check if someone pasted raw JSON
+  if (str.startsWith('{') && str.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(str);
+      const tid = parsed.t || parsed.tunnel_id || parsed.TunnelID;
+      if (tid) {
+        return {
+          tunnel_id: String(tid).trim(),
+          account_id: String(parsed.a || parsed.account_id || parsed.AccountTag || '').trim(),
+          cname_target: `${String(tid).trim()}.cfargotunnel.com`
+        };
+      }
+    } catch (_) {}
+  }
+
+  // 2. Extract token from command flags or assignments: --token <token>, token="<token>", TOKEN=<token>
+  const tokenMatch = str.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_-]+)\1/i);
+  if (tokenMatch) {
+    str = tokenMatch[2];
+  } else {
+    str = str.replace(/^["']|["']$/g, '');
+    const words = str.split(/\s+/);
+    if (words.length > 1) {
+      const longest = words.reduce((a, b) => b.length > a.length ? b : a, '');
+      if (longest.length >= 20) {
+        str = longest;
+      }
+    }
+  }
+
+  // 3. Decode base64
   try {
-    let b64 = token.trim();
+    let b64 = str.trim().replace(/-/g, '+').replace(/_/g, '/');
     b64 += '='.repeat((4 - (b64.length % 4)) % 4);
-    const parsed = JSON.parse(atob(b64));
-    if (parsed && parsed.t) {
+    const decoded = (typeof atob === 'function')
+      ? atob(b64)
+      : (typeof Buffer !== 'undefined' ? Buffer.from(b64, 'base64').toString('utf-8') : '');
+    const parsed = JSON.parse(decoded);
+    const tid = parsed && (parsed.t || parsed.tunnel_id || parsed.TunnelID);
+    if (parsed && tid) {
+      const cleanTid = String(tid).trim();
       return {
-        tunnel_id: parsed.t,
-        account_id: parsed.a || '',
-        cname_target: `${parsed.t}.cfargotunnel.com`
+        tunnel_id: cleanTid,
+        account_id: String(parsed.a || parsed.account_id || parsed.AccountTag || '').trim(),
+        cname_target: `${cleanTid}.cfargotunnel.com`
       };
     }
   } catch (_) {}
   return null;
 }
+if (typeof window !== 'undefined') window.parseClientTunnelToken = parseClientTunnelToken;
 
 function updateClientTokenPreview() {
   const tokenInput = document.getElementById('cf-tunnel-token');
@@ -1869,7 +1909,9 @@ function updateClientTokenPreview() {
   if (!tokenInput) return;
 
   const raw = tokenInput.value ? tokenInput.value.trim() : '';
-  const meta = parseClientTunnelToken(raw) || (cachedCloudflareStatus && cachedCloudflareStatus.tunnel_metadata?.valid ? cachedCloudflareStatus.tunnel_metadata : null);
+  const meta = parseClientTunnelToken(raw)
+    || (cachedCloudflareStatus && cachedCloudflareStatus.tunnel_metadata?.valid ? cachedCloudflareStatus.tunnel_metadata : null)
+    || (typeof cachedEnv !== 'undefined' && cachedEnv?.CLOUDFLARE_TUNNEL_METADATA?.valid ? cachedEnv.CLOUDFLARE_TUNNEL_METADATA : null);
 
   if (meta && (meta.tunnel_id || meta.cname_target)) {
     const target = meta.cname_target || `${meta.tunnel_id}.cfargotunnel.com`;
@@ -1880,12 +1922,16 @@ function updateClientTokenPreview() {
       cnameCard.style.display = 'block';
       if (cnameTargetEl) cnameTargetEl.textContent = target;
       const hostUrl = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
-      if (cnameSubdomainEl && hostUrl) {
-        try {
-          const parsed = new URL(hostUrl.startsWith('http') ? hostUrl : `https://${hostUrl}`);
-          const parts = parsed.hostname.split('.');
-          cnameSubdomainEl.textContent = parts.length > 2 ? parts[0] : '@';
-        } catch (_) {
+      if (cnameSubdomainEl) {
+        if (hostUrl) {
+          try {
+            const parsed = new URL(hostUrl.startsWith('http') ? hostUrl : `https://${hostUrl}`);
+            const parts = parsed.hostname.split('.');
+            cnameSubdomainEl.textContent = parts.length > 2 ? parts[0] : '@';
+          } catch (_) {
+            cnameSubdomainEl.textContent = 'watch';
+          }
+        } else {
           cnameSubdomainEl.textContent = 'watch';
         }
       }
@@ -1895,6 +1941,7 @@ function updateClientTokenPreview() {
     if (cnameCard) cnameCard.style.display = 'none';
   }
 }
+if (typeof window !== 'undefined') window.updateClientTokenPreview = updateClientTokenPreview;
 
 async function refreshCloudflareStatus() {
   const banner = document.getElementById('cf-connectors-banner');
@@ -1964,10 +2011,16 @@ function updateGuidePlayerPreview() {
   const baseUrlInput = document.getElementById('base-url');
   const proxyUrlInput = document.getElementById('proxy-url');
   const preview = document.getElementById('guide-player-preview');
-  if (!preview) return;
   const val = (baseUrlInput && baseUrlInput.value) ? baseUrlInput.value.trim() : (proxyUrlInput && proxyUrlInput.value ? proxyUrlInput.value.trim() : 'https://watch.yourdomain.com');
   const clean = val.replace(/\/+$/, '');
-  preview.textContent = clean;
+  if (preview) {
+    preview.textContent = clean;
+  }
+  if (typeof updateClientTokenPreview === 'function') {
+    try {
+      updateClientTokenPreview();
+    } catch (_) {}
+  }
 }
 
 function syncBaseToProxy() {
@@ -2043,11 +2096,27 @@ document.getElementById('cf-tunnel-token')?.addEventListener('input', () => {
 
 document.getElementById('btn-save-cf-token')?.addEventListener('click', async () => {
   const input = document.getElementById('cf-tunnel-token');
-  const token = input ? input.value.trim() : '';
+  let token = input ? input.value.trim() : '';
   if (!token) {
-    notify('Enter a Cloudflare Tunnel Token to save.', true);
+    if (cachedCloudflareStatus?.token_configured || input?.placeholder?.includes('Saved')) {
+      notify('Cloudflare Tunnel Token is already saved in configuration. Enter a new token to replace.');
+    } else {
+      notify('Enter a Cloudflare Tunnel Token in the input box above to save.', true);
+    }
     return;
   }
+  const tokenMatch = token.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_-]+)\1/i);
+  if (tokenMatch) {
+    token = tokenMatch[2];
+  } else {
+    token = token.replace(/^["']|["']$/g, '').trim();
+    const words = token.split(/\s+/);
+    if (words.length > 1) {
+      const longest = words.reduce((a, b) => b.length > a.length ? b : a, '');
+      if (longest.length >= 20) token = longest;
+    }
+  }
+
   try {
     await api('/api/save-env', {
       method: 'POST',
@@ -2066,6 +2135,36 @@ document.getElementById('btn-save-cf-token')?.addEventListener('click', async ()
 document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   const orig = btn.textContent;
+  const tokenInput = document.getElementById('cf-tunnel-token');
+  let tokenVal = tokenInput ? tokenInput.value.trim() : '';
+
+  if (tokenVal) {
+    const tokenMatch = tokenVal.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_-]+)\1/i);
+    if (tokenMatch) {
+      tokenVal = tokenMatch[2];
+    } else {
+      tokenVal = tokenVal.replace(/^["']|["']$/g, '').trim();
+      const words = tokenVal.split(/\s+/);
+      if (words.length > 1) {
+        const longest = words.reduce((a, b) => b.length > a.length ? b : a, '');
+        if (longest.length >= 20) tokenVal = longest;
+      }
+    }
+    try {
+      await api('/api/save-env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ CLOUDFLARE_TUNNEL_TOKEN: tokenVal })
+      });
+      tokenInput.value = '';
+      tokenInput.placeholder = 'Saved · enter to replace';
+    } catch (_) {}
+  } else if (!cachedCloudflareStatus?.token_configured && !tokenInput?.placeholder?.includes('Saved')) {
+    notify('Please enter your Cloudflare Tunnel Token in the input box above before starting the tunnel.', true);
+    if (tokenInput) tokenInput.focus();
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = 'Starting…';
   try {
@@ -2074,7 +2173,7 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'start' })
     });
-    notify(res.success ? '✓ Local aio-tunnel container started!' : `Tunnel start failed: ${res.error}`, !res.success);
+    notify(res.success ? '✓ Local Cloudflare tunnel container started!' : `Tunnel start failed: ${res.error}`, !res.success);
     await refreshCloudflareStatus();
   } catch (err) {
     notify(`Could not start tunnel: ${err.message}`, true);
@@ -2090,7 +2189,7 @@ document.getElementById('btn-copy-cf-cname')?.addEventListener('click', (e) => {
   if (target && !target.includes('<tunnel_id>')) {
     copyToClipboard(target, `Copied CNAME target: ${target}`, e.currentTarget);
   } else {
-    notify('Enter your Cloudflare Tunnel Token first to resolve your unique CNAME target.', true);
+    notify('Enter your Cloudflare Tunnel Token in the box above to resolve your unique CNAME target.', true);
   }
 });
 
@@ -2106,13 +2205,33 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
 
   const apiToken = apiTokenInput ? apiTokenInput.value.trim() : '';
   if (!apiToken) {
-    notify('Enter a Cloudflare API Token (Zone:DNS:Edit permission) to push DNS.', true);
+    notify('Enter a Cloudflare API Token (Zone:DNS:Edit permission) in the field below.', true);
     if (apiTokenInput) apiTokenInput.focus();
     return;
   }
 
-  const hostname = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
-  const tunnelToken = tunnelTokenInput?.value?.trim() || '';
+  let hostname = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
+  if (hostname) {
+    try {
+      const parsed = new URL(hostname.startsWith('http') ? hostname : `https://${hostname}`);
+      hostname = parsed.hostname;
+    } catch (_) {}
+  }
+  if (!hostname) {
+    notify('Enter your Web Player public address or external domain above before pushing DNS.', true);
+    if (baseUrlInput) baseUrlInput.focus();
+    return;
+  }
+
+  let tunnelToken = tunnelTokenInput?.value?.trim() || '';
+  if (tunnelToken) {
+    const tokenMatch = tunnelToken.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_-]+)\1/i);
+    if (tokenMatch) {
+      tunnelToken = tokenMatch[2];
+    } else {
+      tunnelToken = tunnelToken.replace(/^["']|["']$/g, '').trim();
+    }
+  }
   const zoneId = zoneIdInput ? zoneIdInput.value.trim() : '';
 
   btn.disabled = true;

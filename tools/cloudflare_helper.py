@@ -22,17 +22,35 @@ def parse_tunnel_token(token: str) -> dict:
     """
     Parses a Cloudflare Zero-Trust Tunnel token (Base64-encoded JSON)
     to extract account tag, tunnel UUID, and canonical CNAME target.
+    Handles raw tokens, commands containing --token, and surrounding quotes.
     """
     if not token or not isinstance(token, str):
         return {"valid": False}
-    token = token.strip()
-    padded = token + "=" * ((4 - len(token) % 4) % 4)
+    raw = token.strip()
+    if not raw:
+        return {"valid": False}
+
+    # Extract token if user pasted a shell command or flag like --token <token>
+    token_match = re.search(r'(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["\']?)([A-Za-z0-9_-]+)\1', raw, re.IGNORECASE)
+    if token_match:
+        raw = token_match.group(2)
+    else:
+        raw = raw.strip("\"'")
+        words = raw.split()
+        if len(words) > 1:
+            longest = max(words, key=len)
+            if len(longest) >= 20:
+                raw = longest
+
+    # Handle base64 URL-safe replacements and padding
+    normalized = raw.replace("-", "+").replace("_", "/")
+    padded = normalized + "=" * ((4 - len(normalized) % 4) % 4)
     try:
-        decoded = base64.b64decode(padded).decode("utf-8")
+        decoded = base64.b64decode(padded.encode("ascii")).decode("utf-8")
         data = json.loads(decoded)
-        if isinstance(data, dict) and "t" in data:
-            tunnel_id = str(data.get("t", "")).strip()
-            account_id = str(data.get("a", "")).strip()
+        if isinstance(data, dict):
+            tunnel_id = str(data.get("t") or data.get("tunnel_id") or data.get("TunnelID") or "").strip()
+            account_id = str(data.get("a") or data.get("account_id") or data.get("AccountTag") or "").strip()
             if tunnel_id:
                 return {
                     "valid": True,

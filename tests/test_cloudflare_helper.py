@@ -34,6 +34,20 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertTrue(res["valid"])
         self.assertEqual(res["tunnel_id"], "tun")
 
+    def test_parse_tunnel_token_command_wrapped(self):
+        raw = {"a": "acc", "t": "tun-cmd", "s": "sec"}
+        b64 = base64.b64encode(json.dumps(raw).encode()).decode()
+        cmd = f"cloudflared tunnel run --token {b64}"
+        res = parse_tunnel_token(cmd)
+        self.assertTrue(res["valid"])
+        self.assertEqual(res["tunnel_id"], "tun-cmd")
+
+        # Quoted token or service install command
+        cmd2 = f"cloudflared.exe service install \"{b64}\""
+        res2 = parse_tunnel_token(cmd2)
+        self.assertTrue(res2["valid"])
+        self.assertEqual(res2["tunnel_id"], "tun-cmd")
+
     def test_parse_tunnel_token_invalid(self):
         self.assertFalse(parse_tunnel_token("not-a-token")["valid"])
         self.assertFalse(parse_tunnel_token("")["valid"])
