@@ -956,6 +956,55 @@ class PortalTests(unittest.TestCase):
             result = portal.probe_integration(("Bitmagnet", "bitmagnet", 3333, "Indexers"))
             self.assertFalse(result["enabled"])
 
+    def test_legacy_profiles_probe_and_normalization(self):
+        # 1. Legacy 'scrapers' profile enables core services and anime-kitsu, excludes jikan-api
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "scrapers"}), patch("socket.create_connection"):
+            res_prowlarr = portal.probe_integration(("Prowlarr", "prowlarr", 9696, "Indexers"))
+            self.assertTrue(res_prowlarr["enabled"])
+            res_kitsu = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
+            self.assertTrue(res_kitsu["enabled"])
+            res_jikan = portal.probe_integration(("Jikan API", "jikan-api", 8080, "Metadata"))
+            self.assertFalse(res_jikan["enabled"])
+
+        # 2. Legacy 'anime-db' profile enables anime-kitsu and jikan-api, excludes core services
+        with patch.object(portal, "read_saved_env", return_value={"COMPOSE_PROFILES": "anime-db"}), patch("socket.create_connection"):
+            res_kitsu = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
+            self.assertTrue(res_kitsu["enabled"])
+            res_jikan = portal.probe_integration(("Jikan API", "jikan-api", 8080, "Metadata"))
+            self.assertTrue(res_jikan["enabled"])
+            res_prowlarr = portal.probe_integration(("Prowlarr", "prowlarr", 9696, "Indexers"))
+            self.assertFalse(res_prowlarr["enabled"])
+
+        # 3. Empty COMPOSE_PROFILES defaults to core and all (enabling all services with 'core' or 'all')
+        with patch.object(portal, "read_saved_env", return_value={}), patch("socket.create_connection"):
+            res_prowlarr = portal.probe_integration(("Prowlarr", "prowlarr", 9696, "Indexers"))
+            self.assertTrue(res_prowlarr["enabled"])
+            res_kitsu = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
+            self.assertTrue(res_kitsu["enabled"])
+
+        # 4. /api/save-env allows legacy profiles and normalizes them on save
+        with patch.object(portal, "save_env_updates") as mock_save:
+            status, _, _ = self.request("/api/save-env", "POST", {"COMPOSE_PROFILES": "scrapers,anime-db"}, auth=True)
+            self.assertEqual(status, 200)
+            mock_save.assert_called_once()
+            saved_dict = mock_save.call_args[0][0]
+            self.assertEqual(saved_dict["COMPOSE_PROFILES"], "core,anime")
+
+        # 5. /api/save-env rejects unsupported profiles
+        status, _, _ = self.request("/api/save-env", "POST", {"COMPOSE_PROFILES": "invalid-profile"}, auth=True)
+        self.assertEqual(status, 400)
+
+        # 6. /api/config-import allows legacy profiles and normalizes them on save
+        with patch.object(portal, "save_env_updates") as mock_save:
+            status, _, _ = self.request(
+                "/api/config-import", "POST",
+                {"format": "aio-local-config-v1", "values": {"COMPOSE_PROFILES": "scrapers"}},
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            mock_save.assert_called_once()
+            self.assertEqual(mock_save.call_args[0][0]["COMPOSE_PROFILES"], "core")
+
     @patch.object(portal, "playback_readiness", return_value={"ready": True})
     def test_test_playback_endpoint(self, _readiness):
         # 1. When NNTP login fails

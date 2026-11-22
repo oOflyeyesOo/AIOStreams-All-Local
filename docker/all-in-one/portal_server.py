@@ -222,22 +222,34 @@ def probe_integration(item):
     import socket
     name, host, port, group = item
     env_vars = read_saved_env()
-    profiles = {p.strip() for p in env_vars.get("COMPOSE_PROFILES", "core").split(",") if p.strip()}
+    raw_profiles = {p.strip().strip("\"'") for p in env_vars.get("COMPOSE_PROFILES", "").split("#", 1)[0].split(",") if p.strip().strip("\"'")}
+    profiles = set()
+    for p in raw_profiles:
+        if p == "scrapers":
+            profiles.add("core")
+            profiles.add("scrapers")
+        elif p == "anime-db":
+            profiles.add("anime")
+            profiles.add("anime-db")
+        else:
+            profiles.add(p)
+    if not profiles:
+        profiles = {"core", "all"}
     service_profiles = {
-        "aiometadata": {"core", "all"},
-        "postersplus": {"core", "all"},
-        "subsense": {"core", "all"},
-        "lumiere-db": {"core", "all"},
-        "prowlarr": {"core", "all"},
-        "flaresolverr": {"core", "all"},
-        "bitmagnet": {"core", "all"},
-        "zilean": {"core", "all"},
-        "stremthru": {"core", "all"},
-        "anime-kitsu": {"anime", "all"},
-        "jikan-api": {"anime", "all"},
-        "jikan-mongo": {"anime", "all"},
+        "aiometadata": {"core", "scrapers", "all"},
+        "postersplus": {"core", "scrapers", "all"},
+        "subsense": {"core", "scrapers", "all"},
+        "lumiere-db": {"core", "scrapers", "all"},
+        "prowlarr": {"core", "scrapers", "all"},
+        "flaresolverr": {"core", "scrapers", "all"},
+        "bitmagnet": {"core", "scrapers", "all"},
+        "zilean": {"core", "scrapers", "all"},
+        "stremthru": {"core", "scrapers", "all"},
+        "anime-kitsu": {"anime", "anime-db", "scrapers", "all"},
+        "jikan-api": {"anime", "anime-db", "all"},
+        "jikan-mongo": {"anime", "anime-db", "all"},
     }
-    enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"core", "all"}))
+    enabled = host == "aiostreams" or bool(profiles & service_profiles.get(host, {"core", "scrapers", "all"}))
 
     reachable = False
     if enabled:
@@ -559,8 +571,8 @@ def playback_readiness():
     env = read_saved_env()
     aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
     targets = [("Configured streaming manifest", aio_url + "/stremio/u/local/manifest.json", True)]
-    profiles = set(env.get("COMPOSE_PROFILES", "core").split(","))
-    if profiles & {"core", "all"}:
+    profiles = {p.strip().strip("\"'") for p in env.get("COMPOSE_PROFILES", "core").split("#", 1)[0].split(",") if p.strip().strip("\"'")}
+    if profiles & {"core", "scrapers", "all"}:
         targets += [("Prowlarr", "http://prowlarr:9696/ping", False)]
     def check_http(target):
         name, url, manifest = target
@@ -1025,6 +1037,18 @@ def proxy_config(kind, base_url):
 def save_env_updates(updates):
     """Serialize concurrent portal writes and replace the file only when complete."""
     with ENV_LOCK:
+        if "COMPOSE_PROFILES" in updates:
+            raw = str(updates["COMPOSE_PROFILES"]).split("#", 1)[0]
+            normalized = []
+            for p in raw.split(","):
+                p = p.strip().strip("\"'")
+                if not p:
+                    continue
+                norm = "core" if p == "scrapers" else ("anime" if p == "anime-db" else p)
+                if norm not in normalized:
+                    normalized.append(norm)
+            if normalized:
+                updates = {**updates, "COMPOSE_PROFILES": ",".join(normalized)}
         if "ADDON_PASSWORD" in updates:
             saved = read_saved_env()
             prior = saved.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
@@ -2614,10 +2638,19 @@ button:hover {{ background: #0369a1; }}
                 if "BASE_URL" in supplied:
                     normalize_base_url(supplied["BASE_URL"])
                 if "COMPOSE_PROFILES" in supplied:
-                    profiles = {profile.strip() for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip()}
-                    if not profiles or not profiles.issubset({"core", "anime", "tunnel", "all"}):
+                    profiles = {profile.strip().strip("\"'") for profile in supplied["COMPOSE_PROFILES"].split(",") if profile.strip().strip("\"'")}
+                    if not profiles or not profiles.issubset({"core", "anime", "tunnel", "all", "scrapers", "anime-db"}):
                         self.json_response({"error": "COMPOSE_PROFILES contains an unsupported profile."}, 400)
                         return
+                    normalized = []
+                    for p in supplied["COMPOSE_PROFILES"].split(","):
+                        p = p.strip().strip("\"'")
+                        if not p:
+                            continue
+                        norm = "core" if p == "scrapers" else ("anime" if p == "anime-db" else p)
+                        if norm not in normalized:
+                            normalized.append(norm)
+                    supplied["COMPOSE_PROFILES"] = ",".join(normalized)
                 updates = supplied
                 if updates.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                     raise ValueError('Invalid optional-source state')
@@ -3158,6 +3191,19 @@ button:hover {{ background: #0369a1; }}
                 raise ValueError('Invalid streaming mode; must be debrid, usenet, or hybrid')
             if keys_to_update.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                 raise ValueError('Anime sources must be enabled or disabled')
+            if "COMPOSE_PROFILES" in keys_to_update:
+                profiles = {profile.strip().strip("\"'") for profile in keys_to_update["COMPOSE_PROFILES"].split(",") if profile.strip().strip("\"'")}
+                if not profiles or not profiles.issubset({"core", "anime", "tunnel", "all", "scrapers", "anime-db"}):
+                    raise ValueError("COMPOSE_PROFILES contains an unsupported profile.")
+                normalized = []
+                for p in keys_to_update["COMPOSE_PROFILES"].split(","):
+                    p = p.strip().strip("\"'")
+                    if not p:
+                        continue
+                    norm = "core" if p == "scrapers" else ("anime" if p == "anime-db" else p)
+                    if norm not in normalized:
+                        normalized.append(norm)
+                keys_to_update["COMPOSE_PROFILES"] = ",".join(normalized)
             for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')

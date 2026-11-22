@@ -102,3 +102,28 @@ class ControllerTests(unittest.TestCase):
 
         self.assertEqual(logged.call_args.args[1], 'Refreshing AIOStreams player links')
         self.assertEqual(controller.JOB['status'], 'complete')
+
+    def test_controller_parses_and_normalizes_legacy_profiles(self):
+        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
+               'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
+        config = {'services': {
+            'prowlarr': {'profiles': ['core', 'scrapers', 'all']},
+            'anime-kitsu': {'profiles': ['anime', 'anime-db', 'scrapers', 'all']},
+            'jikan-api': {'profiles': ['anime', 'anime-db', 'all']},
+        }}
+        started = []
+        def command(args, step, **kwargs):
+            if 'up' in args:
+                started.extend(args[args.index('--wait-timeout') + 2:])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.env').write_text('COMPOSE_PROFILES="scrapers" # legacy comment\n')
+            with patch.object(controller, 'ROOT', root), patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), \
+                 patch.object(controller, 'command_json', side_effect=[[own], config]), \
+                 patch.object(controller, 'log_command', side_effect=command):
+                controller.apply()
+
+        self.assertIn('prowlarr', started)
+        self.assertIn('anime-kitsu', started)
+        self.assertNotIn('jikan-api', started)

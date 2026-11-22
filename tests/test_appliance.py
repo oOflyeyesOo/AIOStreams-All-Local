@@ -36,6 +36,29 @@ class ApplianceTests(unittest.TestCase):
             prepare_env.prepare(root, data, {})
             self.assertEqual((data / '.env').read_text(), text)
 
+    def test_prepare_migrates_legacy_profiles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'app'
+            data = Path(directory) / 'data'
+            root.mkdir()
+            try:
+                (root / 'probe').symlink_to(root / 'missing')
+                (root / 'probe').unlink()
+            except OSError:
+                self.skipTest('Symlink creation requires OS permission')
+            (root / '.env.example').write_text('COMPOSE_PROFILES=core\nADDON_PASSWORD=admin\n')
+            (root / '.env').write_text('COMPOSE_PROFILES="scrapers,anime-db,tunnel" # legacy comment\n')
+            prepare_env.prepare(root, data, {})
+            text = (data / '.env').read_text()
+            values = dict(line.split('=', 1) for line in text.splitlines() if '=' in line)
+            self.assertEqual(values['COMPOSE_PROFILES'], 'core,anime,tunnel')
+
+            # Legacy single 'scrapers' profile
+            (data / '.env').write_text('COMPOSE_PROFILES=scrapers\n')
+            prepare_env.prepare(root, data, {})
+            values = dict(line.split('=', 1) for line in (data / '.env').read_text().splitlines() if '=' in line)
+            self.assertEqual(values['COMPOSE_PROFILES'], 'core')
+
     def test_entrypoint_uses_networked_portal_and_single_controller_setup(self):
         script = (ROOT / 'docker/all-in-one/entrypoint.sh').read_text()
         self.assertNotIn('--scale portal=0', script)

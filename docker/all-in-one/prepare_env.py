@@ -24,6 +24,17 @@ def prepare(root, data, environment):
     if existing.get('AIO_PORTAL_MANAGED_PASSWORD') == 'true':
         incoming.pop('ADDON_PASSWORD', None)
     updates = form_updates(incoming, existing)
+    profile_val = updates.get('COMPOSE_PROFILES', existing.get('COMPOSE_PROFILES', ''))
+    if profile_val:
+        cleaned = profile_val.split('#', 1)[0].strip().strip("\"'")
+        profile_parts = [p.strip().strip("\"'") for p in cleaned.split(',') if p.strip().strip("\"'")]
+        migrated = []
+        for p in profile_parts:
+            normalized = 'core' if p == 'scrapers' else ('anime' if p == 'anime-db' else p)
+            if normalized not in migrated:
+                migrated.append(normalized)
+        if migrated:
+            updates['COMPOSE_PROFILES'] = ','.join(migrated)
     for key, value in updates.items():
         if any(c in value for c in '\r\n\x00$\'"'):
             raise ValueError(f'{key} contains unsupported configuration characters')

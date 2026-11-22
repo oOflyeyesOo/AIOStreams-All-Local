@@ -225,7 +225,7 @@ services:
   zilean:
     image: ipromknight/zilean:latest
     container_name: zilean
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     cpu_shares: ${ZILEAN_CPU_SHARES:-256}
@@ -266,7 +266,7 @@ services:
   bitmagnet:
     image: ghcr.io/bitmagnet-io/bitmagnet:latest
     container_name: bitmagnet
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
@@ -344,7 +344,7 @@ services:
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${PROWLARR_MEM_LIMIT:-384m}
@@ -450,7 +450,7 @@ services:
     image: ghcr.io/thephaseless/byparr:latest
     shm_size: "1gb"
     container_name: flaresolverr
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -477,7 +477,7 @@ services:
   stremthru:
     image: muniftanjim/stremthru:latest
     container_name: stremthru
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${STREMTHRU_MEM_LIMIT:-768m}
@@ -547,7 +547,7 @@ services:
       context: .
       dockerfile: docker/anime-kitsu/Dockerfile
     container_name: anime-kitsu
-    profiles: ["anime", "all"]
+    profiles: ["anime", "anime-db", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${KITSU_MEM_LIMIT:-256m}
@@ -575,7 +575,7 @@ services:
   aiometadata:
     image: ghcr.io/jigsawfr/aiometadata-docker:latest
     container_name: aiometadata
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${AIOMETADATA_MEM_LIMIT:-512m}
@@ -640,7 +640,7 @@ services:
   lumiere-db:
     image: ghcr.io/0xconstant1/lumiere-db:latest
     container_name: lumiere-db
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     stop_grace_period: 75s
     logging: *default-logging
@@ -674,7 +674,7 @@ services:
   jikan-mongo:
     image: mongo:7-jammy
     container_name: jikan-mongo
-    profiles: ["anime", "all"]
+    profiles: ["anime", "anime-db", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${JIKAN_MONGO_MEM_LIMIT:-512m}
@@ -695,7 +695,7 @@ services:
   jikan-api:
     image: ghcr.io/jikan-me/jikan-rest:latest
     container_name: jikan-api
-    profiles: ["anime", "all"]
+    profiles: ["anime", "anime-db", "all"]
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -728,7 +728,7 @@ services:
   postersplus:
     image: ghcr.io/umbraprojects/postersplus:latest
     container_name: postersplus
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${POSTERSPLUS_MEM_LIMIT:-384m}
@@ -756,7 +756,7 @@ services:
   subsense:
     image: nepiraw/stremio-subsense:latest
     container_name: stremio-subsense
-    profiles: ["core", "all"]
+    profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${SUBSENSE_MEM_LIMIT:-384m}

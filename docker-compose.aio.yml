@@ -55,6 +55,7 @@ services:
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-}
       - TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-}
+      - COMPOSE_PROFILES=${COMPOSE_PROFILES:-core}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
     volumes:
       - aio-data:/data

@@ -113,12 +113,21 @@ def apply():
         # seeds the shared definition; replacing it here would race that write.
         if COMPOSE_FILE == 'compose.manager.yml':
             excluded.add('portal')
-        profiles = {'all'}
+        profiles = set()
         env_file = ROOT / '.env'
         if env_file.exists():
             for line in env_file.read_text().splitlines():
+                line = line.strip()
                 if line.startswith('COMPOSE_PROFILES='):
-                    profiles = set(line.split('=', 1)[1].strip().strip("\"'").split(','))
+                    raw = line.split('=', 1)[1].split('#', 1)[0].strip().strip("\"'")
+                    profiles = {p.strip().strip("\"'") for p in raw.split(',') if p.strip().strip("\"'")}
+        if not profiles:
+            profiles = {'core', 'all'}
+        else:
+            if 'scrapers' in profiles:
+                profiles.add('core')
+            if 'anime-db' in profiles:
+                profiles.add('anime')
         services = [name for name, service in rendered['services'].items()
                     if name not in excluded and (not service.get('profiles') or profiles.intersection(service['profiles']))
                     and service.get('restart') != 'no']
