@@ -646,9 +646,9 @@ def setup_usenet_indexer():
             errors += 1
             print(f"[Usenet Setup] Prowlarr could not disable retired indexer ({name}): {result}", flush=True)
     if errors:
-        raise RuntimeError(f'Prowlarr could not apply {errors} NZB indexer change(s); check the addresses and API keys')
+        print(f"[Usenet Setup] ⚠️ Warning: Prowlarr could not apply {errors} NZB indexer change(s); check the addresses and API keys. Continuing with available indexers.", flush=True)
     if rows:
-        print(f'[Usenet Setup] Applied {len(rows)} NZB indexer setting(s) in Prowlarr.', flush=True)
+        print(f'[Usenet Setup] Configured NZB indexer setting(s) in Prowlarr ({len(rows) - errors}/{len(rows)} succeeded).', flush=True)
 
 
 # ==============================================================================

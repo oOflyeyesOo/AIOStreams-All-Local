@@ -122,7 +122,7 @@ def check_cloudflare_containers() -> dict:
     }
 
 
-def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, account_id: str = None, tunnel_id: str = None) -> dict:
+def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, account_id: str = None, tunnel_id: str = None, zone_id: str = None) -> dict:
     """
     Creates or updates a DNS CNAME record in Cloudflare pointing hostname to cname_target (proxied).
     Optionally configures public hostname ingress rules if tunnel credentials and permissions exist.
@@ -152,51 +152,54 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
         "User-Agent": "AIOStreams-Stack-Manager/1.0"
     }
 
-    # 1. Find matching zone in Cloudflare
-    zones_url = "https://api.cloudflare.com/client/v4/zones?per_page=50&status=active"
-    try:
-        req = urllib.request.Request(zones_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        err_msg = f"Cloudflare API returned status {e.code}"
+    # 1. Resolve matching zone in Cloudflare
+    zone_id = (zone_id or "").strip()
+    zone_name = clean_host
+    if not zone_id:
+        zones_url = "https://api.cloudflare.com/client/v4/zones?per_page=50&status=active"
         try:
-            err_json = json.loads(body)
-            if err_json.get("errors"):
-                err_msg = "; ".join(err.get("message", "") for err in err_json["errors"] if err.get("message")) or err_msg
-        except Exception:
-            pass
-        return {"success": False, "error": f"Cloudflare API Error ({e.code}): {err_msg}"}
-    except Exception as e:
-        return {"success": False, "error": f"Failed to connect to Cloudflare API: {str(e)}"}
+            req = urllib.request.Request(zones_url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            err_msg = f"Cloudflare API returned status {e.code}"
+            try:
+                err_json = json.loads(body)
+                if err_json.get("errors"):
+                    err_msg = "; ".join(err.get("message", "") for err in err_json["errors"] if err.get("message")) or err_msg
+            except Exception:
+                pass
+            return {"success": False, "error": f"Cloudflare API Error ({e.code}): {err_msg}"}
+        except Exception as e:
+            return {"success": False, "error": f"Failed to connect to Cloudflare API: {str(e)}"}
 
-    if not data.get("success"):
-        errors = data.get("errors", [])
-        msg = "; ".join(err.get("message", "") for err in errors if isinstance(err, dict)) or "Failed to list Cloudflare zones."
-        return {"success": False, "error": msg}
+        if not data.get("success"):
+            errors = data.get("errors", [])
+            msg = "; ".join(err.get("message", "") for err in errors if isinstance(err, dict)) or "Failed to list Cloudflare zones."
+            return {"success": False, "error": msg}
 
-    zones = data.get("result", [])
-    if not zones:
-        return {"success": False, "error": "No active domains/zones found in this Cloudflare account."}
+        zones = data.get("result", [])
+        if not zones:
+            return {"success": False, "error": "No active domains/zones found in this Cloudflare account."}
 
-    # Find longest matching zone name (e.g., 'sub.example.com' before 'example.com')
-    matching_zone = None
-    for zone in sorted(zones, key=lambda z: len(z.get("name", "")), reverse=True):
-        zname = zone.get("name", "").lower().strip()
-        if clean_host == zname or clean_host.endswith("." + zname):
-            matching_zone = zone
-            break
+        # Find longest matching zone name (e.g., 'sub.example.com' before 'example.com')
+        matching_zone = None
+        for zone in sorted(zones, key=lambda z: len(z.get("name", "")), reverse=True):
+            zname = zone.get("name", "").lower().strip()
+            if clean_host == zname or clean_host.endswith("." + zname):
+                matching_zone = zone
+                break
 
-    if not matching_zone:
-        available_names = [z.get("name") for z in zones if z.get("name")]
-        return {
-            "success": False,
-            "error": f"No Cloudflare zone found for '{clean_host}'. Available domains in your Cloudflare account: {', '.join(available_names)}"
-        }
+        if not matching_zone:
+            available_names = [z.get("name") for z in zones if z.get("name")]
+            return {
+                "success": False,
+                "error": f"No Cloudflare zone found for '{clean_host}'. Available domains in your Cloudflare account: {', '.join(available_names)}"
+            }
 
-    zone_id = matching_zone["id"]
-    zone_name = matching_zone["name"]
+        zone_id = matching_zone["id"]
+        zone_name = matching_zone["name"]
 
     # 2. Check if a DNS record already exists for clean_host
     query_url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?name={urllib.parse.quote(clean_host)}&per_page=10"

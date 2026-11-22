@@ -1653,16 +1653,38 @@ function updateClientTokenPreview() {
   const tokenInput = document.getElementById('cf-tunnel-token');
   const previewBox = document.getElementById('cf-token-meta-preview');
   const previewText = document.getElementById('cf-token-meta-text');
-  if (!tokenInput || !previewBox || !previewText) return;
+  const cnameCard = document.getElementById('cf-cname-guide-card');
+  const cnameTargetEl = document.getElementById('cf-cname-target');
+  const cnameSubdomainEl = document.getElementById('cf-cname-subdomain');
+  const proxyUrlInput = document.getElementById('proxy-url');
+  const baseUrlInput = document.getElementById('base-url');
+  if (!tokenInput) return;
 
   const raw = tokenInput.value ? tokenInput.value.trim() : '';
   const meta = parseClientTunnelToken(raw) || (cachedCloudflareStatus && cachedCloudflareStatus.tunnel_metadata?.valid ? cachedCloudflareStatus.tunnel_metadata : null);
 
   if (meta && (meta.tunnel_id || meta.cname_target)) {
-    previewText.textContent = `Tunnel ID: ${meta.tunnel_id || 'valid'} · CNAME Target: ${meta.cname_target || (meta.tunnel_id + '.cfargotunnel.com')}`;
-    previewBox.style.display = 'block';
+    const target = meta.cname_target || `${meta.tunnel_id}.cfargotunnel.com`;
+    if (previewText) previewText.textContent = `Tunnel ID: ${meta.tunnel_id || 'valid'} · CNAME Target: ${target}`;
+    if (previewBox) previewBox.style.display = 'block';
+
+    if (cnameCard) {
+      cnameCard.style.display = 'block';
+      if (cnameTargetEl) cnameTargetEl.textContent = target;
+      const hostUrl = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
+      if (cnameSubdomainEl && hostUrl) {
+        try {
+          const parsed = new URL(hostUrl.startsWith('http') ? hostUrl : `https://${hostUrl}`);
+          const parts = parsed.hostname.split('.');
+          cnameSubdomainEl.textContent = parts.length > 2 ? parts[0] : '@';
+        } catch (_) {
+          cnameSubdomainEl.textContent = 'watch';
+        }
+      }
+    }
   } else {
-    previewBox.style.display = 'none';
+    if (previewBox) previewBox.style.display = 'none';
+    if (cnameCard) cnameCard.style.display = 'none';
   }
 }
 
@@ -1854,10 +1876,21 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
   }
 });
 
+document.getElementById('btn-copy-cf-cname')?.addEventListener('click', (e) => {
+  const targetEl = document.getElementById('cf-cname-target');
+  const target = targetEl ? targetEl.textContent.trim() : '';
+  if (target && !target.includes('<tunnel_id>')) {
+    copyToClipboard(target, `Copied CNAME target: ${target}`, e.currentTarget);
+  } else {
+    notify('Enter your Cloudflare Tunnel Token first to resolve your unique CNAME target.', true);
+  }
+});
+
 document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   const orig = btn.textContent;
   const apiTokenInput = document.getElementById('cf-api-token');
+  const zoneIdInput = document.getElementById('cf-zone-id');
   const tunnelTokenInput = document.getElementById('cf-tunnel-token');
   const proxyUrlInput = document.getElementById('proxy-url');
   const baseUrlInput = document.getElementById('base-url');
@@ -1872,6 +1905,7 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
 
   const hostname = (proxyUrlInput?.value?.trim()) || (baseUrlInput?.value?.trim()) || '';
   const tunnelToken = tunnelTokenInput?.value?.trim() || '';
+  const zoneId = zoneIdInput ? zoneIdInput.value.trim() : '';
 
   btn.disabled = true;
   btn.textContent = 'Pushing DNS…';
@@ -1887,7 +1921,8 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
       body: JSON.stringify({
         api_token: apiToken,
         hostname: hostname,
-        tunnel_token: tunnelToken
+        tunnel_token: tunnelToken,
+        zone_id: zoneId
       })
     });
 

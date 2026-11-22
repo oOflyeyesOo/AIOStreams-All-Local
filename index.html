@@ -370,14 +370,34 @@
           <div id="cf-connectors-body"></div>
         </div>
 
+        <!-- Zero-Token 1-Click CNAME Card -->
+        <div id="cf-cname-guide-card" class="cf-cname-copy-box" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong style="color:#38bdf8;font-size:12px;">Zero-Token Setup: Copy CNAME to Cloudflare DNS</strong>
+            <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer" class="mini-action-btn" style="text-decoration:none;font-size:11px;">Open Cloudflare DNS ↗</a>
+          </div>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px 0;">No API token needed! In Cloudflare (where your Zone ID is shown), click <strong>DNS → Add record</strong>:</p>
+          <div class="cf-cname-row">
+            <span>Type: <code>CNAME</code></span>
+            <span>Name: <code id="cf-cname-subdomain">watch</code></span>
+            <span>Target: <code id="cf-cname-target">&lt;tunnel_id&gt;.cfargotunnel.com</code></span>
+            <span>Proxy: <code style="color:#fbbf24;">Proxied (Orange Cloud)</code></span>
+            <button type="button" id="btn-copy-cf-cname" class="mini-action-btn" style="margin-left:auto;">Copy CNAME Target 📋</button>
+          </div>
+        </div>
+
         <div class="field-grid" style="margin-top:10px;">
           <label>
             <span class="field-label">Cloudflare Tunnel Token <span>TOKEN</span></span>
             <input id="cf-tunnel-token" type="password" autocomplete="new-password" placeholder="eyJhIjoi... (from Cloudflare Zero Trust)">
           </label>
           <label>
-            <span class="field-label">Cloudflare API Token (for automated DNS) <span>DNS:EDIT</span></span>
-            <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Cloudflare API Token with Zone.DNS:Edit">
+            <span class="field-label">Cloudflare Zone ID (Optional) <span>ZONE ID</span></span>
+            <input id="cf-zone-id" type="text" autocomplete="off" placeholder="Found on domain Overview page in Cloudflare">
+          </label>
+          <label style="grid-column:1 / -1;">
+            <span class="field-label">Cloudflare API Token (Optional: only needed if pushing DNS via API) <span>OPTIONAL</span></span>
+            <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Optional: Cloudflare API Token with Zone.DNS:Edit permissions">
           </label>
         </div>
 

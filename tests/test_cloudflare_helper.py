@@ -136,6 +136,35 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertEqual(res["action"], "updated")
         self.assertEqual(res["hostname"], "watch.example.com")
 
+    @patch("urllib.request.urlopen")
+    def test_push_cloudflare_dns_with_explicit_zone_id(self, mock_urlopen):
+        # When zone_id is explicitly provided, it skips querying /zones!
+        # 1. dns search (empty)
+        dns_empty = json.dumps({"success": True, "result": []}).encode("utf-8")
+        # 2. dns create response
+        dns_created = json.dumps({
+            "success": True,
+            "result": {"id": "rec-zone-direct", "name": "watch.mycustomzone.org", "type": "CNAME", "content": "tun123.cfargotunnel.com"}
+        }).encode("utf-8")
+
+        responses = [dns_empty, dns_created]
+
+        mock_context = MagicMock()
+        mock_context.__enter__.side_effect = lambda: MagicMock(
+            read=lambda: responses.pop(0)
+        )
+        mock_urlopen.return_value = mock_context
+
+        res = push_cloudflare_dns(
+            "valid_token",
+            "watch.mycustomzone.org",
+            "tun123.cfargotunnel.com",
+            zone_id="my-zone-id-abc"
+        )
+        self.assertTrue(res["success"])
+        self.assertEqual(res["action"], "created")
+        self.assertEqual(res["record_id"], "rec-zone-direct")
+
     @patch("subprocess.run")
     def test_manage_local_tunnel(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="Started cloudflared", stderr="")

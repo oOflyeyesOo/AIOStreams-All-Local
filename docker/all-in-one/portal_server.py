@@ -3464,6 +3464,7 @@ button:hover {{ background: #0369a1; }}
             cname_target = (payload.get("cname_target") or "").strip() or (meta.get("cname_target") if meta.get("valid") else "")
             account_id = payload.get("account_id") or meta.get("account_id")
             tunnel_id = payload.get("tunnel_id") or meta.get("tunnel_id")
+            zone_id = (payload.get("zone_id") or "").strip() or None
 
             if not cname_target:
                 self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)
@@ -3474,7 +3475,8 @@ button:hover {{ background: #0369a1; }}
                 hostname=hostname,
                 cname_target=cname_target,
                 account_id=account_id,
-                tunnel_id=tunnel_id
+                tunnel_id=tunnel_id,
+                zone_id=zone_id
             )
             self.json_response(res, 200 if res.get("success") else 400)
         except Exception as e:
