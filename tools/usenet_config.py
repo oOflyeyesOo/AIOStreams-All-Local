@@ -18,6 +18,22 @@ def extra_sources(values, field):
         return []
     encoded = values.get(field + '_B64', '')
     if not encoded:
+        raw = values.get(field)
+        if isinstance(raw, list) and all(isinstance(row, Mapping) for row in raw):
+            return list(raw)
+        if isinstance(raw, str) and raw.strip():
+            try:
+                rows = json.loads(raw)
+                if isinstance(rows, list) and all(isinstance(row, Mapping) for row in rows):
+                    return rows
+            except (ValueError, TypeError):
+                pass
+            try:
+                rows = json.loads(base64.b64decode(raw, validate=True))
+                if isinstance(rows, list) and all(isinstance(row, Mapping) for row in rows):
+                    return rows
+            except (ValueError, TypeError, UnicodeError):
+                pass
         return []
     try:
         if not isinstance(encoded, (str, bytes)):
@@ -49,7 +65,11 @@ def indexer_address(value):
 def newznab_indexers(values):
     rows = extra_sources(values, 'USENET_EXTRA_INDEXERS')
     if values.get('NZB_INDEXER_URL') and values.get('NZB_INDEXER_API_KEY'):
-        rows.insert(0, {'id': '', 'url': indexer_address(values['NZB_INDEXER_URL']), 'apiKey': values['NZB_INDEXER_API_KEY']})
+        try:
+            addr = indexer_address(values['NZB_INDEXER_URL'])
+            rows.insert(0, {'id': '', 'url': addr, 'apiKey': values['NZB_INDEXER_API_KEY']})
+        except ValueError:
+            pass
     return rows
 
 def credential(values, name):
