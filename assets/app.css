@@ -1896,6 +1896,42 @@ details.op-card summary.op-card-header::-webkit-details-marker {
   font-weight: 600;
 }
 
+.nzb-indexer-card {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.indexer-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.indexer-name-badge {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-main);
+  letter-spacing: 0.02em;
+}
+
+.indexer-card-header .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indexer-status-detail {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 /* ==========================================================================
    Service Log Modal Dialog
    ========================================================================== */

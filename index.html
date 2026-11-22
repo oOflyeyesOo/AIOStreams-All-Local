@@ -502,21 +502,33 @@
             <span>NZB indexers</span>
             <span class="op-badge">DIRECT AIOSTREAMS PRESET · ~250MS SEARCH</span>
           </h3>
-          <button type="button" id="test-saved-nzb-btn" class="mini-action-btn">Test saved primary indexer</button>
+          <button type="button" id="test-saved-nzb-btn" class="mini-action-btn" style="display:none;" hidden>Test saved primary indexer</button>
         </div>
         <p class="field-help" style="margin-top:2px;margin-bottom:10px">NZB indexers (e.g. altHUB, DrunkenSlug, AnimeTosho) are configured directly into AIOStreams as native Newznab presets with ~250ms parallel search, while Prowlarr is dedicated 100% to torrent indexing.</p>
-        <label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
-        <div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
+        <div style="display:none;" hidden>
+          <input id="nzb-indexer-url" type="hidden">
+          <div id="usenet-indexer-key-fields"></div>
+        </div>
         <div id="extra-nzb-indexers"></div>
         <button type="button" id="add-nzb-indexer" class="text-button">+ Add NZB indexer</button>
         <template id="nzb-indexer-row">
-          <fieldset class="usenet-source-row">
-            <legend>Additional NZB indexer</legend>
-            <div class="field-grid">
-              <label>Newznab base address <input data-source-field="url" type="url" required></label>
-              <label>API key <input data-source-field="apiKey" type="password" autocomplete="new-password" required></label>
+          <fieldset class="usenet-source-row nzb-indexer-card">
+            <legend data-indexer-legend style="display:none;">NZB Indexer</legend>
+            <div class="indexer-card-header">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="indexer-name-badge" data-indexer-name>NZB Indexer</span>
+                <span class="indexer-status-badge op-badge" data-indexer-status style="display:none;"></span>
+              </div>
+              <div class="row-actions">
+                <button type="button" class="mini-action-btn" data-test-indexer>Test indexer</button>
+                <button type="button" class="text-button" data-remove-source>Remove indexer</button>
+              </div>
             </div>
-            <button type="button" class="text-button" data-remove-source>Remove indexer</button>
+            <div class="field-grid">
+              <label>Newznab base address <input data-source-field="url" type="url" placeholder="https://drunkenslug.com or https://api.althub.co.za" required></label>
+              <label>API key <input data-source-field="apiKey" type="password" autocomplete="new-password" placeholder="API key or Saved · enter to replace" required></label>
+            </div>
+            <div class="indexer-status-detail" data-indexer-feedback style="display:none;"></div>
           </fieldset>
         </template>
       </div>
