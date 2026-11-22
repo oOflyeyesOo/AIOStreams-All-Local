@@ -1786,5 +1786,98 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(data["action"], "start")
 
 
+    def test_unmapped_api_get_returns_json_404(self):
+        status, body, headers = self.request("/api/nonexistent_test_route", auth=True)
+        self.assertEqual(status, 404)
+        self.assertEqual(headers.get("Content-Type"), "application/json")
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual(data.get("error"), "Endpoint not found")
+
+    def test_defensive_route_error_handling(self):
+        leak_indicator = "C:\\sensitive\\system\\path\\to\\aio\\secret_token.txt"
+
+        # 1. /api/playback-readiness error masking
+        with patch.object(portal, "playback_readiness", side_effect=Exception(f"Readiness error: {leak_indicator}")):
+            status, body, _ = self.request("/api/playback-readiness", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 2. /api/integrations error masking
+        with patch.object(portal, "probe_integration", side_effect=Exception(f"Probe crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/integrations", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 3. /api/maintenance error masking
+        with patch.object(portal, "maintenance_snapshot", side_effect=Exception(f"Snapshot crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/maintenance", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 4. /api/diagnostics error masking
+        with patch.object(portal, "diagnostics_snapshot", side_effect=Exception(f"Diagnostics crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/diagnostics", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 5. /api/config-export error masking
+        with patch.object(portal, "config_export", side_effect=Exception(f"Export crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/config-export", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 6. /api/player-preferences POST ValueError vs Exception
+        with patch.object(portal, "save_player_preferences", side_effect=ValueError("Invalid speed parameter")):
+            status, body, _ = self.request("/api/player-preferences", "POST", {"speed": 99}, auth=True)
+            self.assertEqual(status, 400)
+            data = json.loads(body)
+            self.assertEqual(data.get("error"), "Invalid speed parameter")
+
+        with patch.object(portal, "save_player_preferences", side_effect=Exception(f"DB crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/player-preferences", "POST", {"speed": 1}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertIn("Internal server error", data.get("error", ""))
+
+        # 7. /api/cloudflare/push-dns error masking
+        with patch("tools.cloudflare_helper.push_cloudflare_dns", side_effect=Exception(f"CF API crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                "api_token": "token",
+                "hostname": "watch.example.com",
+                "cname_target": "target.cfargotunnel.com"
+            }, auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+        # 8. /api/cloudflare/tunnel error masking
+        with patch("tools.cloudflare_helper.manage_local_tunnel", side_effect=Exception(f"Tunnel crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/cloudflare/tunnel", "POST", {"action": "start"}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+        # 9. /api/lumiere/rebuild error masking
+        with patch.object(portal.subprocess, "run", side_effect=Exception(f"Lumiere exec crash: {leak_indicator}")):
+            status, body, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak_indicator.encode(), body)
+            data = json.loads(body)
+            self.assertFalse(data.get("success"))
+
+
 if __name__ == "__main__":
     unittest.main()
