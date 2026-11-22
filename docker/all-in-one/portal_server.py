@@ -139,13 +139,58 @@ INTERNAL_SERVICE_TARGETS = {
     "zilean": ("zilean", 8181, 8181),
     "flaresolverr": ("flaresolverr", 8191, 8191),
     "postersplus": ("postersplus", 8000, 9039),
-    "subsense": ("stremio-subsense", 3100, 3100),
+    "subsense": ("subsense", 3100, 3100),
     "stremthru": ("stremthru", 8080, 8080),
     "anime-kitsu": ("anime-kitsu", 7000, 7005),
     "lumiere-db": ("lumiere-db", 8000, 8000),
     "bitmagnet": ("bitmagnet", 3333, 3333),
     "jikan-api": ("jikan-api", 8080, 8001),
 }
+
+def is_dns_error(exc):
+    if isinstance(exc, socket.gaierror):
+        return True
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, socket.gaierror):
+        return True
+    msg = str(reason if reason is not None else exc).lower()
+    return any(ind in msg for ind in (
+        "name has no usable address",
+        "name or service not known",
+        "getaddrinfo failed",
+        "nodename nor servname provided",
+        "errno -5",
+        "errno -2",
+        "errno 11001",
+        "eai_noname",
+        "eai_again",
+        "eai_nodata",
+        "eai_addrfamily",
+        "gaierror",
+    ))
+
+def get_service_fallback_url(url):
+    """
+    If url targets a known container, return mapped localhost fallback URL.
+    Respects custom port configuration from saved env.
+    """
+    if not url:
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        if host in ("localhost", "127.0.0.1", "::1"):
+            return None
+        env_vars = read_saved_env()
+        for svc, (container, internal_port, default_host_port) in INTERNAL_SERVICE_TARGETS.items():
+            if host in (svc, container, "stremio-subsense"):
+                custom_port_var = f"PORT_{svc.upper().replace('-', '_')}"
+                host_port = int(env_vars.get(custom_port_var) or os.environ.get(custom_port_var) or default_host_port)
+                netloc = f"127.0.0.1:{host_port}"
+                return urllib.parse.urlunsplit((parsed.scheme or "http", netloc, parsed.path, parsed.query, parsed.fragment))
+    except Exception:
+        pass
+    return None
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -601,25 +646,32 @@ def run_playback_test(mode=None, content_id=None, kind=None):
 
         streams = []
         aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-        if install_info and install_info.get("uuid"):
-            pw = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or ""
-            target = f"{aio_url}/stremio/{install_info['uuid']}/{pw}/stream/{sample_kind}/{sample_id}.json"
-            try:
-                req = urllib.request.Request(target, headers={"User-Agent": "AIO-Playback-Test/1.0"})
-                with urllib.request.urlopen(req, timeout=25) as resp:
-                    data = json.load(resp)
-                    streams = data.get("streams", [])
-            except Exception:
-                pass
+        aio_urls = [aio_url]
+        fb_aio = get_service_fallback_url(aio_url)
+        if fb_aio and fb_aio not in aio_urls:
+            aio_urls.append(fb_aio)
+        for cur_aio in aio_urls:
+            if streams:
+                break
+            if install_info and install_info.get("uuid"):
+                pw = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or ""
+                target = f"{cur_aio}/stremio/{install_info['uuid']}/{pw}/stream/{sample_kind}/{sample_id}.json"
+                try:
+                    req = urllib.request.Request(target, headers={"User-Agent": "AIO-Playback-Test/1.0"})
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        data = json.load(resp)
+                        streams = data.get("streams", [])
+                except Exception:
+                    pass
 
-        if not streams:
-            try:
-                req = urllib.request.Request(f"{aio_url}/stremio/u/local/stream/{sample_kind}/{sample_id}.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
-                with urllib.request.urlopen(req, timeout=25) as resp:
-                    data = json.load(resp)
-                    streams = data.get("streams", [])
-            except Exception:
-                pass
+            if not streams:
+                try:
+                    req = urllib.request.Request(f"{cur_aio}/stremio/u/local/stream/{sample_kind}/{sample_id}.json", headers={"User-Agent": "AIO-Playback-Test/1.0"})
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        data = json.load(resp)
+                        streams = data.get("streams", [])
+                except Exception:
+                    pass
 
         if streams:
             candidates = [s for s in streams if s.get("url")]
@@ -764,6 +816,10 @@ def optimized_profile_export():
 
     live_config = None
     aiostreams_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+    aio_candidates = [aiostreams_url]
+    fb_aio = get_service_fallback_url(aiostreams_url)
+    if fb_aio and fb_aio not in aio_candidates:
+        aio_candidates.append(fb_aio)
     candidates = [
         os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
         os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
@@ -785,19 +841,22 @@ def optimized_profile_export():
     saved_env = read_saved_env()
     if install_uuid:
         for pw in (saved_env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin", "admin_local_secret"):
-            try:
-                auth = base64.b64encode(f"{install_uuid}:{pw}".encode()).decode("ascii")
-                req = urllib.request.Request(
-                    f"{aiostreams_url}/api/v1/user",
-                    headers={"Authorization": f"Basic {auth}", "Accept": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    res = json.load(resp)
-                    if isinstance(res, dict) and res.get("success") and "userData" in res.get("data", {}):
-                        live_config = res["data"]["userData"]
-                        break
-            except Exception:
-                pass
+            if live_config:
+                break
+            for cur_aio in aio_candidates:
+                try:
+                    auth = base64.b64encode(f"{install_uuid}:{pw}".encode()).decode("ascii")
+                    req = urllib.request.Request(
+                        f"{cur_aio}/api/v1/user",
+                        headers={"Authorization": f"Basic {auth}", "Accept": "application/json"}
+                    )
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        res = json.load(resp)
+                        if isinstance(res, dict) and res.get("success") and "userData" in res.get("data", {}):
+                            live_config = res["data"]["userData"]
+                            break
+                except Exception:
+                    pass
 
     return {
         "format": "aio-local-optimized-profile-v1",
@@ -1467,6 +1526,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         for c in (f"http://{container}:{internal_port}", f"http://127.0.0.1:{host_port}"):
             if c not in candidates:
                 candidates.append(c)
+        if service == "subsense":
+            alt = f"http://stremio-subsense:{internal_port}"
+            if alt not in candidates:
+                candidates.insert(1, alt)
 
         normalized_subpath = "/" + subpath.lstrip("/") if subpath else "/"
         query_str = f"?{query}" if query else ""
@@ -1975,8 +2038,20 @@ button:hover {{ background: #0369a1; }}
         if path == "/ready":
             try:
                 base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-                with urllib.request.urlopen(base + "/api/v1/status", timeout=2):
-                    pass
+                endpoints = [base + "/api/v1/status"]
+                fb = get_service_fallback_url(endpoints[0])
+                if fb and fb not in endpoints:
+                    endpoints.append(fb)
+                success = False
+                for ep in endpoints:
+                    try:
+                        with urllib.request.urlopen(ep, timeout=2):
+                            success = True
+                            break
+                    except Exception:
+                        pass
+                if not success:
+                    raise OSError("aiostreams not ready")
                 self.json_response({"status": "ready", "dependencies": {"aiostreams": "ready"}})
             except (OSError, ValueError, urllib.error.URLError):
                 self.json_response({"status": "starting", "dependencies": {"aiostreams": "unavailable"}}, 503)
@@ -1985,8 +2060,19 @@ button:hover {{ background: #0369a1; }}
             try:
                 base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
                 manifest_url = base + "/stremio/u/local/manifest.json"
-                with urllib.request.urlopen(manifest_url, timeout=3) as response:
-                    manifest = json.load(response)
+                endpoints = [manifest_url]
+                fb = get_service_fallback_url(manifest_url)
+                if fb and fb not in endpoints:
+                    endpoints.append(fb)
+                manifest = None
+                for ep in endpoints:
+                    try:
+                        with urllib.request.urlopen(ep, timeout=3) as response:
+                            manifest = json.load(response)
+                            if isinstance(manifest, dict) and manifest.get("id") and manifest.get("resources"):
+                                break
+                    except Exception:
+                        pass
                 if not isinstance(manifest, dict) or not manifest.get("id") or not manifest.get("resources"):
                     raise ValueError("Manifest is incomplete")
                 self.json_response({"status": "ready", "manifest": manifest.get("id")})
@@ -2007,12 +2093,20 @@ button:hover {{ background: #0369a1; }}
         if path == "/api/export-manifest":
             try:
                 base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-                try:
-                    req = urllib.request.urlopen(base + "/stremio/u/local/manifest.json", timeout=5)
-                except Exception:
-                    req = urllib.request.urlopen("http://localhost:3001/stremio/u/local/manifest.json", timeout=5)
-                with req as response:
-                    manifest = json.load(response)
+                manifest_url = base + "/stremio/u/local/manifest.json"
+                endpoints = [manifest_url]
+                fb = get_service_fallback_url(manifest_url)
+                if fb and fb not in endpoints:
+                    endpoints.append(fb)
+                manifest = None
+                for ep in endpoints:
+                    try:
+                        with urllib.request.urlopen(ep, timeout=5) as response:
+                            manifest = json.load(response)
+                            if isinstance(manifest, dict) and manifest.get("id"):
+                                break
+                    except Exception:
+                        pass
                 if not isinstance(manifest, dict) or not manifest.get("id"):
                     raise ValueError("Manifest not ready")
                 self.send_response(200)
@@ -2093,18 +2187,24 @@ button:hover {{ background: #0369a1; }}
                 addon_pw = env_vars.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD") or "admin"
                 config_data = None
                 if profile_uuid:
-                    try:
-                        req = urllib.request.Request(
-                            f"{aiom_base}/api/config/load/{profile_uuid}",
-                            data=json.dumps({"password": addon_pw, "addonPassword": addon_pw}).encode(),
-                            headers={"Content-Type": "application/json"}
-                        )
-                        with urllib.request.urlopen(req, timeout=5) as resp:
-                            res = json.load(resp)
-                            if isinstance(res, dict) and res.get("success") and isinstance(res.get("config"), dict):
-                                config_data = res.get("config")
-                    except Exception:
-                        pass
+                    candidates = [f"{aiom_base}/api/config/load/{profile_uuid}"]
+                    fb = get_service_fallback_url(candidates[0])
+                    if fb and fb not in candidates:
+                        candidates.append(fb)
+                    for target_url in candidates:
+                        try:
+                            req = urllib.request.Request(
+                                target_url,
+                                data=json.dumps({"password": addon_pw, "addonPassword": addon_pw}).encode(),
+                                headers={"Content-Type": "application/json"}
+                            )
+                            with urllib.request.urlopen(req, timeout=5) as resp:
+                                res = json.load(resp)
+                                if isinstance(res, dict) and res.get("success") and isinstance(res.get("config"), dict):
+                                    config_data = res.get("config")
+                                    break
+                        except Exception:
+                            pass
 
                 if not config_data:
                     raw_tmpl = env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json")
@@ -2595,7 +2695,11 @@ button:hover {{ background: #0369a1; }}
                 # Fallback: check if aiostreams aggregator is reachable
                 import urllib.request
                 aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-                for endpoint in [aio_url + "/api/v1/status"]:
+                endpoints = [aio_url + "/api/v1/status"]
+                fb = get_service_fallback_url(endpoints[0])
+                if fb and fb not in endpoints:
+                    endpoints.append(fb)
+                for endpoint in endpoints:
                     try:
                         with urllib.request.urlopen(endpoint, timeout=1) as resp_check:
                             if resp_check.status in (200, 301, 302):
@@ -2609,7 +2713,10 @@ button:hover {{ background: #0369a1; }}
                 _STATUS_PROBE_CACHE["timestamp"] = now
 
         # Send only saved-key indicators, never stored credential values.
-        base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
+        try:
+            base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
+        except Exception:
+            base_val = "http://localhost:3001"
         aiom_val = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST") or derive_aiometadata_host(base_val)
         mode_val = env_vars.get("STREAMING_MODE")
         if not mode_val:
@@ -2872,30 +2979,40 @@ button:hover {{ background: #0369a1; }}
 
     def handle_api_flaresolverr(self):
         flaresolverr_url = os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/")
-        try:
-            req = urllib.request.Request(f"{flaresolverr_url}/", headers={"User-Agent": "AIO-Local-Stack/1.0"})
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                raw_bytes = resp.read()
-                version = "v3.3+"
-                try:
-                    data = json.loads(raw_bytes.decode("utf-8", errors="ignore"))
-                    version = data.get("version") or data.get("msg") or "v3.3+"
-                except Exception:
-                    pass
-                self.json_response({
-                    "status": "online",
-                    "reachable": True,
-                    "version": version,
-                    "url": flaresolverr_url,
-                    "message": f"Antibot Proxy ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
-                })
-        except Exception:
+        endpoints = [f"{flaresolverr_url}/"]
+        fb = get_service_fallback_url(endpoints[0])
+        if fb and fb not in endpoints:
+            endpoints.append(fb)
+        resp_bytes = None
+        for ep in endpoints:
+            try:
+                req = urllib.request.Request(ep, headers={"User-Agent": "AIO-Local-Stack/1.0"})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    resp_bytes = resp.read()
+                    break
+            except Exception:
+                pass
+        if resp_bytes is not None:
+            version = "v3.3+"
+            try:
+                data = json.loads(resp_bytes.decode("utf-8", errors="ignore"))
+                version = data.get("version") or data.get("msg") or "v3.3+"
+            except Exception:
+                pass
             self.json_response({
-                "status": "offline",
-                "reachable": False,
+                "status": "online",
+                "reachable": True,
+                "version": version,
                 "url": flaresolverr_url,
-                "message": f"Antibot proxy is not responding at {flaresolverr_url}."
-            }, 503)
+                "message": f"Antibot Proxy ({version}) is active and ready to bypass Cloudflare challenges for scrapers."
+            })
+            return
+        self.json_response({
+            "status": "offline",
+            "reachable": False,
+            "url": flaresolverr_url,
+            "message": f"Antibot proxy is not responding at {flaresolverr_url}."
+        }, 503)
 
     def handle_api_benchmark(self):
         results = {}
@@ -2904,18 +3021,29 @@ button:hover {{ background: #0369a1; }}
             ("aiometadata", os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/") + "/manifest.json"),
             ("flaresolverr", os.environ.get("FLARESOLVERR_URL", "http://flaresolverr:8191").rstrip("/") + "/"),
             ("zilean", os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/") + "/dmm/filtered?query=Inception"),
-            ("prowlarr", "http://prowlarr:9696/ping")
+            ("prowlarr", os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/") + "/ping")
         ]
         for name, url in targets:
             t0 = time.monotonic()
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": "AIO-Benchmark/1.0"})
-                with urllib.request.urlopen(req, timeout=2) as resp:
-                    resp.read(256)
-                    ms = round((time.monotonic() - t0) * 1000, 1)
-                    results[name] = {"status": "ok", "latency_ms": ms}
-            except Exception as e:
-                results[name] = {"status": "unreachable", "error": type(e).__name__}
+            candidate_urls = [url]
+            fb = get_service_fallback_url(url)
+            if fb and fb not in candidate_urls:
+                candidate_urls.append(fb)
+            success = False
+            last_err = None
+            for candidate in candidate_urls:
+                try:
+                    req = urllib.request.Request(candidate, headers={"User-Agent": "AIO-Benchmark/1.0"})
+                    with urllib.request.urlopen(req, timeout=2) as resp:
+                        resp.read(256)
+                        ms = round((time.monotonic() - t0) * 1000, 1)
+                        results[name] = {"status": "ok", "latency_ms": ms}
+                        success = True
+                        break
+                except Exception as e:
+                    last_err = e
+            if not success:
+                results[name] = {"status": "unreachable", "error": type(last_err).__name__ if last_err else "Error"}
 
         env = read_saved_env()
         debrid_results = {}

@@ -21,6 +21,8 @@ import urllib.error
 import urllib.parse
 import tempfile
 import copy
+import ipaddress
+import socket
 from pathlib import Path
 
 # Source Compose mounts the checkout at /app and the entry script at /init.
@@ -127,6 +129,67 @@ def resolve_path(relative_path, default_path):
         if os.path.exists(candidate):
             return candidate
     return default_path
+
+SERVICE_PORT_MAP = {
+    "postersplus": (8000, 9039, "PORT_POSTERSPLUS"),
+    "aiometadata": (4005, 4005, "PORT_AIOMETADATA"),
+    "aiostreams": (3000, 3001, "PORT_AIOSTREAMS"),
+    "prowlarr": (9696, 9696, "PORT_PROWLARR"),
+    "flaresolverr": (8191, 8191, "PORT_FLARESOLVERR"),
+    "zilean": (8181, 8181, "PORT_ZILEAN"),
+    "stremthru": (8080, 8080, "PORT_STREMTHRU"),
+    "subsense": (3100, 3100, "PORT_SUBSENSE"),
+    "stremio-subsense": (3100, 3100, "PORT_SUBSENSE"),
+    "anime-kitsu": (7000, 7005, "PORT_ANIME_KITSU"),
+    "bitmagnet": (3333, 3333, "PORT_BITMAGNET"),
+    "lumiere-db": (8000, 8000, "PORT_LUMIERE_DB"),
+    "jikan-api": (8080, 8001, "PORT_JIKAN_API"),
+}
+
+def is_dns_error(exc):
+    """Check if exception is a DNS / getaddrinfo resolution failure."""
+    if isinstance(exc, socket.gaierror):
+        return True
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, socket.gaierror):
+        return True
+    msg = str(reason if reason is not None else exc).lower()
+    return any(ind in msg for ind in (
+        "name has no usable address",
+        "name or service not known",
+        "getaddrinfo failed",
+        "nodename nor servname provided",
+        "errno -5",
+        "errno -2",
+        "errno 11001",
+        "eai_noname",
+        "eai_again",
+        "eai_nodata",
+        "eai_addrfamily",
+        "gaierror",
+    ))
+
+def get_service_fallback_url(url):
+    """
+    If url targets a known container name, generate the mapped localhost fallback URL.
+    E.g. http://postersplus:8000/... -> http://127.0.0.1:9039/...
+         http://aiometadata:4005/... -> http://127.0.0.1:4005/...
+    """
+    if not url:
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        if host in ("localhost", "127.0.0.1", "::1"):
+            return None
+        if host in SERVICE_PORT_MAP:
+            _, default_host_port, env_port_var = SERVICE_PORT_MAP[host]
+            host_port = int(os.environ.get(env_port_var) or default_host_port)
+            netloc = f"127.0.0.1:{host_port}"
+            return urllib.parse.urlunsplit((parsed.scheme or "http", netloc, parsed.path, parsed.query, parsed.fragment))
+    except Exception:
+        pass
+    return None
 
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://prowlarr:9696").rstrip("/")
 ZILEAN_URL = os.environ.get("ZILEAN_URL", "http://zilean:8181").rstrip("/")
@@ -243,7 +306,7 @@ TARGET_INDEXERS = [
 
 SCRAPER_TIMEOUT_MS = int(os.environ.get("SCRAPER_TIMEOUT_MS", "3000"))
 
-def make_request(url, method="GET", data=None, headers=None, timeout=12, max_redirects=5):
+def make_request(url, method="GET", data=None, headers=None, timeout=12, max_redirects=5, allow_fallback=True):
     default_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json"
@@ -259,20 +322,37 @@ def make_request(url, method="GET", data=None, headers=None, timeout=12, max_red
     except urllib.error.HTTPError as e:
         if e.code in (301, 302, 307, 308) and e.headers.get("Location") and max_redirects > 0:
             redirect_url = urllib.parse.urljoin(url, e.headers.get("Location"))
-            return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects - 1)
+            return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects - 1, allow_fallback=allow_fallback)
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"error": e.code, "message": err_msg}
     except Exception as e:
+        if allow_fallback:
+            reason = getattr(e, "reason", None)
+            is_conn_err = isinstance(reason, (ConnectionRefusedError, OSError)) or isinstance(e, (ConnectionRefusedError, OSError))
+            if is_dns_error(e) or is_conn_err:
+                fallback_url = get_service_fallback_url(url)
+                if fallback_url and fallback_url != url:
+                    try:
+                        return make_request(fallback_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects, allow_fallback=False)
+                    except Exception:
+                        pass
         return {"error": -1, "message": str(e)}
 
-def is_url_reachable(url, timeout=2.0):
+def is_url_reachable(url, timeout=2.0, allow_fallback=True):
     if not url:
         return False
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "AIOStreams-Probe/1.0", "Accept": "*/*"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status in (200, 301, 302)
-    except Exception:
+    except Exception as e:
+        if allow_fallback:
+            reason = getattr(e, "reason", None)
+            is_conn_err = isinstance(reason, (ConnectionRefusedError, OSError)) or isinstance(e, (ConnectionRefusedError, OSError))
+            if is_dns_error(e) or is_conn_err:
+                fallback_url = get_service_fallback_url(url)
+                if fallback_url and fallback_url != url:
+                    return is_url_reachable(fallback_url, timeout=timeout, allow_fallback=False)
         return False
 
 DEFAULT_JIKAN_URL = "https://api.tenrai.org/v4"
@@ -775,8 +855,11 @@ def sync_aiostreams_native_usenet():
 def wait_for_postersplus(max_attempts=20, interval=2):
     print(f"[Posters+ Setup] Waiting for Posters+ at {POSTERSPLUS_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
-        res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}")
-        if not isinstance(res, dict) or res.get("error") != -1 or "detail" in res or "access_key" in str(res):
+        res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}", timeout=2)
+        if isinstance(res, dict) and not res.get("error") and (res.get("status") in (200, 301, 302) or "detail" in res or "access_key" in str(res)):
+            print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
+            return True
+        if isinstance(res, dict) and res.get("status") in (200, 301, 302):
             print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
             return True
         if attempt >= 8 and not is_url_reachable(POSTERSPLUS_URL, timeout=1.0):
@@ -790,10 +873,13 @@ def wait_for_aiometadata(max_attempts=30, interval=2):
     print(f"[AIOMetadata Setup] Waiting for AIOMetadata at {AIOMETADATA_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
         # An error dictionary is truthy; liveness also precedes manifest readiness.
-        res = make_request(f"{AIOMETADATA_URL}/manifest.json")
+        res = make_request(f"{AIOMETADATA_URL}/manifest.json", timeout=2)
         if isinstance(res, dict) and not res.get("error") and res.get("id"):
             print(f"[AIOMetadata Setup] ✓ AIOMetadata is online and ready! (attempt {attempt})", flush=True)
             return True
+        if attempt >= 8 and not is_url_reachable(AIOMETADATA_URL, timeout=1.0):
+            print("[AIOMetadata Setup] ℹ️ AIOMetadata is unreachable. Check its container, selected Compose profile, and Docker network.", flush=True)
+            return False
         time.sleep(interval)
     print("[AIOMetadata Setup] Note: AIOMetadata is still starting up...", flush=True)
     return False
@@ -900,7 +986,10 @@ def setup_aiometadata_tamtaro():
     config["usePosterProxy"] = True
     config["posterRatingProvider"] = "customArt"
     poster_key = os.environ.get("POSTERSPLUS_ACCESS_KEY") or os.environ.get("ADDON_PASSWORD") or "admin"
-    poster_url = f"{POSTERSPLUS_URL}/poster?stremio_id={{id}}&type={{type}}&shape={{shape}}"
+    internal_poster_base = os.environ.get("POSTERSPLUS_CONTAINER_URL") or "http://postersplus:8000"
+    if "127.0.0.1" not in POSTERSPLUS_URL and "localhost" not in POSTERSPLUS_URL:
+        internal_poster_base = POSTERSPLUS_URL
+    poster_url = f"{internal_poster_base}/poster?stremio_id={{id}}&type={{type}}&shape={{shape}}"
     if poster_key:
         poster_url += '&access_key=' + urllib.parse.quote(poster_key, safe='')
     config["customPosterUrl"] = poster_url
@@ -1806,8 +1895,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         if p not in validated_presets and isinstance(p, dict):
             if p.get("instanceId"):
                 removed_preset_ids.add(p["instanceId"])
-            if p.get("type"):
-                removed_preset_ids.add(p["type"])
 
     validated_presets = [p for p in validated_presets if not is_deprecated_preset(p)]
     # Order Usenet presets first so NZB indexers are queried and resolved with priority
@@ -2307,18 +2394,24 @@ def run_stream_diagnostics(config_info, aiometadata_manifest=None):
 
     # 2. Test Posters+ Server
     print(f"[Test 1/4] Testing Posters+ server ({POSTERSPLUS_URL})...", flush=True)
-    p_res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}")
-    if not isinstance(p_res, dict) or p_res.get("error") not in [-1] or "access_key" in str(p_res):
+    p_res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}", timeout=2)
+    if isinstance(p_res, dict) and not p_res.get("error") and (p_res.get("status") in (200, 301, 302) or "access_key" in str(p_res) or "detail" in p_res):
         print(f"[Test 1/4] ✓ Posters+ server is reachable and active!", flush=True)
+    elif isinstance(p_res, dict) and p_res.get("error") == -1:
+        print(f"[Test 1/4] ℹ️ Posters+ server is starting up or unreachable (optional metadata badge provider).", flush=True)
     else:
         print(f"[Test 1/4] ℹ️ Posters+ server status: {p_res}", flush=True)
 
     # 3. Test AIOMetadata Manifest
     aiom_target = aiometadata_manifest or f"{AIOMETADATA_URL}/manifest.json"
     print(f"[Test 2/4] Testing AIOMetadata manifest ({aiom_target})...", flush=True)
-    aiom_res = make_request(aiom_target)
+    aiom_res = make_request(aiom_target, timeout=2)
     if isinstance(aiom_res, dict) and "name" in aiom_res:
         print(f"[Test 2/4] ✓ AIOMetadata manifest verified: '{aiom_res.get('name')}' (v{aiom_res.get('version')})", flush=True)
+    elif not aiometadata_manifest:
+        print(f"[Test 2/4] ℹ️ AIOMetadata is optional and not active; manifest verification skipped.", flush=True)
+    elif isinstance(aiom_res, dict) and aiom_res.get("error") == -1:
+        print(f"[Test 2/4] ℹ️ AIOMetadata manifest is currently unreachable or starting up.", flush=True)
     else:
         print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {aiom_res}", flush=True)
 
