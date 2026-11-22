@@ -21,7 +21,9 @@ services:
     - aiostreams-data:/app/data/aiostreams:ro
     command: python3 /check_stack.py
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - stack-check
   controller:
     logging:
       driver: json-file
@@ -89,7 +91,15 @@ services:
     environment:
     - AIO_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
     - COMPOSE_CONTROL_SOCKET=/runtime/control.sock
-    - AIOSTREAMS_URL=http://aiostreams:3000
+    - AIOSTREAMS_URL=${AIOSTREAMS_URL:-http://aiostreams:3000}
+    - AIOMETADATA_URL=${AIOMETADATA_URL:-http://aiometadata:4005}
+    - POSTERSPLUS_URL=${POSTERSPLUS_URL:-http://postersplus:8000}
+    - POSTERSPLUS_ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-${ADDON_PASSWORD:-admin}}
+    - PROWLARR_URL=${PROWLARR_URL:-http://prowlarr:9696}
+    - FLARESOLVERR_URL=${FLARESOLVERR_URL:-http://flaresolverr:8191}
+    - ZILEAN_URL=${ZILEAN_URL:-http://zilean:8181}
+    - STREMTHRU_URL=${STREMTHRU_URL:-http://stremthru:8080}
+    - BITMAGNET_URL=${BITMAGNET_URL:-http://bitmagnet:3333}
     - ADDON_PASSWORD=${ADDON_PASSWORD:-}
     - PORTAL_AUTH_REQUIRED=${PORTAL_AUTH_REQUIRED:-false}
     - BASE_URL=${BASE_URL:-}
@@ -134,7 +144,10 @@ services:
       retries: 3
       start_period: 5s
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - portal
+        - aio-portal
   aiostreams:
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-aiostreams:${AIO_IMAGE_TAG:-latest}
     healthcheck:
@@ -223,7 +236,9 @@ services:
     volumes:
     - aiostreams-data:/data
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - aiostreams
     depends_on:
       init-postgres:
         condition: service_completed_successfully
@@ -267,7 +282,9 @@ services:
     - Zilean__Dmm__ScrapeSchedule=${ZILEAN_SCRAPE_SCHEDULE:-0 4 * * *}
     - Zilean__Dmm__MinimumReDownloadIntervalMinutes=1440
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - zilean
     depends_on:
       init-postgres:
         condition: service_completed_successfully
@@ -316,7 +333,9 @@ services:
     volumes:
     - bitmagnet-data:/root/.local/share/bitmagnet
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - bitmagnet
     depends_on:
       init-postgres:
         condition: service_completed_successfully
@@ -375,7 +394,9 @@ services:
     volumes:
     - prowlarr-data:/config
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - prowlarr
     depends_on:
       init-configs:
         condition: service_completed_successfully
@@ -395,17 +416,18 @@ services:
     - aiostreams-data:/data/aiostreams
     - aio-config:/app
     environment:
-    - PROWLARR_URL=http://prowlarr:9696
+    - PROWLARR_URL=${PROWLARR_URL:-http://prowlarr:9696}
     - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
     - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
-    - FLARESOLVERR_URL=http://flaresolverr:8191
+    - FLARESOLVERR_URL=${FLARESOLVERR_URL:-http://flaresolverr:8191}
     - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
-    - AIOSTREAMS_URL=http://aiostreams:3000
-    - AIOMETADATA_URL=http://aiometadata:4005
+    - AIOSTREAMS_URL=${AIOSTREAMS_URL:-http://aiostreams:3000}
+    - AIOMETADATA_URL=${AIOMETADATA_URL:-http://aiometadata:4005}
     - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
-    - POSTERSPLUS_URL=http://postersplus:8000
+    - POSTERSPLUS_URL=${POSTERSPLUS_URL:-http://postersplus:8000}
     - POSTERSPLUS_ACCESS_KEY=${POSTERSPLUS_ACCESS_KEY:-${ADDON_PASSWORD:-admin}}
-    - STREMTHRU_URL=http://stremthru:8080
+    - STREMTHRU_URL=${STREMTHRU_URL:-http://stremthru:8080}
+    - ZILEAN_URL=${ZILEAN_URL:-http://zilean:8181}
     - BASE_URL=${BASE_URL:-http://localhost:3001}
     - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}
     - PREMIUMIZE_API_KEY=${PREMIUMIZE_API_KEY:-}
@@ -446,7 +468,10 @@ services:
     - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
     command: python3 -u /init/setup_stack.py
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - stack-bootstrap
+        - bootstrap
   flaresolverr:
     image: ghcr.io/thephaseless/byparr:latest
     shm_size: 1gb
@@ -474,7 +499,9 @@ services:
     - TZ=Etc/UTC
     mem_limit: ${FLARESOLVERR_MEM_LIMIT:-1024m}
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - flaresolverr
     volumes: []
   stremthru:
     image: muniftanjim/stremthru:latest
@@ -525,7 +552,9 @@ services:
     volumes:
     - stremthru-data:/app/data
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - stremthru
     depends_on:
     - shared-redis
   cloudflared:
@@ -541,7 +570,10 @@ services:
         compress: 'true'
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - cloudflared
+        - aio-tunnel
     volumes: []
   anime-kitsu:
     restart: unless-stopped
@@ -571,7 +603,9 @@ services:
     - ANILIST_TOKEN=${ANILIST_TOKEN:-}
     - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - anime-kitsu
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-kitsu:${AIO_IMAGE_TAG:-latest}
     volumes: []
   aiometadata:
@@ -630,7 +664,9 @@ services:
     volumes:
     - aiometadata-data:/app/addon/data
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - aiometadata
     depends_on:
       shared-redis:
         condition: service_healthy
@@ -670,7 +706,9 @@ services:
     volumes:
     - lumiere-db-data:/data
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - lumiere-db
     depends_on:
       init-configs:
         condition: service_completed_successfully
@@ -698,7 +736,9 @@ services:
     volumes:
     - jikan-mongo-data:/data/db
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - jikan-mongo
   jikan-api:
     image: ghcr.io/jikan-me/jikan-rest:latest
     restart: unless-stopped
@@ -730,7 +770,9 @@ services:
     - JIKAN_MICRO_CACHING_ENABLED=${JIKAN_MICRO_CACHING_ENABLED:-true}
     - JIKAN_MICRO_CACHING_DURATION=${JIKAN_MICRO_CACHING_DURATION:-10}
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - jikan-api
     depends_on:
       jikan-mongo:
         condition: service_healthy
@@ -758,7 +800,9 @@ services:
     volumes:
     - postersplus-data:/app/cache
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - postersplus
     depends_on:
       init-configs:
         condition: service_completed_successfully
@@ -792,7 +836,10 @@ services:
     volumes:
     - subsense-data:/app/data
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - subsense
+        - stremio-subsense
     depends_on:
     - shared-redis
   shared-redis:
@@ -817,7 +864,10 @@ services:
       timeout: 3s
       retries: 5
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - shared-redis
+        - redis
   init-postgres:
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-postgres-init:${AIO_IMAGE_TAG:-latest}
     restart: 'no'
@@ -848,7 +898,9 @@ services:
       \ SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\
       \n  exit 0\nfi\n"
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - init-postgres
   shared-postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -874,7 +926,10 @@ services:
       retries: 30
       start_period: 5s
     networks:
-    - stremio-net
+      stremio-net:
+        aliases:
+        - shared-postgres
+        - postgres
 networks:
   stremio-net:
     driver: bridge

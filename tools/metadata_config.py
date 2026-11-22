@@ -50,7 +50,10 @@ def prepare_metadata_template(template, settings, existing=None):
         if "simkl" in source and "personal" in source and not keys.get("simklTokenId"):
             catalog["enabled"] = False
     poster_key = settings.get("POSTERSPLUS_ACCESS_KEY") or settings.get("ADDON_PASSWORD") or "admin"
-    poster_base = settings.get("POSTERSPLUS_URL") or "http://postersplus:8000"
+    poster_base = settings.get("POSTERSPLUS_CONTAINER_URL") or "http://postersplus:8000"
+    configured_poster = settings.get("POSTERSPLUS_URL")
+    if configured_poster and "127.0.0.1" not in configured_poster and "localhost" not in configured_poster:
+        poster_base = configured_poster
     poster_url = poster_base.rstrip("/") + "/poster?stremio_id={id}&type={type}&shape={shape}"
     poster_url += "&access_key=" + urllib.parse.quote(poster_key, safe="")
     config["customPosterUrl"] = poster_url
@@ -100,6 +103,29 @@ def request_metadata(url, data, method="POST"):
     except (TimeoutError, socket.timeout):
         raise MetadataRequestError(504) from None
     except urllib.error.URLError as error:
+        reason = getattr(error, "reason", None)
+        is_dns = isinstance(reason, socket.gaierror) or any(
+            ind in str(reason).lower()
+            for ind in ("usable address", "not known", "getaddrinfo", "gaierror", "errno -5", "errno -2")
+        )
+        if is_dns or isinstance(reason, (ConnectionRefusedError, OSError)):
+            parsed = urllib.parse.urlsplit(url)
+            if (parsed.hostname or "").lower() == "aiometadata":
+                fallback_url = urllib.parse.urlunsplit(
+                    (parsed.scheme or "http", "127.0.0.1:4005", parsed.path, parsed.query, parsed.fragment)
+                )
+                if fallback_url != url:
+                    try:
+                        fallback_req = urllib.request.Request(
+                            fallback_url, data=json.dumps(data).encode(),
+                            method=method, headers={"Content-Type": "application/json"}
+                        )
+                        with urllib.request.urlopen(fallback_req, timeout=30) as response:
+                            result = json.load(response)
+                            if isinstance(result, dict) and result.get("success") is True:
+                                return result
+                    except Exception:
+                        pass
         status = 504 if isinstance(error.reason, (TimeoutError, socket.timeout)) else 502
         raise MetadataRequestError(status) from None
     except (OSError, ValueError):
