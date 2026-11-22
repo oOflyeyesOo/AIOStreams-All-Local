@@ -102,7 +102,7 @@ COMPOSE_PROFILES=core
 | Template | File Name | Description |
 | :--- | :--- | :--- |
 | **All-Local Self-Hosted (Default)** | `all-local-selfhosted.json` | Pre-configured with Tamtaro SEL, Vidhin regexes, SeaDex anime scoring, Zilean, Torrentio, SubSense, StremThru Store, and Anime Kitsu. |
-| **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Pure Usenet configuration routing through Prowlarr Newznab, InfiniDysk WebDAV streaming, AIOMetadata, SubSense, and TsukiHime anime. |
+| **Usenet Only (NNTP & NZB)** | `usenet-only.json` | Pure Usenet configuration routing through direct Newznab presets in AIOStreams (~250ms latency, bypassing Prowlarr), InfiniDysk WebDAV streaming, AIOMetadata, SubSense, and TsukiHime anime. |
 | **Tamtaro Complete Suite** | `tamtaro-complete.json` | Full sorting and filtering suite with 100+ release groups, multilingual exclusions, and multi-indexer parsing. |
 | **Tamtaro Anime Only** | `tamtaro-anime-only.json` | Dedicated anime profile optimizing for NekoBT, Tsukihime, AnimeTosho, SubsPlease, SeaDex, and dual-audio. |
 | **Debrid Starter** | `debrid-starter.json` | Lightweight template for single-debrid setups without extended custom scrapers. |

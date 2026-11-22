@@ -831,6 +831,47 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(data.get("status"), "valid")
             self.assertIn("news.customserver.com", data.get("detail", ""))
 
+        # Test /api/test-provider endpoint with NZB provider
+        portal.save_env_updates({
+            "NZB_INDEXER_URL": "https://api.althub.co.za",
+            "NZB_INDEXER_API_KEY": "dummy_nzb_key"
+        })
+        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b"<caps><searching></searching></caps>"
+            mock_resp.status = 200
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+
+            status, body, _ = self.request(
+                "/api/test-provider", "POST",
+                {"provider": "nzb"},
+                auth=True, headers={"Content-Type": "application/json"}
+            )
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual(data.get("status"), "valid")
+            self.assertIn("api.althub.co.za", data.get("detail", ""))
+
+        # Test usenet playback failure troubleshooting string
+        with patch.object(portal, "read_saved_env", return_value={"USENET_ENABLED": "true", "USENET_HOST": "news.test", "USENET_USER": "u", "USENET_PASS": "p"}), \
+             patch.object(portal, "test_nntp_login", return_value=(True, "Authentication accepted")), \
+             patch.object(portal, "validate_provider", return_value={"status": "valid", "detail": ""}), \
+             patch.object(portal.os.path, "isfile", return_value=True), \
+             patch.object(portal.Path, "read_text", return_value='{"uuid":"fixture","encrypted_password":"fixture"}'), \
+             patch.object(portal.urllib.request, "urlopen") as mock_url:
+            mock_resp = unittest.mock.MagicMock()
+            mock_resp.read.return_value = b'{"streams": []}'
+            mock_resp.headers = {"Content-Type": "application/json"}
+            mock_resp.__enter__.return_value = mock_resp
+            mock_url.return_value = mock_resp
+            pb_result = portal.run_playback_test(mode="usenet")
+            self.assertFalse(pb_result["success"])
+            self.assertEqual(
+                pb_result["troubleshoot"],
+                "Check your NZB indexer URL and API key configuration in Portal settings / AIOStreams direct Newznab presets."
+            )
+
     def test_diagnostics_export_endpoint(self):
         with patch.object(portal, "probe_integration", return_value={
             "name": "Prowlarr", "group": "Indexers", "reachable": True,

@@ -78,10 +78,11 @@ The stack has been streamlined to a high-speed local indexing and caching archit
 
 The single-page form accepts server, port, username, password, TLS and connection
 count, plus an optional Newznab URL/API key. Connect my stack supplies the current
-InfiniDysk headless JSON schema and creates one native AIOStreams
-`Prowlarr → InfiniDysk` Usenet route. The installed indexer manager filters
-Prowlarr indexers to `protocol == torrent`; the native Usenet route selects only
-Usenet sources. This does not create a second torrent-search route.
+InfiniDysk headless JSON schema and provisions direct Newznab presets in AIOStreams
+for sub-second parallel searches (~250ms latency), bypassing Prowlarr. The installed
+indexer manager configures Prowlarr indexers strictly filtered to `protocol == torrent`,
+keeping Prowlarr 100% dedicated to torrent indexing. On-demand NNTP downloads and
+WebDAV streaming are handled by InfiniDysk.
 
 Credentials are stored in the private local environment file. Base64 encoding
 protects Compose syntax; it is not encryption. Passwords and configured manifest
@@ -95,10 +96,10 @@ fixture test:
 - Passwords containing dollar signs, quotes and `#` survived both Compose passes;
   InfiniDysk authenticated against the fixture (three successes, zero rejections).
 - Reapplying without retyping the password preserved it and created no duplicate
-  Newznab indexer. Managed address changes update the existing indexer in place.
+  Newznab indexer. Managed address changes update existing indexers in place.
 - Optional Usenet route switched on, reached healthy state, and switched off again.
 - Disabling Usenet emptied the effective provider list, disabled the managed NZB
-  indexer, omitted its native route and retained the saved credentials.
+  indexer presets, omitted its native route and retained the saved credentials.
 - Default enabled-service checks passed 21/21. This includes TCP-only probes.
 
 This verifies configuration, authentication and indexer provisioning. It does not

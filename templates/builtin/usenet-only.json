@@ -1,8 +1,8 @@
 {
   "metadata": {
     "id": "builtin.usenet-only",
-    "name": "Usenet Only (NNTP InfiniDysk & Prowlarr NZB - No Debrid)",
-    "description": "Streamlined all-local Usenet pipeline routing via Prowlarr Newznab indexers, InfiniDysk NNTP on-demand streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime.",
+    "name": "Usenet Only (NNTP InfiniDysk & Direct Newznab - No Debrid)",
+    "description": "Streamlined all-local Usenet pipeline routing via direct Newznab presets in AIOStreams, InfiniDysk NNTP on-demand streaming, AIOMetadata, SubSense subtitles, and TsukiHime anime.",
     "source": "community",
     "author": "AIOStreams-All-Local",
     "version": "1.0.0",

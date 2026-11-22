@@ -1380,6 +1380,27 @@ document.getElementById('test-saved-usenet-btn')?.addEventListener('click', asyn
   }
 });
 
+document.getElementById('test-saved-nzb-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Testing…';
+  try {
+    const res = await api('/api/test-provider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'nzb' })
+    });
+    const isValid = res.status === 'valid' || res.status === 'ok';
+    notify(isValid ? `✓ NZB indexer valid: ${res.detail}` : `✗ NZB indexer: ${res.detail}`, !isValid);
+  } catch (err) {
+    notify(`NZB indexer test failed: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
 const setupFormEl = document.getElementById('setup-form');
 if (setupFormEl) {
   setupFormEl.addEventListener('input', () => { if (typeof setFormDirty === 'function') setFormDirty(true); });

@@ -73,6 +73,9 @@ If you watch via the embedded **AIOStreams Web Player**, you only need **one pub
 > [!TIP]
 > **AIOMetadata stays 100% private and local!** AIOStreams connects to AIOMetadata directly over the internal Docker network (`stremio-net`). The client browser talks only to the Web Player. All scrapers, databases, and metadata services remain unexposed.
 
+> [!NOTE]
+> **Indexer & Scraper Architecture:** Prowlarr (`:9696`) is **100% dedicated to torrent indexing**. Usenet searches query Newznab indexers directly via native AIOStreams presets (~250ms parallel resolution), completely bypassing Prowlarr, while InfiniDysk (`:3005`) handles on-demand NNTP downloads.
+
 ```mermaid
 flowchart LR
     RemoteUser["📱 Browser / Web Player (Anywhere)"]
@@ -143,13 +146,13 @@ See [docs/ANIME-AND-PROFILES.md](docs/ANIME-AND-PROFILES.md) for application-lev
 | **Metadata & Catalogs** | AIOMetadata (`:4005`) | Rich streaming-provider catalogs (Netflix, Disney+, Apple TV+, Max, Prime, Anime) |
 | **Portal & Watchdog** | Portal (`:8088`), Controller | Setup wizard, manifest exporter, automated backups, live integration monitor |
 | **Search Index** | LumiereDB (`:8000`) | IMDb SQLite catalog search index (always up with AIOMetadata on `core` profile) |
-| **Indexers & Cache** | Prowlarr (`:9696`), Zilean (`:8181`) | Auto-provisioned torrent indexers, DMM hash cache (<100 ms lookup) |
-| **Cloudflare Bypass** | FlareSolverr (`:8191`) | Unblocks Cloudflare-protected indexers for Prowlarr |
+| **Indexers & Cache** | Prowlarr (`:9696`), Zilean (`:8181`) | Auto-provisioned torrent indexers (Prowlarr is 100% dedicated to torrents), DMM hash cache (<100 ms lookup) |
+| **Cloudflare Bypass** | FlareSolverr (`:8191`) | Unblocks Cloudflare-protected torrent indexers for Prowlarr |
 | **Artwork** | Posters+ (`:9039`) | IMDb/Trakt/MAL rating badge overlays on poster art |
 | **Subtitles** | SubSense (`:3100`) | Multi-provider subtitle aggregator (OpenSubtitles, SubSource, SubDL, YIFY) |
 | **Anime Metadata** | Anime Kitsu (`:7005`) | Kitsu → IMDb/TVDB ID mapping for correct scraper lookups |
 | **Debrid Store** | StremThru (`:8080`) | Personal debrid cloud library catalog + stream proxying |
-| **Usenet** | InfiniDysk (`:3005`) | High-throughput Usenet / WebDAV streaming engine |
+| **Usenet** | InfiniDysk (`:3005`), Native Newznab | Usenet searches run directly via native Newznab presets in AIOStreams (~250ms latency); InfiniDysk provides high-throughput NNTP / WebDAV on-demand streaming |
 | **Databases** | PostgreSQL 16, Redis 7 | Shared backends for Zilean and AIOMetadata |
 
 Trakt, Simkl, AniList, and subtitle/debrid providers are configured through the bundled services — not additional containers.

@@ -320,4 +320,33 @@ test('copy buttons for guide player url and proxy config trigger instant feedbac
   assert.equal(env.context.lastNotification, 'Remote Web Player URL copied!');
 });
 
+test('test-saved-nzb-btn calls /api/test-provider with nzb provider and notifies result', async () => {
+  const env = form({});
+  let notifyMessage = null;
+  let notifyError = null;
+  env.context.notify = (msg, isErr) => {
+    notifyMessage = msg;
+    notifyError = isErr;
+  };
+  const nzbBtnSlice = source.slice(
+    source.indexOf("document.getElementById('test-saved-nzb-btn')"),
+    source.indexOf("const setupFormEl = document.getElementById('setup-form')")
+  );
+  vm.runInContext(nzbBtnSlice, env.context);
+
+  const nzbBtn = env.document.getElementById('test-saved-nzb-btn');
+  assert.ok(nzbBtn.handlers.click, 'Expected click handler on test-saved-nzb-btn');
+
+  env.context.api = async (path, opts) => {
+    assert.equal(path, '/api/test-provider');
+    const body = JSON.parse(opts.body);
+    assert.equal(body.provider, 'nzb');
+    return { status: 'valid', detail: 'NZB indexer (api.althub.co.za) verified successfully.' };
+  };
+
+  await nzbBtn.handlers.click({ currentTarget: nzbBtn });
+  assert.match(notifyMessage, /✓ NZB indexer valid: NZB indexer/);
+  assert.equal(notifyError, false);
+});
+
 

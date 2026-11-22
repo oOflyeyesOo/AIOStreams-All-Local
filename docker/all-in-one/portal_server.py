@@ -637,7 +637,7 @@ def run_playback_test(mode=None, content_id=None, kind=None):
         else:
             if mode == "usenet":
                 stream_step.update(status="fail", detail="The NZB indexer returned no results for sample query.")
-                troubleshoot = "Check your Prowlarr NZB indexer configuration and reachability."
+                troubleshoot = "Check your NZB indexer URL and API key configuration in Portal settings / AIOStreams direct Newznab presets."
             else:
                 stream_step.update(status="fail", detail="Scrapers returned no stream results for sample title.")
                 troubleshoot = "Ensure Prowlarr or Torrentio is enabled and scrapers can reach public trackers."
@@ -1241,7 +1241,7 @@ PORTAL_API_GET_PATHS = {
 
 PORTAL_API_POST_PATHS = {
     "/api/webhook-test", "/api/setup", "/api/aiometadata/apply-template",
-    "/api/validate-provider", "/api/smoke-test", "/api/test-playback",
+    "/api/validate-provider", "/api/test-provider", "/api/smoke-test", "/api/test-playback",
     "/api/config-import", "/api/save-env", "/api/quick-setup",
     "/api/settings", "/api/env", "/api/save", "/api/restart",
     "/api/clean-cache", "/api/watchdog", "/api/backups/prune",
@@ -2453,7 +2453,7 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"success": False, "error": "Could not apply or persist the metadata preset. Check portal logs.",
                                     "errorCode": "AIOMETADATA_PRESET_FAILED"}, 500)
             return
-        if path == "/api/validate-provider":
+        if path in ("/api/validate-provider", "/api/test-provider"):
             try:
                 payload = self.read_json_body()
                 self.json_response(validate_provider(payload.get("provider"), payload.get("key")))

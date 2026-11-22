@@ -48,8 +48,9 @@ Public indexers are seeded into Prowlarr when reachable. External indexer uptime
 Cloudflare challenges and rate limits can affect results.
 
 For Usenet, enter the server, port, username, password, TLS and connection count
-on the setup page. Add a Newznab base URL/API key, or use existing Prowlarr
-indexers. Disabling Usenet stops its managed provider connections while retaining
+on the setup page. Add Newznab indexer URL/API key pairs (e.g. altHUB, DrunkenSlug),
+which are provisioned directly as native Newznab presets in AIOStreams (~250ms parallel searches),
+keeping Prowlarr 100% dedicated to torrent indexers. Disabling Usenet stops its managed provider connections while retaining
 credentials.
 
 Torrentio is enabled by default (`ENABLE_TORRENTIO=true`). Set it to `false` to

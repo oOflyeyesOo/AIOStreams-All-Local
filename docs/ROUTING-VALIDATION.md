@@ -8,14 +8,14 @@
 | Resource | Owner and path | Duplicate-work policy |
 |---|---|---|
 | Streams | Player → AIOStreams → Direct Scrapers / Torrentio / RemuxDB / StremThru Store | One combined player manifest |
-| Indexer searches | AIOStreams → Prowlarr → Torrents / Usenet | Direct native scraping with local timeout bounds |
+| Indexer searches (Torrents) | AIOStreams → Prowlarr → Torrents | Direct native scraping with local timeout bounds; Prowlarr is 100% dedicated to torrent indexers |
 | DMM hash discovery | AIOStreams → Zilean | Local PostgreSQL DMM cache (<50ms lookup) |
 | Catalogs and metadata | AIOStreams → configured AIOMetadata; Kitsu for anime catalogs/metadata | Kitsu restricted to catalog/meta; unconfigured AIOMetadata omitted |
 | Subtitles | AIOStreams → configured SubSense URL (:3100) | Multi-provider subtitles (OpenSubtitles, SubDL, SubSource) |
 | Artwork | AIOMetadata → Posters+ `/poster?stremio_id=…` | Explicit render key; portal password is not reused |
 | Personal Cloud Library | AIOStreams → StremThru Store (:8080) | Real-Debrid / TorBox / Premiumize cloud downloads mounted directly |
 | Transport & Ban Shield | AIOStreams BuiltinProxy (:3001) | Outbound connections originate from server IP only; HTTP 206 partial content |
-| Usenet | AIOStreams → Prowlarr (Newznab) → InfiniDysk (:3005) | Fixture configuration/NNTP login verified; on-demand article streaming |
+| Usenet | AIOStreams → Direct Newznab Presets (~250ms) → InfiniDysk (:3005) | Parallel native Newznab queries bypass Prowlarr; on-demand NNTP article streaming via InfiniDysk |
 
 Installing both the combined manifest and its optional standalone metadata manifest
 can duplicate catalogs. The page now says so. Public scrapers behind different
@@ -118,4 +118,4 @@ duplicate-free traffic or every integration being end-to-end verified.
 
 ## Optional-source follow-up
 
-The current default adds native Torrentio, direct Prowlarr indexing, and Zilean DMM caching, and uses a Usenet-only native Prowlarr preset when configured. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.
+The current default adds native Torrentio, direct Prowlarr torrent indexing (Prowlarr is 100% dedicated to torrents), direct Newznab presets in AIOStreams (~250ms latency), and Zilean DMM caching, routing Usenet downloads on-demand to InfiniDysk. [Measured comparisons and acceptance](OPTIONAL-SOURCES-VALIDATION.md) supersede the default-source and untested-NNTP-configuration descriptions above. Paid NNTP media decoding remains unverified.

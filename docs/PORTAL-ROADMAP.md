@@ -30,7 +30,7 @@
 ### 3. Usenet & Multi-Provider Ingress
 *Status: Completed*
 - Dedicated Usenet (NNTP) configuration for InfiniDysk on-demand streaming.
-- Automated Prowlarr Newznab indexer synchronization.
+- Automated direct Newznab preset provisioning in AIOStreams (~250ms latency) and dedicating Prowlarr strictly to torrent indexers.
 - Automatic cross-protocol failover between Debrid and Usenet sources.
 
 ### 4. Consolidated Logs & Diagnostics

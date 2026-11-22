@@ -497,7 +497,14 @@
         </fieldset>
       </template>
       <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
-        <h3>NZB indexers</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+          <h3 style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>NZB indexers</span>
+            <span class="op-badge">DIRECT AIOSTREAMS PRESET · ~250MS SEARCH</span>
+          </h3>
+          <button type="button" id="test-saved-nzb-btn" class="mini-action-btn">Test saved primary indexer</button>
+        </div>
+        <p class="field-help" style="margin-top:2px;margin-bottom:10px">NZB indexers (e.g. altHUB, DrunkenSlug, AnimeTosho) are configured directly into AIOStreams as native Newznab presets with ~250ms parallel search, while Prowlarr is dedicated 100% to torrent indexing.</p>
         <label><span class="field-label">NZB indexer base address <span>NEWZNAB</span></span><input id="nzb-indexer-url" type="url" placeholder="https://api.alttot.com or https://animetosho.org"></label>
         <div id="usenet-indexer-key-fields" class="field-grid" style="margin-top:10px"></div>
         <div id="extra-nzb-indexers"></div>

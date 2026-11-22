@@ -61,14 +61,14 @@ All media requests flow through a unified Docker bridge network (`stremio-net`).
 ### Stage 2: Stream Request Fan-Out & Aggregation
 When a user selects a title, Stremio sends a stream resolution request to AIOStreams, which coordinates a parallel fan-out across configured scrapers:
 
-1. **Prowlarr (`:9696`) & Byparr (`:8191`)**: Scrapers requiring Torznab/Newznab indexers route queries through Prowlarr. Byparr handles Cloudflare-protected indexers automatically.
+1. **Prowlarr (`:9696`) & Byparr (`:8191`)**: Prowlarr is **100% dedicated to torrent indexing** (Torznab). Byparr handles Cloudflare-protected torrent indexers automatically. Usenet/Newznab indexers bypass Prowlarr entirely, eliminating serialized multi-tracker latency overhead and Cloudflare challenge timeouts.
 
 2. **Primary Scrapers**:
    - **LumiereDB (`:8000`)**: Local SQLite search index for fast hash lookups.
    - **Zilean (`:8181`)**: Local SQLite database of cached Debrid Media Manager (DMM) torrent hashes. Resolves popular releases in <50ms.
    - **Torrentio Public Index**: When `ENABLE_TORRENTIO=true`, queries Torrentio's cloud index in ~30ms.
    - **StremThru Store (`:8080`)**: Queries the user's personal Real-Debrid / Torbox cloud for already-downloaded files.
-   - **Usenet Search (Built-in & Prowlarr)**: When enabled, searches configured Newznab indexers and Easynews.
+   - **Direct Usenet & Newznab Indexers**: When Usenet is enabled, AIOStreams queries direct Newznab indexers (e.g. altHUB, DrunkenSlug, AnimeTosho) natively in parallel with sub-second resolution (~250ms latency), completely bypassing Prowlarr, while InfiniDysk handles on-demand NNTP downloads. Easynews direct search runs alongside if configured.
 
 ---
 
@@ -130,8 +130,8 @@ FORCE_PROXY_PROXIED_SERVICES=["realdebrid","premiumize","alldebrid","torbox","de
 For users with **only a Usenet server** and **Newznab indexer(s)** without any debrid account:
 
 1. Set `STREAMING_MODE=usenet` in `.env` (or select **Usenet Only** in the Setup Portal).
-2. AIOStreams queries **Prowlarr** for Newznab NZB releases; debrid-dependent scrapers are automatically disabled.
-3. When the user presses play, AIOStreams passes the chosen NZB to **InfiniDysk** (`http://infinidysk:3000`), which streams the video over HTTP/WebDAV with full byte-range seeking.
+2. AIOStreams queries direct Newznab indexers (e.g. altHUB, DrunkenSlug, AnimeTosho) natively in parallel (~250ms latency), bypassing Prowlarr; debrid-dependent scrapers are automatically disabled, leaving Prowlarr 100% dedicated to torrent indexers.
+3. When the user presses play, AIOStreams passes the chosen NZB to **InfiniDysk** (`http://infinidysk:3000`), which handles on-demand NNTP downloads and streams the video over HTTP/WebDAV with full byte-range seeking.
 4. All playback proxies through BuiltinProxy at `${BASE_URL}/playback/...` — remote players never need direct access to InfiniDysk's internal port.
 
 ---
