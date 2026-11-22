@@ -762,6 +762,26 @@ main {
   box-shadow: 0 0 0 1px var(--accent-gold), 0 4px 16px rgba(245, 158, 11, 0.15);
 }
 
+.access-scope-section #scope-local.active {
+  border-color: #10b981;
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.16) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 0 0 1px #10b981, 0 4px 18px rgba(16, 185, 129, 0.2);
+}
+
+.access-scope-section #scope-local.active .mode-pill-title {
+  color: #34d399;
+}
+
+.access-scope-section #scope-remote.active {
+  border-color: #38bdf8;
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 0 0 1px #38bdf8, 0 4px 18px rgba(56, 189, 248, 0.2);
+}
+
+.access-scope-section #scope-remote.active .mode-pill-title {
+  color: #38bdf8;
+}
+
 .mode-pill-icon {
   font-size: 17px;
   line-height: 1;
@@ -2333,8 +2353,11 @@ footer {
     gap: 12px;
   }
   .mode-selector-pills,
-  .access-scope-section .mode-selector-pills {
+  .access-scope-section .mode-selector-pills,
+  .endpoints-grid,
+  .integrated-proxy-inputs {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
   .service-grid {
     grid-template-columns: 1fr;
@@ -2607,11 +2630,33 @@ main { max-width: 1600px; }
   flex-direction: column;
 }
 
+.endpoint-field-primary {
+  position: relative;
+}
+
+.endpoint-field-primary label .field-label span,
+.endpoint-field-primary .field-label span {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.endpoint-field-primary input {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: 0 0 14px -3px rgba(56, 189, 248, 0.12);
+}
+
+.endpoint-field-primary input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25), 0 0 18px rgba(56, 189, 248, 0.2);
+}
+
 /* Remote Access Guide Styling */
 .remote-access-guide-card {
   margin: 18px 0 20px;
   padding: 22px 24px;
-  background: linear-gradient(145deg, rgba(14, 165, 233, 0.07) 0%, rgba(15, 23, 42, 0.9) 100%);
+  background: linear-gradient(145deg, rgba(14, 165, 233, 0.08) 0%, rgba(15, 23, 42, 0.95) 100%);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.08);
@@ -2726,7 +2771,7 @@ main { max-width: 1600px; }
 .guide-steps-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
@@ -2734,19 +2779,20 @@ main { max-width: 1600px; }
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  padding: 12px 14px;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .guide-step-card:hover {
-  border-color: rgba(56, 189, 248, 0.3);
-  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.88);
+  transform: translateY(-1px);
 }
 
 .guide-step-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
@@ -2756,7 +2802,7 @@ main { max-width: 1600px; }
 
 .guide-step-title {
   color: #38bdf8;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -2777,8 +2823,8 @@ main { max-width: 1600px; }
 
 /* Integrated Reverse Proxy Config Component */
 .integrated-proxy-card {
-  background: rgba(10, 15, 23, 0.85);
-  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: rgba(10, 15, 23, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   border-radius: var(--radius-sm);
   padding: 16px 18px;
   margin-bottom: 14px;
@@ -2786,14 +2832,14 @@ main { max-width: 1600px; }
 }
 
 .integrated-proxy-header {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .proxy-header-title-group {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 
 .proxy-header-badge {
@@ -2808,7 +2854,7 @@ main { max-width: 1600px; }
 
 .proxy-header-title {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-main);
 }
@@ -2816,13 +2862,14 @@ main { max-width: 1600px; }
 .proxy-header-sub {
   font-size: 11.5px;
   color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .integrated-proxy-inputs {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .integrated-proxy-inputs .proxy-input-field {
@@ -2833,6 +2880,21 @@ main { max-width: 1600px; }
 .integrated-proxy-inputs .field-label {
   font-size: 11.5px;
   margin-bottom: 4px;
+}
+
+.field-sub-note {
+  display: block;
+  font-size: 10.5px;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.field-help-inline {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.35;
 }
 
 .integrated-proxy-actions {
@@ -2847,22 +2909,59 @@ main { max-width: 1600px; }
   margin: 0;
   font-size: 12px;
   padding: 6px 14px;
+  transition: all 0.18s ease;
+}
+
+/* External Reverse Proxy Snippet Panel */
+.proxy-snippet-container {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.proxy-snippet-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.proxy-snippet-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* Cloudflare Connector Detection & DNS Automation */
 .cf-dns-hub {
-  background: rgba(14, 23, 42, 0.7);
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(14, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.28);
   border-radius: var(--radius-sm);
-  padding: 14px 16px;
+  padding: 16px 18px;
   margin-top: 14px;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4);
+}
+
+.cf-hub-banner-title {
+  margin-bottom: 12px;
+}
+
+.cf-hub-explanation {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 5px 0 0;
 }
 
 .cf-connector-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .cf-connector-title {
@@ -2913,7 +3012,7 @@ main { max-width: 1600px; }
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: var(--radius-xs);
-  padding: 10px 14px;
+  padding: 12px 14px;
   margin-top: 10px;
 }
 

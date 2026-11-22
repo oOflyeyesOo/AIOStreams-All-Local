@@ -267,103 +267,119 @@
     <div class="access-scope-section">
       <label class="field-label">Access Scope <span>NETWORK ACCESS</span></label>
       <div class="mode-selector-pills" role="radiogroup" aria-label="Access Scope">
-        <button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Server (No Domain Required)</span></button>
-        <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access<span id="cf-host-badge" class="cf-detected-badge" style="display:none;">☁️ Connector Found</span></span><span class="mode-pill-desc">Public Domain / Tunnel / Traefik</span></button>
+        <button type="button" class="mode-pill active" id="scope-local" data-scope="local" role="radio" aria-checked="true"><span class="mode-pill-icon">🏠</span><span class="mode-pill-title">Local Access</span><span class="mode-pill-desc">LAN / Home Network (No Domain Needed)</span></button>
+        <button type="button" class="mode-pill" id="scope-remote" data-scope="remote" role="radio" aria-checked="false"><span class="mode-pill-icon">🌐</span><span class="mode-pill-title">Remote Access<span id="cf-host-badge" class="cf-detected-badge" style="display:none;">☁️ Connector Found</span></span><span class="mode-pill-desc">Cloudflare Tunnel / Reverse Proxy</span></button>
       </div>
       <div id="cf-detected-hint" style="display:none;margin-top:8px;font-size:12px;color:var(--accent-cyan);line-height:1.4;"></div>
+    </div>
+  </div>
+
+  <!-- Primary Endpoints (Web Player & Metadata) -->
+  <div class="endpoints-grid">
+    <div class="endpoint-field endpoint-field-primary">
+      <label class="field-label" for="base-url">Web Player Public Address (Port 3001) <span>PRIMARY ENDPOINT · REQUIRED</span></label>
+      <input id="base-url" name="BASE_URL" type="url" placeholder="https://watch.yourdomain.com" required spellcheck="false">
+      <p class="field-help" id="base-url-help">Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player &amp; streams.</p>
+    </div>
+    <div class="endpoint-field">
+      <label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>OPTIONAL SUBDOMAIN</span></label>
+      <input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false">
+      <p class="field-help" id="aiometa-url-help">Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!</p>
     </div>
   </div>
 
   <div id="remote-access-guide" class="remote-access-guide-card" style="display:none;">
     <div class="guide-header-badge-row">
       <div class="guide-header-badge">
-        <span class="guide-header-badge-title">🎬 Web Player Remote Access (Port 3001) - Zero Ports on Router (1 Hostname Needed)</span>
+        <span class="guide-header-badge-title">🎬 Web Player Remote Access (Port 3001)</span>
       </div>
-      <span class="guide-hostname-tag">1 HOSTNAME NEEDED</span>
+      <span class="guide-hostname-tag">Zero Router Ports · 1 Hostname Needed</span>
     </div>
     <p class="guide-intro">
-      Stream movies, anime, and series on your phone, tablet, or web browser anywhere in the world. Only <strong>Port 3001</strong> needs to be exposed &mdash; all backend scrapers, indexers, and databases stay strictly sealed.
+      Stream movies, anime, and series on your phone, tablet, or web browser anywhere in the world. Only <strong>Port 3001</strong> needs to be exposed &mdash; all backend scrapers, indexers, and databases stay strictly sealed on the private container network.
     </p>
 
     <div class="guide-playback-callout">
       <div class="playback-callout-content">
         <span class="playback-callout-icon">✨</span>
         <div class="playback-callout-text">
-          <span class="playback-callout-label">Direct Root Playback Callout:</span>
+          <span class="playback-callout-label">Web Player Direct URL:</span>
           <code id="guide-player-preview" class="guide-player-code">https://watch.yourdomain.com</code>
-          <span class="playback-callout-sub">(Root defaults directly to Web Player - no folders needed!)</span>
+          <span class="playback-callout-sub">(Root loads Web Player directly &mdash; no subpath needed!)</span>
         </div>
       </div>
       <button type="button" class="mini-action-btn" id="btn-copy-guide-player-url" style="margin:0;font-size:11px;padding:4px 10px;">Copy Player URL 📋</button>
     </div>
 
+    <!-- Quick Steps: Direct UI Guidance (Zero .env editing) -->
     <div class="guide-steps-grid">
       <div class="guide-step-card">
         <div class="guide-step-header">
-          <span class="guide-step-icon">☁️</span>
-          <strong class="guide-step-title">1. Tunnel / Proxy Setup</strong>
+          <span class="guide-step-icon">1️⃣</span>
+          <strong class="guide-step-title">1. Choose Connection Method</strong>
         </div>
         <p class="guide-step-desc">
-          In Cloudflare Zero Trust: <em>Networks &rarr; Tunnels &rarr; Add Tunnel</em>. Copy token into <code>.env</code> as <code>CLOUDFLARE_TUNNEL_TOKEN=...</code> (or use Caddy / Nginx / Traefik).
+          Use the built-in <strong>Cloudflare Zero-Trust Tunnel</strong> below (recommended &mdash; zero router ports to forward), or generate configuration for your <strong>External Reverse Proxy</strong> (Caddy, Nginx, Traefik).
         </p>
       </div>
       <div class="guide-step-card">
         <div class="guide-step-header">
-          <span class="guide-step-icon">🧭</span>
-          <strong class="guide-step-title">2. Route to Port 3001</strong>
+          <span class="guide-step-icon">2️⃣</span>
+          <strong class="guide-step-title">2. Paste Token or Copy Config</strong>
         </div>
         <p class="guide-step-desc">
-          Subdomain: <code>watch</code> &rarr; Domain: <code>yourdomain.com</code> &rarr; Service: <code>HTTP</code> &rarr; URL: <code>aiostreams:3000</code> (Exposes Port 3001).
+          Paste your tunnel token into the <strong>Cloudflare Tunnel Token</strong> box below and select <strong>Save Tunnel Token 💾</strong>, or copy the generated reverse proxy snippet. No manual file editing required!
         </p>
       </div>
       <div class="guide-step-card">
         <div class="guide-step-header">
-          <span class="guide-step-icon">🚀</span>
-          <strong class="guide-step-title">3. Enter Address &amp; Connect</strong>
+          <span class="guide-step-icon">3️⃣</span>
+          <strong class="guide-step-title">3. Set Public URL &amp; Connect</strong>
         </div>
         <p class="guide-step-desc">
-          Set AIOStreams address below to <code>https://watch.yourdomain.com</code> and click <em>Connect my stack</em>. Root URL loads Web Player directly.
+          Confirm your public domain in the <strong>Web Player Public Address</strong> box above, then click <strong>Connect my stack</strong>. Root visits open the Web Player immediately!
         </p>
       </div>
     </div>
 
+    <!-- Integrated Connection Methods & Routing Card -->
     <div class="integrated-proxy-card" id="proxy-config-details">
       <div class="integrated-proxy-header">
         <div class="proxy-header-title-group">
-          <span class="proxy-header-badge">PROXY</span>
-          <h4 class="proxy-header-title">Reverse proxy config</h4>
+          <span class="proxy-header-badge">CONNECTION METHODS</span>
+          <h4 class="proxy-header-title">Configure Remote Routing</h4>
         </div>
-        <span class="proxy-header-sub">Generates ready-to-use reverse proxy routing snippets for your external domain.</span>
+        <span class="proxy-header-sub">Choose between the built-in Zero-Trust tunnel container or generate snippets for your external reverse proxy.</span>
       </div>
+
       <div class="integrated-proxy-inputs">
         <div class="proxy-input-field">
           <label class="field-label" for="proxy-url">External Domain / Base URL</label>
-          <input id="proxy-url" type="url" placeholder="https://aio.yourdomain.com" aria-label="Reverse proxy external base URL">
+          <input id="proxy-url" type="url" placeholder="https://watch.yourdomain.com" aria-label="Reverse proxy external base URL">
+          <span class="field-sub-note">Synced with your Web Player Public Address above</span>
         </div>
         <div class="proxy-input-field">
-          <label class="field-label" for="proxy-format">Proxy Format</label>
+          <label class="field-label" for="proxy-format">Connection Method</label>
           <select id="proxy-format" aria-label="Reverse proxy configuration format">
-            <option value="cloudflare">Cloudflare Tunnel (Zero-Trust)</option>
-            <option value="caddy">Caddy</option>
-            <option value="nginx">Nginx</option>
-            <option value="traefik">Traefik</option>
+            <option value="cloudflare" selected>☁️ Cloudflare Zero-Trust Tunnel (Built-in, Zero Router Ports)</option>
+            <option value="caddy">🔒 Caddy Reverse Proxy</option>
+            <option value="nginx">⚡ Nginx Reverse Proxy</option>
+            <option value="traefik">🚦 Traefik Ingress</option>
           </select>
+          <span class="field-sub-note">Select method to view configuration &amp; controls</span>
         </div>
       </div>
-      <div class="integrated-proxy-actions">
-        <button id="generate-proxy" class="light-button" type="button">Generate snippet ↗</button>
-        <button id="copy-proxy-config" class="light-button" type="button">Copy Config 📋</button>
-      </div>
-      <div class="op-console">
-        <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
-        <pre id="proxy-output" class="mono-code" aria-live="polite"><code>Not generated yet.</code></pre>
-      </div>
 
-      <!-- Cloudflare Zero-Trust & Host Connector Hub -->
-      <div id="cloudflare-automation-panel" class="cf-dns-hub" style="margin-top:14px;">
-        <div class="cf-connector-header">
-          <span class="cf-connector-title">☁️ Cloudflare Host Connectors &amp; Automated DNS</span>
-          <button type="button" id="btn-scan-cf-connectors" class="mini-action-btn" title="Scan Docker for running Cloudflare connectors">Scan Host ↻</button>
+      <!-- Cloudflare Zero-Trust & Host Connector Hub (Active when format === 'cloudflare') -->
+      <div id="cloudflare-automation-panel" class="cf-dns-hub">
+        <div class="cf-hub-banner-title">
+          <div class="cf-connector-header">
+            <span class="cf-connector-title">☁️ Built-in Cloudflare Tunnel &amp; Automated DNS</span>
+            <button type="button" id="btn-scan-cf-connectors" class="mini-action-btn" title="Scan Docker for running Cloudflare connectors">Scan Host ↻</button>
+          </div>
+          <p class="cf-hub-explanation">
+            Secure remote streaming with zero open router ports and no static IP needed. Enter your tunnel token directly below &mdash; the portal automatically saves and manages the container for you.
+          </p>
         </div>
 
         <div id="cf-connectors-banner" class="cf-connector-banner" style="display:none;">
@@ -372,11 +388,11 @@
 
         <!-- Zero-Token 1-Click CNAME Card -->
         <div id="cf-cname-guide-card" class="cf-cname-copy-box" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <strong style="color:#38bdf8;font-size:12px;">Zero-Token Setup: Copy CNAME to Cloudflare DNS</strong>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+            <strong style="color:#38bdf8;font-size:12px;">Zero-Token Setup: Copy CNAME Record to Cloudflare DNS</strong>
             <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer" class="mini-action-btn" style="text-decoration:none;font-size:11px;">Open Cloudflare DNS ↗</a>
           </div>
-          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px 0;">No API token needed! In Cloudflare (where your Zone ID is shown), click <strong>DNS → Add record</strong>:</p>
+          <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px 0;">No API token needed! In Cloudflare Dashboard, navigate to <strong>DNS &rarr; Records &rarr; Add record</strong>:</p>
           <div class="cf-cname-row">
             <span>Type: <code>CNAME</code></span>
             <span>Name: <code id="cf-cname-subdomain">watch</code></span>
@@ -386,18 +402,21 @@
           </div>
         </div>
 
-        <div class="field-grid" style="margin-top:10px;">
+        <div class="field-grid" style="margin-top:12px;">
           <label>
-            <span class="field-label">Cloudflare Tunnel Token <span>TOKEN</span></span>
-            <input id="cf-tunnel-token" type="password" autocomplete="new-password" placeholder="eyJhIjoi... (from Cloudflare Zero Trust)">
+            <span class="field-label">Cloudflare Tunnel Token <span>DIRECT INPUT</span></span>
+            <input id="cf-tunnel-token" type="password" autocomplete="new-password" placeholder="eyJhIjoi... (paste token from Cloudflare Zero Trust)">
+            <span class="field-help-inline">Direct input &mdash; saved automatically to stack config. No manual .env editing required.</span>
           </label>
           <label>
             <span class="field-label">Cloudflare Zone ID (Optional) <span>ZONE ID</span></span>
             <input id="cf-zone-id" type="text" autocomplete="off" placeholder="Found on domain Overview page in Cloudflare">
+            <span class="field-help-inline">Only needed for automated DNS record creation via API.</span>
           </label>
           <label style="grid-column:1 / -1;">
-            <span class="field-label">Cloudflare API Token (Optional: only needed if pushing DNS via API) <span>OPTIONAL</span></span>
-            <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Optional: Cloudflare API Token with Zone.DNS:Edit permissions">
+            <span class="field-label">Cloudflare API Token (Optional) <span>AUTO-DNS ONLY</span></span>
+            <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Cloudflare API Token with Zone.DNS:Edit permissions">
+            <span class="field-help-inline">Leave blank if creating the CNAME record manually using the 1-click target above.</span>
           </label>
         </div>
 
@@ -405,7 +424,7 @@
           <span class="cf-dns-meta-badge" id="cf-token-meta-text"></span>
         </div>
 
-        <div class="integrated-proxy-actions" style="margin-top:12px;margin-bottom:0;">
+        <div class="integrated-proxy-actions" style="margin-top:14px;margin-bottom:0;">
           <button type="button" id="btn-save-cf-token" class="light-button">Save Tunnel Token 💾</button>
           <button type="button" id="btn-start-cf-tunnel" class="light-button">Start Local Tunnel ▶</button>
           <button type="button" id="btn-push-cf-dns" class="light-button" style="border-color:rgba(56,189,248,0.4);color:#38bdf8;">Push DNS to Cloudflare 🚀</button>
@@ -413,27 +432,29 @@
 
         <div id="cf-dns-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--radius-xs);font-size:12px;background:rgba(255,255,255,0.03);border:1px solid var(--line);"></div>
       </div>
+
+      <!-- External Reverse Proxy Snippet Panel -->
+      <div class="proxy-snippet-container" id="proxy-snippet-container">
+        <div class="proxy-snippet-toolbar">
+          <span class="proxy-snippet-title">Configuration Snippet</span>
+          <div class="integrated-proxy-actions" style="margin-bottom:0;">
+            <button id="generate-proxy" class="light-button" type="button">Generate snippet ↗</button>
+            <button id="copy-proxy-config" class="light-button" type="button">Copy Config 📋</button>
+          </div>
+        </div>
+        <div class="op-console">
+          <div class="op-console-header"><span>proxy · config</span><span class="code-dot">● ● ●</span></div>
+          <pre id="proxy-output" class="mono-code" aria-live="polite"><code>Not generated yet.</code></pre>
+        </div>
+      </div>
     </div>
 
     <div class="guide-isolation-callout">
       <span class="isolation-icon">🔒</span>
       <div class="isolation-content">
-        <strong class="isolation-title">Local Isolation:</strong> AIOMetadata, Prowlarr, Zilean, StremThru, Bitmagnet remain 100% private on <code>stremio-net</code>.
-        <p class="isolation-sub">Only Port 3001 (Web Player / streams) is exposed externally. All indexing databases and credential keys remain completely private.</p>
+        <strong class="isolation-title">Local Network Isolation &amp; Privacy:</strong>
+        <p class="isolation-sub">AIOMetadata, Prowlarr, Zilean, StremThru, and Bitmagnet remain 100% private on <code>stremio-net</code>. Only Port 3001 (Web Player / streams) is exposed externally. All indexing databases and credential keys remain completely private.</p>
       </div>
-    </div>
-  </div>
-
-  <div class="endpoints-grid">
-    <div class="endpoint-field">
-      <label class="field-label" for="base-url">AIOStreams / Web Player address (Port 3001) <span>REQUIRED</span></label>
-      <input id="base-url" name="BASE_URL" type="url" placeholder="https://aio.yourdomain.com" required spellcheck="false">
-      <p class="field-help" id="base-url-help">Attach your public domain or Cloudflare Tunnel to port 3001 on your reverse proxy for Web Player &amp; streams.</p>
-    </div>
-    <div class="endpoint-field">
-      <label class="field-label" for="aiometadata-host">AIOMetadata address (Port 4005) <span>OPTIONAL SUBDOMAIN</span></label>
-      <input id="aiometadata-host" name="AIOMETADATA_HOST" type="url" placeholder="https://aiometa.yourdomain.com" spellcheck="false">
-      <p class="field-help" id="aiometa-url-help">Optional subdomain: only needed for native Stremio app outside home. Keep local when using the Web Player!</p>
     </div>
   </div>
 </div>
@@ -553,7 +574,7 @@
       <label class="field-label" for="aiometadata-template">Metadata catalog template <span>PRESET</span></label>
       <div class="template-actions">
         <button type="button" id="copy-template-json" class="mini-action-btn" title="Copy template JSON to clipboard">Copy JSON ⧉</button>
-        <a id="download-template-json" class="mini-action-btn" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json" title="Download template JSON file">Grab JSON ↓</a>
+        <a id="download-template-json" class="mini-action-btn" href="/templates/aiometadata-configs/tamtaro-aiometadata-with-anime.json" download="tamtaro-aiometadata-with-anime.json" title="Download template JSON file">Download JSON ↓</a>
       </div>
     </div>
     <select id="aiometadata-template" name="AIOMETADATA_TEMPLATE">
