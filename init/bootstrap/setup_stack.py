@@ -2463,8 +2463,6 @@ def run_stream_diagnostics(config_info, aiometadata_manifest=None):
     else:
         err_msg = aiom_res.get("message", str(aiom_res)) if isinstance(aiom_res, dict) else str(aiom_res)
         print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {err_msg} (optional service)", flush=True)
-        err_msg = aiom_res.get("message", str(aiom_res)) if isinstance(aiom_res, dict) else str(aiom_res)
-        print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {err_msg} (optional service)", flush=True)
 
     # 4. Test AIOStreams Manifest Availability (Both Direct & Alias)
     uuid = config_info.get("uuid")
