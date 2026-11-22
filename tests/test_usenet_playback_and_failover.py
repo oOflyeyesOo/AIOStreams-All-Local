@@ -134,6 +134,36 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         self.assertEqual(len(sliced), 1024)
         self.assertTrue(sliced.startswith(bytes.fromhex("1a45dfa3")))
 
+    def test_usenet_moves_to_direct_newznab_presets_and_dedicates_prowlarr_to_torrents(self):
+        """Usenet indexers are provisioned as direct Newznab presets in AIOStreams and Prowlarr is torrent-only."""
+        with patch.object(bootstrap, 'PREMIUMIZE_API_KEY', ''), \
+             patch.object(bootstrap, 'REALDEBRID_API_KEY', ''), \
+             patch.object(bootstrap, 'TORBOX_API_KEY', ''), \
+             patch.dict(bootstrap.os.environ, {
+                 'USENET_ENABLED': 'true',
+                 'USENET_HOST': 'news.example.com',
+                 'USENET_USER': 'testuser',
+                 'USENET_PASS': 'testpass',
+                 'NZB_INDEXER_URL': 'https://api.althub.co.za',
+                 'NZB_INDEXER_API_KEY': 'test_althub_key',
+             }):
+            config = bootstrap.build_default_config(probe_services=False)
+
+        presets = config.get("presets", [])
+        newznab_presets = [p for p in presets if p.get("type") == "newznab"]
+        self.assertTrue(len(newznab_presets) >= 1)
+        althub = next((p for p in newznab_presets if "althub" in p.get("instanceId", "")), None)
+        self.assertIsNotNone(althub)
+        self.assertTrue(althub.get("enabled"))
+        self.assertEqual(althub.get("options", {}).get("api", {}).get("apiKey"), "test_althub_key")
+        self.assertEqual(althub.get("options", {}).get("services"), ["nzbdav"])
+
+        # Verify Prowlarr presets never include usenet sources
+        prowlarr_presets = [p for p in presets if p.get("type") == "prowlarr"]
+        for p in prowlarr_presets:
+            sources = p.get("options", {}).get("sources", [])
+            self.assertNotIn("usenet", sources)
+
 
 if __name__ == "__main__":
     unittest.main()

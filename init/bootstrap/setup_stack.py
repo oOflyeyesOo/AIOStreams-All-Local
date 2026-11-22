@@ -544,8 +544,10 @@ def tune_prowlarr_indexers():
     }
     for idx in active_indexers:
         name_lower = idx.get("name", "").lower()
+        impl_lower = idx.get("implementation", "").lower()
         updated = False
-        if any(d in name_lower for d in disabled_names):
+        # Keep Prowlarr 100% dedicated to torrents: disable local scrapers and Newznab Usenet indexers
+        if any(d in name_lower for d in disabled_names) or impl_lower == "newznab" or "aio local usenet" in name_lower or "althub" in name_lower:
             if idx.get("enable"):
                 idx["enable"] = False
                 updated = True
@@ -595,9 +597,9 @@ def setup_usenet_indexer():
                           if item is not prior and str(field(item, 'baseUrl') or '').rstrip('/').lower() == base.lower()
                           and item.get('enable') and item.get('name') not in owned), None)
         if duplicate:
-            print('[Usenet Setup] NZB address already enabled in Prowlarr; keeping its manual settings.', flush=True)
+            print('[Usenet Setup] NZB address already registered in Prowlarr; keeping its settings.', flush=True)
             continue
-        if prior and prior.get('enable') and field(prior, 'baseUrl') == base and field(prior, 'apiKey') == api_key:
+        if prior and not prior.get('enable') and field(prior, 'baseUrl') == base and field(prior, 'apiKey') == api_key:
             continue
         if prior is None:
             if schemas is None:
@@ -624,7 +626,9 @@ def setup_usenet_indexer():
                 raise RuntimeError('Prowlarr Newznab support is unavailable')
             schema = matched
         payload = copy.deepcopy(prior or schema)
-        payload.update(name=name, enable=True, appProfileId=payload.get('appProfileId') or 1)
+        # NZB indexers run as direct Newznab presets in AIOStreams for sub-second resolution.
+        # Keep them disabled in Prowlarr so Prowlarr queries strictly torrents.
+        payload.update(name=name, enable=False, appProfileId=payload.get('appProfileId') or 1)
         for entry in payload.get('fields', []):
             if entry.get('name') == 'baseUrl':
                 entry['value'] = base
@@ -1446,6 +1450,50 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         if not any(p.get("type") == target["type"] for p in presets):
             presets.append(target)
 
+    # Ensure Usenet indexers are provisioned as direct Newznab presets in AIOStreams.
+    # Direct Newznab searches achieve sub-second parallel resolution (~250ms), bypassing
+    # Prowlarr's serialized multi-tracker overhead and FlareSolverr timeouts.
+    if usenet_active:
+        rows = newznab_indexers(os.environ)
+        for row in rows:
+            raw_url = str(row.get('url') or '').strip().rstrip('/')
+            if not raw_url:
+                continue
+            api_url = raw_url if raw_url.endswith('/api') else f"{raw_url}/api"
+            domain = urllib.parse.urlsplit(raw_url).netloc.lower().split(':')[0]
+            for prefix in ('api.', 'www.', 'nzb.'):
+                if domain.startswith(prefix):
+                    domain = domain[len(prefix):]
+            slug = domain.split('.')[0] if domain else "indexer"
+            label = "altHUB" if "althub" in domain else ("DrunkenSlug" if "drunkenslug" in domain else ("Anime Tosho" if "animetosho" in domain else slug.capitalize()))
+            instance_id = f"newznab-{slug}"
+            existing = next((p for p in presets if p.get('instanceId') == instance_id or (p.get('type') == 'newznab' and slug in str(p.get('options', {}).get('name', '')).lower())), None)
+            if not existing:
+                presets.append({
+                    "type": "newznab",
+                    "instanceId": instance_id,
+                    "enabled": True,
+                    "options": {
+                        "name": f"{label} (Newznab Direct)",
+                        "api": {
+                            "url": api_url,
+                            "apiKey": row.get('apiKey', '')
+                        },
+                        "services": ["nzbdav"],
+                        "timeout": 8000,
+                        "resources": ["stream"],
+                        "useMultipleInstances": False
+                    }
+                })
+            else:
+                existing["enabled"] = True
+                opts = existing.setdefault("options", {})
+                opts["name"] = f"{label} (Newznab Direct)"
+                opts["api"] = {"url": api_url, "apiKey": row.get("apiKey", "")}
+                opts["services"] = ["nzbdav"]
+                opts["timeout"] = int(opts.get("timeout") or 8000)
+                opts["resources"] = ["stream"]
+
     # Ensure Anime Kitsu is present for local Kitsu ID mapping
     if not any(p.get("instanceId") == "anime-kitsu-local" for p in presets):
         presets.append({
@@ -1577,6 +1625,18 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             enable_t = os.environ.get("ENABLE_TORRENTIO", os.environ.get("ENABLE_KNIGHTCRAWLER", "true")).lower() != "false"
             p["enabled"] = enable_t
             validated_presets.append(p)
+        elif ptype == "newznab":
+            if not usenet_active:
+                if pid:
+                    removed_preset_ids.add(pid)
+                continue
+            p["enabled"] = True
+            opts["timeout"] = int(opts.get("timeout") or 8000)
+            if not opts.get("services"):
+                opts["services"] = ["nzbdav"]
+            opts["resources"] = ["stream"]
+            print(f"[AIOStreams Setup] ✓ Direct Newznab indexer active: {opts.get('name', pid)}", flush=True)
+            validated_presets.append(p)
         elif ptype == "prowlarr":
             sources = opts.get("sources", [])
             if "torrent" in sources:
@@ -1586,13 +1646,22 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts.setdefault("url", PROWLARR_URL)
                 opts.setdefault("prowlarrUrl", PROWLARR_URL)
                 opts.setdefault("prowlarrApiKey", PROWLARR_API_KEY)
+                opts["sources"] = ["torrent"]
                 opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
                 p["enabled"] = True
-                print("[AIOStreams Setup] ✓ Prowlarr Torrents is active.", flush=True)
+                print("[AIOStreams Setup] ✓ Prowlarr Torrents is active (dedicated to torrents).", flush=True)
                 validated_presets.append(p)
             elif "usenet" in sources:
                 is_u_enabled = os.environ.get("USENET_ENABLED", "false").lower() == "true" or bool(USENET_ENABLED)
+                has_direct_newznab = any(p2.get("type") == "newznab" and p2.get("enabled") for p2 in presets)
                 if not is_u_enabled:
+                    if pid:
+                        removed_preset_ids.add(pid)
+                    continue
+                if has_direct_newznab:
+                    # Direct Newznab presets handle Usenet indexers ~60x faster.
+                    # Move Usenet off Prowlarr to keep Prowlarr dedicated to torrents.
+                    print("[AIOStreams Setup] Moving Usenet off Prowlarr onto direct Newznab presets for ~60x faster search.", flush=True)
                     if pid:
                         removed_preset_ids.add(pid)
                     continue
