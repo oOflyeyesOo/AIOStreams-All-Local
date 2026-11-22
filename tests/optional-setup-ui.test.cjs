@@ -558,4 +558,160 @@ test('loadExtraUsenetSources and readExtraUsenetSources unify NZB indexers and p
   assert.equal(savedKeys.has('NZB_INDEXER_API_KEY'), false);
 });
 
+test('setup-form and loadSettings preserve saved Cloudflare credentials and submit newly entered tokens', async () => {
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-123',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: '84144369-15de-4d76-a2a5-48faea71a4f0',
+      cname_target: '84144369-15de-4d76-a2a5-48faea71a4f0.cfargotunnel.com'
+    }
+  });
+
+  await vm.runInContext('loadSettings()', env.context);
+  assert.equal(env.nodes.get('cf-zone-id').value, 'zone-123');
+  assert.equal(env.nodes.get('cf-api-token').placeholder, 'Saved · enter to replace');
+  assert.equal(env.nodes.get('cf-tunnel-token').placeholder, 'Saved · enter to replace');
+  assert.equal(env.nodes.get('cf-token-meta-preview').style.display, 'block');
+  assert.match(env.nodes.get('cf-token-meta-text').textContent, /84144369-15de-4d76-a2a5-48faea71a4f0/);
+  assert.equal(env.nodes.get('cf-cname-guide-card').style.display, 'block');
+  assert.equal(env.nodes.get('cf-cname-target').textContent, '84144369-15de-4d76-a2a5-48faea71a4f0.cfargotunnel.com');
+
+  // Submit without modifying tokens: saved tokens must not be wiped
+  await env.nodes.get('setup-form').handlers.submit({ preventDefault() {} });
+  const save1 = env.calls.find(c => c.path === '/api/save-env').payload;
+  assert.equal(save1.CLOUDFLARE_ZONE_ID, 'zone-123');
+  assert.equal('CLOUDFLARE_TUNNEL_TOKEN' in save1, false, 'Saved tunnel token should not be wiped');
+  assert.equal('CLOUDFLARE_API_TOKEN' in save1, false, 'Saved API token should not be wiped');
+
+  // Submit with newly typed tokens: should sanitize tunnel token and include both
+  env.calls.length = 0;
+  env.nodes.get('cf-tunnel-token').value = 'cloudflared.exe service install --token eyJhIjoiYWJjIn0=';
+  env.nodes.get('cf-api-token').value = 'cf-api-token-new';
+  await env.nodes.get('setup-form').handlers.submit({ preventDefault() {} });
+  const save2 = env.calls.find(c => c.path === '/api/save-env').payload;
+  assert.equal(save2.CLOUDFLARE_TUNNEL_TOKEN, 'eyJhIjoiYWJjIn0=');
+  assert.equal(save2.CLOUDFLARE_API_TOKEN, 'cf-api-token-new');
+});
+
+test('btn-save-cf-token notifies when token is already saved or prompts when empty', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_TUNNEL_TOKEN_SAVED: true
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+
+  await vm.runInContext('loadSettings()', env.context);
+
+  // 1. Empty input when already saved
+  env.nodes.get('cf-tunnel-token').value = '';
+  await env.nodes.get('btn-save-cf-token').handlers.click();
+  assert.match(lastNotification, /already saved in configuration/);
+
+  // 2. Empty input when not saved
+  env.context.cachedEnv.CLOUDFLARE_TUNNEL_TOKEN_SAVED = false;
+  env.nodes.get('cf-tunnel-token').placeholder = '';
+  await env.nodes.get('btn-save-cf-token').handlers.click();
+  assert.match(lastNotification, /Enter a Cloudflare Tunnel Token/);
+
+  // 3. New token entered -> saves sanitized token
+  env.calls.length = 0;
+  env.nodes.get('cf-tunnel-token').value = '--token eyJhIjoiOTk5In0=';
+  await env.nodes.get('btn-save-cf-token').handlers.click();
+  const saveCall = env.calls.find(c => c.path === '/api/save-env');
+  assert.equal(saveCall.payload.CLOUDFLARE_TUNNEL_TOKEN, 'eyJhIjoiOTk5In0=');
+  assert.equal(env.nodes.get('cf-tunnel-token').placeholder, 'Saved · enter to replace');
+});
+
+test('btn-start-cf-tunnel saves new token or proceeds directly when token is already saved', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_TUNNEL_TOKEN_SAVED: true
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+
+  await vm.runInContext('loadSettings()', env.context);
+
+  // 1. Token already saved and input empty: starts tunnel container directly
+  env.calls.length = 0;
+  env.nodes.get('cf-tunnel-token').value = '';
+  await env.nodes.get('btn-start-cf-tunnel').handlers.click({ currentTarget: env.nodes.get('btn-start-cf-tunnel') });
+  assert.equal(env.calls.some(c => c.path === '/api/cloudflare/tunnel' && c.payload.action === 'start'), true);
+  assert.equal(env.calls.some(c => c.path === '/api/save-env'), false);
+
+  // 2. New token typed in input: saves first, then starts tunnel container
+  env.calls.length = 0;
+  env.nodes.get('cf-tunnel-token').value = 'eyJ0IjoiMTIzIn0=';
+  await env.nodes.get('btn-start-cf-tunnel').handlers.click({ currentTarget: env.nodes.get('btn-start-cf-tunnel') });
+  assert.equal(env.calls[0].path, '/api/save-env');
+  assert.equal(env.calls[0].payload.CLOUDFLARE_TUNNEL_TOKEN, 'eyJ0IjoiMTIzIn0=');
+  assert.equal(env.calls.some(c => c.path === '/api/cloudflare/tunnel' && c.payload.action === 'start'), true);
+
+  // 3. Not saved and input empty: prompts user to enter token
+  env.calls.length = 0;
+  env.context.cachedEnv.CLOUDFLARE_TUNNEL_TOKEN_SAVED = false;
+  env.nodes.get('cf-tunnel-token').placeholder = '';
+  env.nodes.get('cf-tunnel-token').value = '';
+  await env.nodes.get('btn-start-cf-tunnel').handlers.click({ currentTarget: env.nodes.get('btn-start-cf-tunnel') });
+  assert.match(lastNotification, /enter your Cloudflare Tunnel Token/i);
+  assert.equal(env.calls.length, 0);
+});
+
+test('btn-push-cf-dns rejects private/local IP hostnames and resolves cname_target from metadata', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-xyz',
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: 'auto-tunnel-id',
+      cname_target: 'auto-tunnel-id.cfargotunnel.com'
+    }
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+
+  await vm.runInContext('loadSettings()', env.context);
+
+  // 1. Private/local IP rejection
+  env.nodes.get('base-url').value = 'http://192.168.1.100:3001';
+  env.nodes.get('cf-api-token').value = 'api-token-valid';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+  assert.match(lastNotification, /Cloudflare DNS requires a public domain name/);
+  assert.equal(env.calls.length, 0);
+
+  // 2. Localhost rejection
+  lastNotification = '';
+  env.nodes.get('base-url').value = 'http://localhost:8088';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+  assert.match(lastNotification, /Cloudflare DNS requires a public domain name/);
+  assert.equal(env.calls.length, 0);
+
+  // 3. Public domain with empty tunnel token input resolves cname_target from metadata
+  env.calls.length = 0;
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  env.nodes.get('cf-tunnel-token').value = '';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+  const pushCall = env.calls.find(c => c.path === '/api/cloudflare/push-dns');
+  assert.ok(pushCall);
+  assert.equal(pushCall.payload.hostname, 'watch.customdomain.org');
+  assert.equal(pushCall.payload.cname_target, 'auto-tunnel-id.cfargotunnel.com');
+  assert.equal(pushCall.payload.zone_id, 'zone-xyz');
+});
+
+
 
