@@ -349,4 +349,213 @@ test('test-saved-nzb-btn calls /api/test-provider with nzb provider and notifies
   assert.equal(notifyError, false);
 });
 
+test('detectIndexerName auto-detects known indexers and falls back to domain or generic', () => {
+  const detectSlice = source.slice(
+    source.indexOf('function detectIndexerName('),
+    source.indexOf('function addUsenetSource(')
+  );
+  const context = vm.createContext({ URL });
+  vm.runInContext(detectSlice, context);
+
+  assert.equal(context.detectIndexerName('https://drunkenslug.com'), 'DrunkenSlug');
+  assert.equal(context.detectIndexerName('https://api.althub.co.za'), 'altHUB');
+  assert.equal(context.detectIndexerName('https://animetosho.org'), 'AnimeTosho');
+  assert.equal(context.detectIndexerName('https://api.nzbgeek.info'), 'NZBGeek');
+  assert.equal(context.detectIndexerName('https://nzbplanet.net'), 'NZBPlanet');
+  assert.equal(context.detectIndexerName('https://nzbfinder.ws'), 'NZBFinder');
+  assert.equal(context.detectIndexerName('https://ninja-central.com'), 'NinjaCentral');
+  assert.equal(context.detectIndexerName('https://custom-index.org'), 'Custom-index');
+  assert.equal(context.detectIndexerName(''), 'NZB Indexer');
+});
+
+test('individual NZB indexer test button passes url, key, and id, providing visual feedback', async () => {
+  const nzbLogic = source.slice(
+    source.indexOf('const extraUsenetSources = ['),
+    source.indexOf('async function loadSettings(options) {')
+  );
+
+  let capturedApiCall = null;
+  let notifiedMsg = null;
+  let notifiedErr = null;
+
+  const mockUrlInput = { value: 'https://drunkenslug.com', placeholder: '', dataset: { sourceField: 'url' }, addEventListener(t, h) { this['on' + t] = h; } };
+  const mockKeyInput = { value: '', placeholder: 'Saved · enter to replace', dataset: { sourceField: 'apiKey' }, required: false, addEventListener(t, h) { this['on' + t] = h; } };
+  const mockNameEl = { textContent: '' };
+  const mockStatusBadge = { textContent: '', style: {} };
+  const mockFeedbackEl = { textContent: '', style: {} };
+  const mockTestBtn = { disabled: false, textContent: 'Test indexer', handlers: {}, addEventListener(t, h) { this.handlers[t] = h; } };
+  const mockRemoveBtn = { handlers: {}, addEventListener(t, h) { this.handlers[t] = h; } };
+
+  const mockRow = {
+    dataset: { sourceId: 'slug-1' },
+    querySelector(sel) {
+      if (sel === '[data-source-field="url"]') return mockUrlInput;
+      if (sel === '[data-source-field="apiKey"]') return mockKeyInput;
+      if (sel === '[data-indexer-name]') return mockNameEl;
+      if (sel === '[data-indexer-status]') return mockStatusBadge;
+      if (sel === '[data-indexer-feedback]') return mockFeedbackEl;
+      if (sel === '[data-test-indexer]') return mockTestBtn;
+      if (sel === '[data-remove-source]') return mockRemoveBtn;
+      return null;
+    },
+    querySelectorAll(sel) {
+      if (sel.includes('[data-indexer-name]')) return [mockNameEl];
+      if (sel === '[data-source-field]') return [mockUrlInput, mockKeyInput];
+      return [];
+    }
+  };
+
+  const list = { children: [], append(r) { this.children.push(r); }, replaceChildren() { this.children = []; } };
+  const template = { content: { firstElementChild: { cloneNode: () => mockRow } } };
+
+  const dom = {
+    'extra-nzb-indexers': list,
+    'add-nzb-indexer': { disabled: false, addEventListener() {} },
+    'nzb-indexer-row': template,
+    'nzb-indexer-url': { value: '' },
+    'NZB_INDEXER_API_KEY': { value: '' }
+  };
+
+  const context = vm.createContext({
+    URL,
+    document: { getElementById: (id) => dom[id] || null },
+    notify: (msg, isErr) => { notifiedMsg = msg; notifiedErr = isErr; },
+    api: async (path, opts) => {
+      capturedApiCall = { path, body: JSON.parse(opts.body) };
+      return { status: 'valid', detail: 'NZB indexer (drunkenslug.com) verified successfully.' };
+    },
+    setFormDirty: () => {},
+    savedKeys: new Set(['NZB_INDEXER_API_KEY'])
+  });
+
+  vm.runInContext(nzbLogic, context);
+
+  // Add the row as saved secret
+  const extraSources = vm.runInContext('extraUsenetSources', context);
+  const row = context.addUsenetSource(extraSources.find(s => s.key === 'USENET_EXTRA_INDEXERS'), {
+    id: 'slug-1',
+    url: 'https://drunkenslug.com',
+    secretSaved: true
+  });
+
+  assert.equal(mockNameEl.textContent, 'DrunkenSlug');
+  assert.ok(mockTestBtn.handlers.click, 'Expected click handler on Test indexer button');
+
+  // Trigger test click
+  await mockTestBtn.handlers.click({ preventDefault() {} });
+
+  assert.equal(capturedApiCall.path, '/api/test-provider');
+  assert.equal(capturedApiCall.body.provider, 'nzb');
+  assert.equal(capturedApiCall.body.url, 'https://drunkenslug.com');
+  assert.equal(capturedApiCall.body.key, 'saved');
+  assert.equal(capturedApiCall.body.id, 'slug-1');
+
+  assert.equal(mockStatusBadge.textContent, 'VALID');
+  assert.match(mockFeedbackEl.textContent, /drunkenslug\.com/);
+  assert.match(notifiedMsg, /✓ DrunkenSlug valid: NZB indexer/);
+  assert.equal(notifiedErr, false);
+});
+
+test('loadExtraUsenetSources and readExtraUsenetSources unify NZB indexers and preserve backward compatibility', () => {
+  const nzbLogic = source.slice(
+    source.indexOf('const extraUsenetSources = ['),
+    source.indexOf('async function loadSettings(options) {')
+  );
+
+  const list = { children: [], append(r) { this.children.push(r); }, replaceChildren() { this.children = []; } };
+
+  function makeMockRow(data = {}) {
+    const urlInput = { value: data.url || '', dataset: { sourceField: 'url' }, placeholder: '', addEventListener() {} };
+    const keyInput = { value: data.apiKey || '', dataset: { sourceField: 'apiKey' }, placeholder: '', required: false, addEventListener() {} };
+    const nameEl = { textContent: '' };
+    const badge = { textContent: '', style: {} };
+    const feedback = { textContent: '', style: {} };
+    const testBtn = { handlers: {}, addEventListener() {} };
+    const removeBtn = { handlers: {}, addEventListener() {} };
+    return {
+      dataset: { ...(data.id ? { sourceId: data.id } : {}) },
+      querySelector(sel) {
+        if (sel === '[data-source-field="url"]') return urlInput;
+        if (sel === '[data-source-field="apiKey"]') return keyInput;
+        if (sel === '[data-indexer-name]') return nameEl;
+        if (sel === '[data-indexer-status]') return badge;
+        if (sel === '[data-indexer-feedback]') return feedback;
+        if (sel === '[data-test-indexer]') return testBtn;
+        if (sel === '[data-remove-source]') return removeBtn;
+        return null;
+      },
+      querySelectorAll(sel) {
+        if (sel.includes('[data-indexer-name]')) return [nameEl];
+        if (sel === '[data-source-field]') return [urlInput, keyInput];
+        return [];
+      }
+    };
+  }
+
+  const template = {
+    content: {
+      firstElementChild: {
+        cloneNode: () => makeMockRow()
+      }
+    }
+  };
+
+  const hiddenUrl = { value: '' };
+  const hiddenKey = { value: '' };
+  const dom = {
+    'extra-nzb-indexers': list,
+    'add-nzb-indexer': { disabled: false, addEventListener() {} },
+    'nzb-indexer-row': template,
+    'nzb-indexer-url': hiddenUrl,
+    'NZB_INDEXER_API_KEY': hiddenKey
+  };
+
+  const savedKeys = new Set(['NZB_INDEXER_API_KEY']);
+  const context = vm.createContext({
+    URL,
+    document: { getElementById: (id) => dom[id] || null },
+    notify: () => {},
+    api: async () => ({ status: 'valid' }),
+    setFormDirty: () => {},
+    savedKeys
+  });
+
+  vm.runInContext(nzbLogic, context);
+
+  // 1. Loading with NZB_INDEXER_URL and extra indexers
+  context.loadExtraUsenetSources({
+    NZB_INDEXER_URL: 'https://drunkenslug.com',
+    configuredKeys: ['NZB_INDEXER_API_KEY'],
+    USENET_EXTRA_INDEXERS: [
+      { id: 'alt-id', url: 'https://api.althub.co.za', secretSaved: true }
+    ]
+  });
+
+  assert.equal(list.children.length, 2);
+  assert.equal(list.children[0].querySelector('[data-source-field="url"]').value, 'https://drunkenslug.com');
+  assert.equal(list.children[0].querySelector('[data-indexer-name]').textContent, 'DrunkenSlug');
+  assert.equal(list.children[1].querySelector('[data-source-field="url"]').value, 'https://api.althub.co.za');
+  assert.equal(list.children[1].querySelector('[data-indexer-name]').textContent, 'altHUB');
+
+  // 2. Saving unified indexers: row 0 -> NZB_INDEXER_URL, rows 1..N -> USENET_EXTRA_INDEXERS
+  const payload = {};
+  context.readExtraUsenetSources(payload);
+
+  assert.equal(payload.NZB_INDEXER_URL, 'https://drunkenslug.com');
+  assert.equal(hiddenUrl.value, 'https://drunkenslug.com');
+  assert.equal('NZB_INDEXER_API_KEY' in payload, false, 'Saved key without replacement should be preserved');
+  assert.equal(payload.USENET_EXTRA_INDEXERS.length, 1);
+  assert.equal(payload.USENET_EXTRA_INDEXERS[0].id, 'alt-id');
+  assert.equal(payload.USENET_EXTRA_INDEXERS[0].url, 'https://api.althub.co.za');
+
+  // 3. Saving when all indexers removed
+  list.children = [];
+  const emptyPayload = {};
+  context.readExtraUsenetSources(emptyPayload);
+  assert.equal(emptyPayload.NZB_INDEXER_URL, '');
+  assert.equal(emptyPayload.NZB_INDEXER_API_KEY, '');
+  assert.equal(emptyPayload.USENET_EXTRA_INDEXERS.length, 0);
+  assert.equal(savedKeys.has('NZB_INDEXER_API_KEY'), false);
+});
+
 

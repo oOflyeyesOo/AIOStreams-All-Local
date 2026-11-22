@@ -257,22 +257,148 @@ const extraUsenetSources = [
   { key: 'USENET_EXTRA_INDEXERS', list: 'extra-nzb-indexers', template: 'nzb-indexer-row', add: 'add-nzb-indexer', secret: 'apiKey' },
 ];
 
+function detectIndexerName(url) {
+  if (!url || typeof url !== 'string') return 'NZB Indexer';
+  const raw = url.toLowerCase().trim();
+  if (!raw) return 'NZB Indexer';
+  if (raw.includes('drunkenslug')) return 'DrunkenSlug';
+  if (raw.includes('althub') || raw.includes('alttot')) return 'altHUB';
+  if (raw.includes('animetosho')) return 'AnimeTosho';
+  if (raw.includes('nzbgeek')) return 'NZBGeek';
+  if (raw.includes('nzbplanet')) return 'NZBPlanet';
+  if (raw.includes('nzbfinder')) return 'NZBFinder';
+  if (raw.includes('ninja-central') || raw.includes('ninjacentral')) return 'NinjaCentral';
+  if (raw.includes('omgwtfnzbs')) return 'OMGWTFNZBs';
+  if (raw.includes('tabula-rasa')) return 'Tabula Rasa';
+  if (raw.includes('miatrix')) return 'Miatrix';
+  if (raw.includes('simplynzbs')) return 'SimplyNZBs';
+  try {
+    const parsed = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    const host = parsed.hostname;
+    if (host) {
+      const parts = host.replace(/^api\./, '').split('.');
+      const main = parts.length > 1 ? parts[parts.length - 2] : parts[0];
+      if (main) return main.charAt(0).toUpperCase() + main.slice(1);
+    }
+  } catch {}
+  return 'NZB Indexer';
+}
+
 function addUsenetSource(source, saved = {}) {
   const list = document.getElementById(source.list);
   const template = document.getElementById(source.template);
   if (!list || !template || list.children.length >= 12) return;
   const row = template.content.firstElementChild.cloneNode(true);
   if (saved.id) row.dataset.sourceId = saved.id;
+  if (saved.secretSaved) row.dataset.secretSaved = 'true';
   for (const input of row.querySelectorAll('[data-source-field]')) {
     const field = input.dataset.sourceField;
     if (field === source.secret) {
-      input.placeholder = saved.secretSaved ? 'Saved · enter to replace' : '';
+      input.placeholder = saved.secretSaved ? 'Saved · enter to replace' : (field === 'apiKey' ? 'API key or Saved · enter to replace' : '');
       input.required = !saved.secretSaved;
     } else if (field in saved) {
       if (input.type === 'checkbox') input.checked = saved[field];
       else input.value = saved[field];
     }
   }
+
+  if (source.key === 'USENET_EXTRA_INDEXERS') {
+    const urlInput = row.querySelector('[data-source-field="url"]');
+    const keyInput = row.querySelector('[data-source-field="apiKey"]');
+    const nameEls = row.querySelectorAll('[data-indexer-name], [data-indexer-legend]');
+    const statusBadge = row.querySelector('[data-indexer-status]');
+    const feedbackEl = row.querySelector('[data-indexer-feedback]');
+    const testBtn = row.querySelector('[data-test-indexer]');
+
+    const updateName = () => {
+      const detected = detectIndexerName(urlInput?.value?.trim() || '');
+      nameEls.forEach(el => { el.textContent = detected; });
+    };
+    updateName();
+    urlInput?.addEventListener('input', updateName);
+    urlInput?.addEventListener('change', updateName);
+
+    if (testBtn) {
+      testBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const url = urlInput?.value?.trim() || '';
+        if (!url) {
+          notify('Enter an NZB indexer base address first.', true);
+          urlInput?.focus();
+          return;
+        }
+        let keyVal = keyInput?.value?.trim() || '';
+        const isSecretSaved = saved.secretSaved || row.dataset.secretSaved === 'true';
+        if (!keyVal && isSecretSaved) {
+          keyVal = 'saved';
+        }
+        if (!keyVal) {
+          notify('Enter an API key for this NZB indexer.', true);
+          keyInput?.focus();
+          return;
+        }
+
+        testBtn.disabled = true;
+        const origText = testBtn.textContent;
+        testBtn.textContent = 'Testing…';
+        if (statusBadge) {
+          statusBadge.style.display = 'inline-block';
+          statusBadge.textContent = 'TESTING…';
+          statusBadge.style.color = 'var(--text-muted)';
+        }
+        if (feedbackEl) {
+          feedbackEl.style.display = 'block';
+          feedbackEl.textContent = 'Connecting to indexer…';
+          feedbackEl.style.color = 'var(--text-muted)';
+        }
+
+        try {
+          const payload = {
+            provider: 'nzb',
+            url: url,
+            key: keyVal
+          };
+          if (row.dataset.sourceId) payload.id = row.dataset.sourceId;
+          const res = await api('/api/test-provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const isValid = res.status === 'valid' || res.status === 'ok';
+          const indexerName = detectIndexerName(url);
+          const detailMsg = res.detail || (isValid ? 'Verified successfully' : 'Validation failed');
+          if (statusBadge) {
+            statusBadge.style.display = 'inline-block';
+            statusBadge.textContent = isValid ? 'VALID' : 'INVALID';
+            statusBadge.style.color = isValid ? '#34d399' : '#f87171';
+          }
+          if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.textContent = detailMsg;
+            feedbackEl.style.color = isValid ? '#34d399' : '#f87171';
+          }
+          notify(isValid ? `✓ ${indexerName} valid: ${detailMsg}` : `✗ ${indexerName}: ${detailMsg}`, !isValid);
+        } catch (err) {
+          const indexerName = detectIndexerName(url);
+          if (statusBadge) {
+            statusBadge.style.display = 'inline-block';
+            statusBadge.textContent = 'ERROR';
+            statusBadge.style.color = '#f87171';
+          }
+          if (feedbackEl) {
+            feedbackEl.style.display = 'block';
+            feedbackEl.textContent = err.message;
+            feedbackEl.style.color = '#f87171';
+          }
+          notify(`${indexerName} test failed: ${err.message}`, true);
+        } finally {
+          testBtn.disabled = false;
+          testBtn.textContent = origText;
+        }
+      });
+    }
+  }
+
   row.querySelector('[data-remove-source]').addEventListener('click', () => {
     row.remove();
     document.getElementById(source.add).disabled = false;
@@ -288,7 +414,22 @@ function loadExtraUsenetSources(settings) {
     document.getElementById(source.list)?.replaceChildren();
     const button = document.getElementById(source.add);
     if (button) button.disabled = false;
-    for (const row of settings[source.key] || []) addUsenetSource(source, row);
+    if (source.key === 'USENET_EXTRA_INDEXERS') {
+      const extraRows = settings[source.key] || [];
+      if (settings.NZB_INDEXER_URL) {
+        const primaryUrl = settings.NZB_INDEXER_URL.trim();
+        const hasNzbKey = (typeof savedKeys !== 'undefined' && savedKeys.has('NZB_INDEXER_API_KEY')) || (settings.configuredKeys && settings.configuredKeys.includes('NZB_INDEXER_API_KEY'));
+        addUsenetSource(source, { url: primaryUrl, secretSaved: !!hasNzbKey });
+        for (const row of extraRows) {
+          if (row.url && row.url.trim().toLowerCase() === primaryUrl.toLowerCase()) continue;
+          addUsenetSource(source, row);
+        }
+      } else {
+        for (const row of extraRows) addUsenetSource(source, row);
+      }
+    } else {
+      for (const row of settings[source.key] || []) addUsenetSource(source, row);
+    }
   }
 }
 
@@ -296,16 +437,62 @@ function readExtraUsenetSources(payload) {
   for (const source of extraUsenetSources) {
     const list = document.getElementById(source.list);
     if (!list) continue;
-    payload[source.key] = Array.from(list.children, row => {
-      const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
-      for (const input of row.querySelectorAll('[data-source-field]')) {
-        const field = input.dataset.sourceField;
-        const val = input.type === 'checkbox' ? input.checked : (input.value ? input.value.trim() : '');
-        if (field === source.secret && !val) continue;
-        values[field] = val;
+    if (source.key === 'USENET_EXTRA_INDEXERS') {
+      const rows = Array.from(list.children);
+      if (rows.length === 0) {
+        payload.NZB_INDEXER_URL = '';
+        payload.NZB_INDEXER_API_KEY = '';
+        if (typeof savedKeys !== 'undefined') savedKeys.delete('NZB_INDEXER_API_KEY');
+        const hiddenKeyInput = document.getElementById('NZB_INDEXER_API_KEY');
+        if (hiddenKeyInput) hiddenKeyInput.value = '';
+        const hiddenUrlInput = document.getElementById('nzb-indexer-url');
+        if (hiddenUrlInput) hiddenUrlInput.value = '';
+        payload.USENET_EXTRA_INDEXERS = [];
+      } else {
+        const row0 = rows[0];
+        const url0 = row0.querySelector('[data-source-field="url"]')?.value?.trim() || '';
+        const key0 = row0.querySelector('[data-source-field="apiKey"]')?.value?.trim() || '';
+        payload.NZB_INDEXER_URL = url0;
+        const hiddenUrlInput = document.getElementById('nzb-indexer-url');
+        if (hiddenUrlInput) hiddenUrlInput.value = url0;
+
+        const isRow0Saved = row0.dataset.secretSaved === 'true';
+        const hiddenKeyInput = document.getElementById('NZB_INDEXER_API_KEY');
+        if (key0) {
+          payload.NZB_INDEXER_API_KEY = key0;
+          if (hiddenKeyInput) hiddenKeyInput.value = key0;
+        } else if (isRow0Saved) {
+          if (typeof savedKeys !== 'undefined') savedKeys.add('NZB_INDEXER_API_KEY');
+          if (hiddenKeyInput) hiddenKeyInput.value = '';
+        } else {
+          payload.NZB_INDEXER_API_KEY = '';
+          if (typeof savedKeys !== 'undefined') savedKeys.delete('NZB_INDEXER_API_KEY');
+          if (hiddenKeyInput) hiddenKeyInput.value = '';
+        }
+
+        payload.USENET_EXTRA_INDEXERS = rows.slice(1).map(row => {
+          const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
+          for (const input of row.querySelectorAll('[data-source-field]')) {
+            const field = input.dataset.sourceField;
+            const val = input.value ? input.value.trim() : '';
+            if (field === 'apiKey' && !val) continue;
+            values[field] = val;
+          }
+          return values;
+        });
       }
-      return values;
-    });
+    } else {
+      payload[source.key] = Array.from(list.children, row => {
+        const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
+        for (const input of row.querySelectorAll('[data-source-field]')) {
+          const field = input.dataset.sourceField;
+          const val = input.type === 'checkbox' ? input.checked : (input.value ? input.value.trim() : '');
+          if (field === source.secret && !val) continue;
+          values[field] = val;
+        }
+        return values;
+      });
+    }
   }
 }
 
@@ -340,9 +527,9 @@ async function loadSettings(options) {
   usenetPasswordSaved=!!env.USENET_PASSWORD_SAVED;
   document.getElementById('usenet-pass').value='';
   document.getElementById('usenet-pass').placeholder=usenetPasswordSaved?'Saved · enter to replace':'Usenet password';
-  if (typeof loadExtraUsenetSources === 'function') loadExtraUsenetSources(env);
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
+  if (typeof loadExtraUsenetSources === 'function') loadExtraUsenetSources(env);
   for (const key of savedKeys) {
     const input = document.getElementById(key);
     if (input) input.closest('label').hidden = false;
