@@ -103,8 +103,10 @@ try:
     assert PASSWORD not in Path('/app/.env').read_text()
     apply()
     config=installed_profile()
-    route=next(p for p in config['presets'] if p.get('type')=='newznab' and 'portal' in p.get('instanceId',''))
-    assert route['options']['services']==['aiostreams']
+    direct_routes=[p for p in config['presets'] if p.get('type')=='newznab' and 'portal' in p.get('instanceId','')]
+    assert len(direct_routes)==2 and all(p['enabled'] for p in direct_routes)
+    for route in direct_routes:
+        assert route['options']['services']==['aiostreams']
     assert not any(p['type'] in ('torrentio','comet') for p in config['presets'])
 
     def aiostreams_dashboard_headers():
@@ -135,7 +137,7 @@ try:
         return [x for x in indexers() if x.get('implementation')=='Newznab' and any(
             f.get('name')=='baseUrl' and f.get('value')==f'http://portal:{port}' for f in x.get('fields',[]))]
     assert len(matches())==len(matches(18886))==1 and matches()[0]['protocol']=='usenet'
-    assert matches(18886)[0]['enable']
+    assert not matches()[0]['enable'] and not matches(18886)[0]['enable'], 'NZB indexers in Prowlarr must remain disabled so Prowlarr queries strictly torrents'
     assert portal('/api/save-env',{'USENET_ENABLED':'true','USENET_USER':USER})['success']
     apply()
     assert len(matches())==len(matches(18886))==1

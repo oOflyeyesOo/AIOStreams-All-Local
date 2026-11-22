@@ -1418,21 +1418,27 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not raw_url:
                 continue
             api_url = raw_url if raw_url.endswith('/api') else f"{raw_url}/api"
-            domain = urllib.parse.urlsplit(raw_url).netloc.lower().split(':')[0]
+            parsed = urllib.parse.urlsplit(raw_url)
+            domain = parsed.netloc.lower().split(':')[0]
             for prefix in ('api.', 'www.', 'nzb.'):
                 if domain.startswith(prefix):
                     domain = domain[len(prefix):]
             slug = domain.split('.')[0] if domain else "indexer"
+            port = parsed.port
+            port_suffix = f"-{port}" if port and port not in (80, 443) else ""
+            name_suffix = f" ({port})" if port and port not in (80, 443) else ""
             label = "altHUB" if "althub" in domain else ("DrunkenSlug" if "drunkenslug" in domain else ("Anime Tosho" if "animetosho" in domain else slug.capitalize()))
-            instance_id = f"newznab-{slug}"
-            existing = next((p for p in presets if p.get('instanceId') == instance_id or (p.get('type') == 'newznab' and slug in str(p.get('options', {}).get('name', '')).lower())), None)
+            instance_id = f"newznab-{slug}{port_suffix}"
+            existing = next((p for p in presets if p.get('instanceId') == instance_id or (
+                p.get('type') == 'newznab' and p.get('options', {}).get('api', {}).get('url', '').rstrip('/') == api_url.rstrip('/')
+            )), None)
             if not existing:
                 presets.append({
                     "type": "newznab",
                     "instanceId": instance_id,
                     "enabled": True,
                     "options": {
-                        "name": f"{label} (Newznab Direct)",
+                        "name": f"{label}{name_suffix} (Newznab Direct)",
                         "api": {
                             "url": api_url,
                             "apiKey": row.get('apiKey', '')
@@ -1446,7 +1452,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             else:
                 existing["enabled"] = True
                 opts = existing.setdefault("options", {})
-                opts["name"] = f"{label} (Newznab Direct)"
+                opts["name"] = f"{label}{name_suffix} (Newznab Direct)"
                 opts["api"] = {"url": api_url, "apiKey": row.get("apiKey", "")}
                 opts["services"] = ["aiostreams"]
                 opts["timeout"] = int(opts.get("timeout") or 8000)
