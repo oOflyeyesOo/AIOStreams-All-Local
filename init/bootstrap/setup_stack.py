@@ -21,8 +21,8 @@ import urllib.error
 import urllib.parse
 import tempfile
 import copy
-import ipaddress
 import socket
+import ipaddress
 from pathlib import Path
 
 # Source Compose mounts the checkout at /app and the entry script at /init.
@@ -313,18 +313,46 @@ def make_request(url, method="GET", data=None, headers=None, timeout=12, max_red
     }
     if headers:
         default_headers.update(headers)
-    body = json.dumps(data).encode("utf-8") if (data is not None and not isinstance(data, (bytes, bytearray))) else data
-    req = urllib.request.Request(url, data=body, headers=default_headers, method=method)
+    try:
+        body = json.dumps(data).encode("utf-8") if (data is not None and not isinstance(data, (bytes, bytearray))) else data
+        req = urllib.request.Request(url, data=body, headers=default_headers, method=method)
+    except Exception as e:
+        return {"error": -1, "message": f"Invalid request configuration: {e}"}
+
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             content = resp.read().decode("utf-8", errors="ignore")
-            return json.loads(content) if content.strip().startswith(("{", "[")) else {"status": resp.status, "text": content}
+            if content.strip().startswith(("{", "[")):
+                try:
+                    return json.loads(content)
+                except Exception:
+                    return {"status": resp.status, "text": content}
+            return {"status": resp.status, "text": content}
     except urllib.error.HTTPError as e:
         if e.code in (301, 302, 307, 308) and e.headers.get("Location") and max_redirects > 0:
             redirect_url = urllib.parse.urljoin(url, e.headers.get("Location"))
             return make_request(redirect_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects - 1, allow_fallback=allow_fallback)
-        err_msg = e.read().decode("utf-8", errors="ignore")
+        err_msg = ""
+        try:
+            err_msg = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            err_msg = str(e)
         return {"error": e.code, "message": err_msg}
+    except urllib.error.URLError as e:
+        if allow_fallback:
+            reason = getattr(e, "reason", None)
+            is_conn_err = isinstance(reason, (ConnectionRefusedError, OSError)) or isinstance(e, (ConnectionRefusedError, OSError))
+            if is_dns_error(e) or is_conn_err:
+                fallback_url = get_service_fallback_url(url)
+                if fallback_url and fallback_url != url:
+                    try:
+                        return make_request(fallback_url, method=method, data=data, headers=headers, timeout=timeout, max_redirects=max_redirects, allow_fallback=False)
+                    except Exception:
+                        pass
+        reason = getattr(e, "reason", e)
+        return {"error": -1, "message": f"Connection failed ({reason})"}
+    except (TimeoutError, socket.timeout) as e:
+        return {"error": -1, "message": f"Request timed out after {timeout}s: {e}"}
     except Exception as e:
         if allow_fallback:
             reason = getattr(e, "reason", None)
@@ -339,10 +367,10 @@ def make_request(url, method="GET", data=None, headers=None, timeout=12, max_red
         return {"error": -1, "message": str(e)}
 
 def is_url_reachable(url, timeout=2.0, allow_fallback=True):
-    if not url:
+    if not url or not isinstance(url, str):
         return False
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "AIOStreams-Probe/1.0", "Accept": "*/*"})
+        req = urllib.request.Request(url.strip(), headers={"User-Agent": "AIOStreams-Probe/1.0", "Accept": "*/*"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status in (200, 301, 302)
     except Exception as e:
@@ -410,7 +438,8 @@ def setup_prowlarr_auth():
                 host_cfg["authenticationMethod"] = "external"
                 host_cfg["authenticationRequired"] = "disabledForLocalAddresses"
                 res = make_request(f"{PROWLARR_URL}/api/v1/config/host/{host_cfg['id']}", method="PUT", data=host_cfg, headers=headers)
-                print(f"[Prowlarr Setup] ✓ Prowlarr authentication method updated to 'external': {res.get('authenticationMethod')}", flush=True)
+                updated_auth = res.get('authenticationMethod') if isinstance(res, dict) else res
+                print(f"[Prowlarr Setup] ✓ Prowlarr authentication method updated to 'external': {updated_auth}", flush=True)
             else:
                 print("[Prowlarr Setup] ✓ Prowlarr authentication method is already external.", flush=True)
     except Exception as e:
@@ -421,7 +450,7 @@ def setup_prowlarr_flaresolverr():
     proxies = make_request(f"{PROWLARR_URL}/api/v1/indexerproxy", headers=headers)
     if isinstance(proxies, list):
         for p in proxies:
-            if p.get("implementation", "").lower() == "flaresolverr" or "flaresolverr" in p.get("name", "").lower():
+            if isinstance(p, dict) and (p.get("implementation", "").lower() == "flaresolverr" or "flaresolverr" in p.get("name", "").lower()):
                 print("[Prowlarr Setup] ✓ FlareSolverr proxy is already registered.", flush=True)
                 return
 
@@ -448,12 +477,13 @@ def setup_prowlarr_indexers():
     existing_definitions = set()
     if isinstance(existing_indexers, list):
         for idx in existing_indexers:
-            def_name = idx.get("definitionName", "").lower()
-            name = idx.get("name", "").lower()
-            if def_name:
-                existing_definitions.add(def_name)
-            if name:
-                existing_definitions.add(name)
+            if isinstance(idx, dict):
+                def_name = idx.get("definitionName", "").lower()
+                name = idx.get("name", "").lower()
+                if def_name:
+                    existing_definitions.add(def_name)
+                if name:
+                    existing_definitions.add(name)
 
     print(f"[Prowlarr Setup] Currently active indexers in Prowlarr: {len(existing_indexers) if isinstance(existing_indexers, list) else 0}", flush=True)
     schemas = make_request(f"{PROWLARR_URL}/api/v1/indexer/schema", headers=headers, timeout=60)
@@ -521,6 +551,8 @@ def setup_prowlarr_indexers():
 
         matched_schema = None
         for schema in schemas:
+            if not isinstance(schema, dict):
+                continue
             s_def = schema.get("definitionName", "").lower()
             s_name = schema.get("name", "").lower()
             if s_def in (target_lower, target_lookup) or s_name in (target_lower, target_lookup):
@@ -540,7 +572,7 @@ def setup_prowlarr_indexers():
 
     # Ensure Zilean local DMM Torznab indexer is provisioned for instant debrid cache hits
     if not any("zilean" in d for d in existing_definitions):
-        torznab_schema = next((s for s in schemas if s.get("implementation") == "Torznab"), None)
+        torznab_schema = next((s for s in schemas if isinstance(s, dict) and s.get("implementation") == "Torznab"), None)
         if torznab_schema:
             z_payload = dict(torznab_schema)
             z_payload["name"] = "Zilean DMM (Local)"
@@ -549,12 +581,13 @@ def setup_prowlarr_indexers():
             z_payload["priority"] = 1
             z_payload["appProfileId"] = 1
             for f in z_payload.get("fields", []):
-                if f.get("name") == "baseUrl":
-                    f["value"] = f"{ZILEAN_URL}/torznab"
-                elif f.get("name") == "apiPath":
-                    f["value"] = "/api"
-                elif f.get("name") == "apiKey":
-                    f["value"] = PROWLARR_API_KEY
+                if isinstance(f, dict):
+                    if f.get("name") == "baseUrl":
+                        f["value"] = f"{ZILEAN_URL}/torznab"
+                    elif f.get("name") == "apiPath":
+                        f["value"] = "/api"
+                    elif f.get("name") == "apiKey":
+                        f["value"] = PROWLARR_API_KEY
             res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=z_payload, headers=headers)
             if isinstance(res, dict) and "id" in res:
                 print("[Prowlarr Setup] ✓ Successfully provisioned Zilean DMM local Torznab indexer.", flush=True)
@@ -563,7 +596,7 @@ def setup_prowlarr_indexers():
     # Ensure Bitmagnet local Torznab indexer is provisioned if reachable or configured
     bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
     if not any("bitmagnet" in d for d in existing_definitions):
-        torznab_schema = next((s for s in schemas if s.get("implementation") == "Torznab"), None)
+        torznab_schema = next((s for s in schemas if isinstance(s, dict) and s.get("implementation") == "Torznab"), None)
         if torznab_schema and (is_url_reachable(bitmagnet_url, timeout=1.0) or is_url_reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or os.environ.get("BITMAGNET_URL")):
             b_payload = dict(torznab_schema)
             b_payload["name"] = "Bitmagnet (Torznab Local)"
@@ -572,12 +605,13 @@ def setup_prowlarr_indexers():
             b_payload["priority"] = 2
             b_payload["appProfileId"] = 1
             for f in b_payload.get("fields", []):
-                if f.get("name") == "baseUrl":
-                    f["value"] = f"{bitmagnet_url}/torznab"
-                elif f.get("name") == "apiPath":
-                    f["value"] = "/api"
-                elif f.get("name") == "apiKey":
-                    f["value"] = os.environ.get("BITMAGNET_API_KEY", "") or PROWLARR_API_KEY
+                if isinstance(f, dict):
+                    if f.get("name") == "baseUrl":
+                        f["value"] = f"{bitmagnet_url}/torznab"
+                    elif f.get("name") == "apiPath":
+                        f["value"] = "/api"
+                    elif f.get("name") == "apiKey":
+                        f["value"] = os.environ.get("BITMAGNET_API_KEY", "") or PROWLARR_API_KEY
             res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=b_payload, headers=headers)
             if isinstance(res, dict) and "id" in res:
                 print("[Prowlarr Setup] ✓ Successfully provisioned Bitmagnet Torznab local indexer.", flush=True)
@@ -622,6 +656,8 @@ def tune_prowlarr_indexers():
         "torrentdownload": 30,
     }
     for idx in active_indexers:
+        if not isinstance(idx, dict):
+            continue
         name_lower = idx.get("name", "").lower()
         impl_lower = idx.get("implementation", "").lower()
         updated = False
@@ -655,23 +691,28 @@ def setup_usenet_indexer():
     existing = make_request(endpoint, headers=headers)
     if not isinstance(existing, list):
         raise RuntimeError('Prowlarr indexer inventory is unavailable')
-    indexers = [item for item in existing if item.get('implementation') == 'Newznab']
+    indexers = [item for item in existing if isinstance(item, dict) and item.get('implementation') == 'Newznab']
     managed_name = 'AIO Local Usenet'
-    owned = {item['name']: item for item in indexers
-             if re.fullmatch(r'AIO Local Usenet(?: \[aio:[a-f0-9]{32}\])?', item.get('name', ''))}
+    owned = {item.get('name'): item for item in indexers
+             if isinstance(item, dict) and item.get('name') and re.fullmatch(r'AIO Local Usenet(?: \[aio:[a-f0-9]{32}\])?', item.get('name', ''))}
     schemas = None
     errors = 0
     keep = set()
 
     def field(item, name):
-        return next((entry.get('value') for entry in item.get('fields', []) if entry.get('name') == name), None)
+        if not isinstance(item, dict):
+            return None
+        return next((entry.get('value') for entry in item.get('fields', []) if isinstance(entry, dict) and entry.get('name') == name), None)
 
     for row in rows:
-        name = f"{managed_name} [aio:{row['id']}]" if row['id'] else managed_name
+        if not isinstance(row, dict):
+            continue
+        row_id = row.get('id')
+        name = f"{managed_name} [aio:{row_id}]" if row_id else managed_name
         keep.add(name)
         prior = owned.get(name)
-        base = row['url']
-        api_key = row['apiKey']
+        base = row.get('url', '')
+        api_key = row.get('apiKey', '')
         duplicate = next((item for item in indexers
                           if item is not prior and str(field(item, 'baseUrl') or '').rstrip('/').lower() == base.lower()
                           and item.get('enable') and item.get('name') not in owned), None)
@@ -692,15 +733,15 @@ def setup_usenet_indexer():
             slug = domain.split('.')[0]
             matched = None
             if slug and len(slug) >= 3:
-                matched = next((s for s in schemas if s.get('implementation') == 'Newznab' and (
+                matched = next((s for s in schemas if isinstance(s, dict) and s.get('implementation') == 'Newznab' and (
                     slug in s.get('definitionName', '').lower() or slug in s.get('name', '').lower()
                 )), None)
             if matched is None:
-                matched = next((s for s in schemas if s.get('implementation') == 'Newznab' and (
+                matched = next((s for s in schemas if isinstance(s, dict) and s.get('implementation') == 'Newznab' and (
                     'generic' in s.get('name', '').lower() or s.get('definitionName', '').lower() == 'newznab'
                 )), None)
             if matched is None:
-                matched = next((s for s in schemas if s.get('implementation') == 'Newznab'), None)
+                matched = next((s for s in schemas if isinstance(s, dict) and s.get('implementation') == 'Newznab'), None)
             if matched is None:
                 raise RuntimeError('Prowlarr Newznab support is unavailable')
             schema = matched
@@ -709,20 +750,21 @@ def setup_usenet_indexer():
         # Keep them disabled in Prowlarr so Prowlarr queries strictly torrents.
         payload.update(name=name, enable=False, appProfileId=payload.get('appProfileId') or 1)
         for entry in payload.get('fields', []):
-            if entry.get('name') == 'baseUrl':
-                entry['value'] = base
-            elif entry.get('name') == 'apiKey':
-                entry['value'] = api_key
+            if isinstance(entry, dict):
+                if entry.get('name') == 'baseUrl':
+                    entry['value'] = base
+                elif entry.get('name') == 'apiKey':
+                    entry['value'] = api_key
         if not prior:
             payload.pop('id', None)
-        path = f"{endpoint}/{prior['id']}" if prior else endpoint
+        path = f"{endpoint}/{prior.get('id')}" if (prior and prior.get('id')) else endpoint
         result = make_request(path, method='PUT' if prior else 'POST', headers=headers, data=payload, timeout=30)
         if not isinstance(result, dict) or not result.get('id'):
             errors += 1
             print(f"[Usenet Setup] Prowlarr could not configure indexer {base} ({name}): {result}", flush=True)
 
     for name, item in owned.items():
-        if name in keep or not item.get('enable'):
+        if not isinstance(item, dict) or name in keep or not item.get('enable') or not item.get('id'):
             continue
         result = make_request(f"{endpoint}/{item['id']}", method='PUT', headers=headers, data=dict(item, enable=False))
         if not isinstance(result, dict) or not result.get('id'):
@@ -856,32 +898,28 @@ def wait_for_postersplus(max_attempts=20, interval=2):
     print(f"[Posters+ Setup] Waiting for Posters+ at {POSTERSPLUS_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
         res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}", timeout=2)
-        if isinstance(res, dict) and not res.get("error") and (res.get("status") in (200, 301, 302) or "detail" in res or "access_key" in str(res)):
-            print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
-            return True
-        if isinstance(res, dict) and res.get("status") in (200, 301, 302):
+        if isinstance(res, dict) and (not res.get("error") or res.get("status") in (200, 301, 302) or "access_key" in str(res.get("text", "")) or "detail" in res or "access_key" in str(res)):
             print(f"[Posters+ Setup] ✓ Posters+ is online and ready! (attempt {attempt})", flush=True)
             return True
         if attempt >= 8 and not is_url_reachable(POSTERSPLUS_URL, timeout=1.0):
-            print("[Posters+ Setup] ℹ️ Posters+ is unreachable. Check its container, selected Compose profile, and Docker network.", flush=True)
+            print(f"[Posters+ Setup] ℹ️ Posters+ is unreachable at {POSTERSPLUS_URL}. Check its container, selected Compose profile, and Docker network.", flush=True)
             return False
         time.sleep(interval)
-    print("[Posters+ Setup] Note: Posters+ is still starting up...", flush=True)
+    print(f"[Posters+ Setup] ℹ️ Posters+ timed out while starting up at {POSTERSPLUS_URL}; continuing without optional rating posters.", flush=True)
     return False
 
 def wait_for_aiometadata(max_attempts=30, interval=2):
     print(f"[AIOMetadata Setup] Waiting for AIOMetadata at {AIOMETADATA_URL}...", flush=True)
     for attempt in range(1, max_attempts + 1):
-        # An error dictionary is truthy; liveness also precedes manifest readiness.
         res = make_request(f"{AIOMETADATA_URL}/manifest.json", timeout=2)
         if isinstance(res, dict) and not res.get("error") and res.get("id"):
             print(f"[AIOMetadata Setup] ✓ AIOMetadata is online and ready! (attempt {attempt})", flush=True)
             return True
         if attempt >= 8 and not is_url_reachable(AIOMETADATA_URL, timeout=1.0):
-            print("[AIOMetadata Setup] ℹ️ AIOMetadata is unreachable. Check its container, selected Compose profile, and Docker network.", flush=True)
+            print(f"[AIOMetadata Setup] ℹ️ AIOMetadata is unreachable at {AIOMETADATA_URL}. Check its container, selected Compose profile, and Docker network.", flush=True)
             return False
         time.sleep(interval)
-    print("[AIOMetadata Setup] Note: AIOMetadata is still starting up...", flush=True)
+    print(f"[AIOMetadata Setup] ℹ️ AIOMetadata timed out while starting up at {AIOMETADATA_URL}; continuing without optional metadata.", flush=True)
     return False
 
 def setup_aiometadata_tamtaro():
@@ -930,10 +968,11 @@ def setup_aiometadata_tamtaro():
         if not isinstance(loaded, dict) or not loaded.get("success") or not isinstance(loaded.get("config"), dict):
             raise RuntimeError("Existing metadata profile could not be loaded; refusing to overwrite linked accounts.")
         existing_cfg = loaded["config"]
-        existing_keys = existing_cfg.get("apiKeys", {})
-        for k, v in existing_keys.items():
-            if "Token" in k or "token" in k or "Account" in k or "oauth" in k:
-                config.setdefault("apiKeys", {})[k] = v
+        existing_keys = existing_cfg.get("apiKeys", {}) if isinstance(existing_cfg, dict) else {}
+        if isinstance(existing_keys, dict):
+            for k, v in existing_keys.items():
+                if "Token" in k or "token" in k or "Account" in k or "oauth" in k:
+                    config.setdefault("apiKeys", {})[k] = v
         for field in ("tokens", "accounts", "oauth", "linkedAccounts"):
             if field in existing_cfg:
                 config[field] = existing_cfg[field]
@@ -941,8 +980,9 @@ def setup_aiometadata_tamtaro():
         if not saved_tmpl or saved_tmpl == template_name:
             if "catalogs" in config and not previous_password:
                 existing_cfg["catalogs"] = config["catalogs"]
-            for k, v in config.get("apiKeys", {}).items():
-                existing_cfg.setdefault("apiKeys", {})[k] = v
+            if isinstance(config.get("apiKeys"), dict):
+                for k, v in config.get("apiKeys", {}).items():
+                    existing_cfg.setdefault("apiKeys", {})[k] = v
             config = existing_cfg
 
     # Refresh environment variables
@@ -958,7 +998,9 @@ def setup_aiometadata_tamtaro():
 
     # Community presets include dozens of MDBList catalogs. Enable these only
     # when a key is supplied, instead of adding slow, unusable catalog requests.
-    for catalog in config.get("catalogs", []):
+    for catalog in (config.get("catalogs", []) if isinstance(config.get("catalogs"), list) else ()):
+        if not isinstance(catalog, dict):
+            continue
         src_id = str(catalog.get("source", catalog.get("id", ""))).lower()
         if not mdblist_key and "mdblist" in src_id:
             catalog["enabled"] = False
@@ -1064,7 +1106,7 @@ def setup_aiometadata_tamtaro():
         if not detail:
             detail = f"AIOMetadata rejected the profile (HTTP {status})." if isinstance(status, int) and 400 <= status <= 599 else "AIOMetadata did not confirm that it saved the profile."
         raise RuntimeError(detail)
-    if res.get("userUUID"):
+    if isinstance(res, dict) and res.get("userUUID"):
         update_env_file("AIOMETADATA_PROFILE_UUID", str(res["userUUID"]))
     update_env_file("AIOMETADATA_TEMPLATE", template_name)
     manifest_url = f"{AIOMETADATA_URL}/manifest.json"
@@ -1895,6 +1937,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         if p not in validated_presets and isinstance(p, dict):
             if p.get("instanceId"):
                 removed_preset_ids.add(p["instanceId"])
+            if p.get("type") and p.get("type") != "custom":
+                removed_preset_ids.add(p["type"])
 
     validated_presets = [p for p in validated_presets if not is_deprecated_preset(p)]
     # Order Usenet presets first so NZB indexers are queried and resolved with priority
@@ -2078,8 +2122,11 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
 
     if TMDB_API_KEY:
         config["tmdbApiKey"] = TMDB_API_KEY
-        for feature in ('titleMatching','yearMatching'):
-            config[feature]['enabled']=True
+        for feature in ('titleMatching', 'yearMatching'):
+            if isinstance(config.get(feature), dict):
+                config[feature]['enabled'] = True
+            else:
+                config[feature] = {'enabled': True}
     else:
         config["precacheNextEpisode"] = False
         for feature in ('titleMatching','yearMatching','digitalReleaseFilter'):
@@ -2268,7 +2315,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
         }
 
         res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload, headers=auth_headers)
-        if isinstance(res, dict) and res.get("success") and "data" in res:
+        if isinstance(res, dict) and res.get("success") and isinstance(res.get("data"), dict):
             uuid = res["data"].get("uuid")
             encrypted_password = res["data"].get("encryptedPassword") or res["data"].get("encrypted_password")
             print(f"[AIOStreams Setup] ✓ Default user configuration registered successfully!", flush=True)
@@ -2279,7 +2326,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
             config["formatter"] = {"id": "tamtaro"}
             create_payload["config"] = config
             res2 = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="POST", data=create_payload, headers=auth_headers)
-            if isinstance(res2, dict) and res2.get("success") and "data" in res2:
+            if isinstance(res2, dict) and res2.get("success") and isinstance(res2.get("data"), dict):
                 uuid = res2["data"].get("uuid")
                 encrypted_password = res2["data"].get("encryptedPassword") or res2["data"].get("encrypted_password")
                 print(f"[AIOStreams Setup] ✓ Fallback user configuration registered successfully!", flush=True)
@@ -2395,25 +2442,29 @@ def run_stream_diagnostics(config_info, aiometadata_manifest=None):
     # 2. Test Posters+ Server
     print(f"[Test 1/4] Testing Posters+ server ({POSTERSPLUS_URL})...", flush=True)
     p_res = make_request(f"{POSTERSPLUS_URL}/?access_key={ADDON_PASSWORD}", timeout=2)
-    if isinstance(p_res, dict) and not p_res.get("error") and (p_res.get("status") in (200, 301, 302) or "access_key" in str(p_res) or "detail" in p_res):
+    if isinstance(p_res, dict) and (not p_res.get("error") or p_res.get("status") in (200, 301, 302) or "access_key" in str(p_res.get("text", "")) or "detail" in p_res or "access_key" in str(p_res)):
         print(f"[Test 1/4] ✓ Posters+ server is reachable and active!", flush=True)
     elif isinstance(p_res, dict) and p_res.get("error") == -1:
         print(f"[Test 1/4] ℹ️ Posters+ server is starting up or unreachable (optional metadata badge provider).", flush=True)
     else:
-        print(f"[Test 1/4] ℹ️ Posters+ server status: {p_res}", flush=True)
+        err_msg = p_res.get("message", str(p_res)) if isinstance(p_res, dict) else str(p_res)
+        print(f"[Test 1/4] ℹ️ Posters+ server status: {err_msg} (optional service)", flush=True)
 
     # 3. Test AIOMetadata Manifest
     aiom_target = aiometadata_manifest or f"{AIOMETADATA_URL}/manifest.json"
     print(f"[Test 2/4] Testing AIOMetadata manifest ({aiom_target})...", flush=True)
     aiom_res = make_request(aiom_target, timeout=2)
     if isinstance(aiom_res, dict) and "name" in aiom_res:
-        print(f"[Test 2/4] ✓ AIOMetadata manifest verified: '{aiom_res.get('name')}' (v{aiom_res.get('version')})", flush=True)
+        print(f"[Test 2/4] ✓ AIOMetadata manifest verified: '{aiom_res.get('name')}' (v{aiom_res.get('version', '')})", flush=True)
     elif not aiometadata_manifest:
         print(f"[Test 2/4] ℹ️ AIOMetadata is optional and not active; manifest verification skipped.", flush=True)
     elif isinstance(aiom_res, dict) and aiom_res.get("error") == -1:
         print(f"[Test 2/4] ℹ️ AIOMetadata manifest is currently unreachable or starting up.", flush=True)
     else:
-        print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {aiom_res}", flush=True)
+        err_msg = aiom_res.get("message", str(aiom_res)) if isinstance(aiom_res, dict) else str(aiom_res)
+        print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {err_msg} (optional service)", flush=True)
+        err_msg = aiom_res.get("message", str(aiom_res)) if isinstance(aiom_res, dict) else str(aiom_res)
+        print(f"[Test 2/4] ℹ️ AIOMetadata manifest response: {err_msg} (optional service)", flush=True)
 
     # 4. Test AIOStreams Manifest Availability (Both Direct & Alias)
     uuid = config_info.get("uuid")

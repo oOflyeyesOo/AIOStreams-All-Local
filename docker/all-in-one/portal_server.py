@@ -94,27 +94,47 @@ def launch_setup():
             return False
         SETUP_JOB.update(status="running", step="Connecting services", exit_code=None, logs=deque(maxlen=80))
     def worker():
+        process = None
         try:
             process = subprocess.Popen(
                 [sys.executable, "-u", os.path.join(WEB_ROOT, "init/bootstrap/setup_stack.py")],
                 cwd=WEB_ROOT, env=dict(os.environ), stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True)
-            for line in process.stdout:
-                with SETUP_LOCK:
-                    SETUP_JOB["logs"].append(line.rstrip())
-                    for marker, step in (("Prowlarr", "Connecting public indexers"), 
-                                         ("AIOMetadata Setup", "Preparing metadata"), ("AIOStreams Setup", "Building your manifest"),
-                                         ("Test ", "Checking the result")):
-                        if marker in line:
-                            SETUP_JOB["step"] = step
-            code = process.wait()
+                stderr=subprocess.STDOUT, text=True, errors="replace")
+            if process.stdout:
+                for line in process.stdout:
+                    with SETUP_LOCK:
+                        SETUP_JOB["logs"].append(line.rstrip())
+                        for marker, step in (("Prowlarr", "Connecting public indexers"),
+                                             ("AIOMetadata Setup", "Preparing metadata"), ("AIOStreams Setup", "Building your manifest"),
+                                             ("Test ", "Checking the result")):
+                            if marker in line:
+                                SETUP_JOB["step"] = step
+            try:
+                code = process.wait(timeout=300)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                code = -1
             with SETUP_LOCK:
                 SETUP_JOB.update(status="complete" if code == 0 else "failed", exit_code=code,
                                  step="Your manifest is ready" if code == 0 else "Setup needs attention")
         except Exception:
             with SETUP_LOCK:
                 SETUP_JOB.update(status="failed", step="Could not start setup", exit_code=-1)
-    threading.Thread(target=worker, daemon=True).start()
+        finally:
+            with SETUP_LOCK:
+                if SETUP_JOB["status"] == "running":
+                    SETUP_JOB.update(status="failed", step="Setup terminated unexpectedly", exit_code=-1)
+            if process and process.poll() is None:
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+    try:
+        threading.Thread(target=worker, daemon=True).start()
+    except Exception as e:
+        with SETUP_LOCK:
+            SETUP_JOB.update(status="failed", step=f"Could not start setup thread: {e}", exit_code=-1)
+        raise
     return True
 
 
@@ -226,7 +246,10 @@ def probe_integration(item):
                 reachable = True
         except OSError:
             custom_port_var = f"PORT_{host.upper().replace('-', '_')}"
-            host_port = int(env_vars.get(custom_port_var) or os.environ.get(custom_port_var) or HOST_PORT_MAP.get(host, 0))
+            try:
+                host_port = int(env_vars.get(custom_port_var) or os.environ.get(custom_port_var) or HOST_PORT_MAP.get(host, 0))
+            except (ValueError, TypeError):
+                host_port = HOST_PORT_MAP.get(host, 0)
             if host_port:
                 try:
                     with socket.create_connection(("127.0.0.1", host_port), timeout=1.0):
@@ -379,7 +402,10 @@ def validate_provider(provider, key=None):
     if provider == "usenet":
         env_vars = read_saved_env()
         host = env_vars.get("USENET_HOST", "")
-        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        try:
+            port = int(env_vars.get("USENET_PORT", 563) or 563)
+        except (ValueError, TypeError):
+            port = 563
         user = credential(env_vars, "USENET_USER")
         password = credential(env_vars, "USENET_PASS")
         use_ssl = env_vars.get("USENET_SSL", "true").lower() != "false"
@@ -396,7 +422,8 @@ def validate_provider(provider, key=None):
         if not isinstance(key, str) or not key.strip():
             return {"status": "invalid", "detail": "No NZB API key configured."}
         clean_key = key.strip()
-        test_url = f"{base_url}/api?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
+        clean_base = base_url if base_url.endswith("/api") else f"{base_url}/api"
+        test_url = f"{clean_base}?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
         headers = {"User-Agent": "AIO-Local/1.0", "Accept": "*/*"}
         request = urllib.request.Request(test_url, headers=headers)
         try:
@@ -459,8 +486,14 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
         return False, f"Test fixture server unreachable: {host}"
     import socket
     import ssl
+    raw_sock = None
+    sock = None
     try:
-        raw_sock = socket.create_connection((host, int(port)), timeout=timeout)
+        try:
+            n_port = int(port)
+        except (ValueError, TypeError):
+            n_port = 563
+        raw_sock = socket.create_connection((host, n_port), timeout=timeout)
         if use_ssl:
             ctx = ssl.create_default_context()
             sock = ctx.wrap_socket(raw_sock, server_hostname=host)
@@ -469,7 +502,6 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
         f = sock.makefile("rwb")
         welcome = f.readline().decode("utf-8", errors="ignore")
         if not welcome.startswith(("200", "201")):
-            sock.close()
             return False, f"Server banner error: {welcome.strip()}"
         f.write(f"AUTHINFO USER {user}\r\n".encode("utf-8"))
         f.flush()
@@ -478,16 +510,25 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
             f.write(f"AUTHINFO PASS {password}\r\n".encode("utf-8"))
             f.flush()
             pass_resp = f.readline().decode("utf-8", errors="ignore")
-            sock.close()
             if pass_resp.startswith("281"):
                 return True, "Authentication accepted"
             return False, f"Authentication rejected: {pass_resp.strip()}"
         elif user_resp.startswith("281"):
-            sock.close()
             return True, "Authentication accepted"
-        sock.close()
         return False, f"Unexpected server response: {user_resp.strip()}"
     except Exception as e:
+        return False, str(e)
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+        elif raw_sock:
+            try:
+                raw_sock.close()
+            except Exception:
+                pass
         return False, str(e)
 
 
@@ -505,13 +546,15 @@ def playback_readiness():
         integrations = list(pool.map(probe_integration, INTEGRATIONS))
     checks = []
     for item in integrations:
+        if not isinstance(item, dict):
+            continue
         if not item.get("enabled", True):
             status = "off"
-        elif item["reachable"]:
+        elif item.get("reachable"):
             status = "ready"
         else:
-            status = "optional" if item["name"] == "SubSense" else "waiting"
-        checks.append({"name": item["name"], "status": status})
+            status = "optional" if item.get("name") == "SubSense" else "waiting"
+        checks.append({"name": item.get("name", "Unknown"), "status": status})
     # Port acceptance alone does not mean the selected application path is usable.
     env = read_saved_env()
     aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -568,7 +611,10 @@ def run_playback_test(mode=None, content_id=None, kind=None):
     auth_step = {"name": "Provider Authentication", "status": "pending", "detail": ""}
     if mode == "usenet":
         host = env_vars.get("USENET_HOST", "")
-        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        try:
+            port = int(env_vars.get("USENET_PORT", 563) or 563)
+        except (ValueError, TypeError):
+            port = 563
         user = credential(env_vars, "USENET_USER")
         password = credential(env_vars, "USENET_PASS")
         if not host or not user or not password:
@@ -589,12 +635,15 @@ def run_playback_test(mode=None, content_id=None, kind=None):
             env_key = PROVIDER_VALIDATORS[prov][0]
             if env_vars.get(env_key):
                 res = validate_provider(prov, env_vars[env_key])
-                debrid_results.append((prov, res["status"] == "valid", res["detail"]))
+                debrid_results.append((prov, res.get("status") == "valid", res.get("detail", "")))
 
         host = env_vars.get("USENET_HOST", "")
         user = credential(env_vars, "USENET_USER")
         password = credential(env_vars, "USENET_PASS")
-        port = int(env_vars.get("USENET_PORT", 563) or 563)
+        try:
+            port = int(env_vars.get("USENET_PORT", 563) or 563)
+        except (ValueError, TypeError):
+            port = 563
         usenet_ok = False
         if host and user and password:
             usenet_ok, _ = test_nntp_login(host, port, user, password, env_vars.get("USENET_SSL", "true") != "false")
@@ -2118,28 +2167,37 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"error": "The manifest is not ready. Complete setup first."}, 503)
             return
         if path == "/api/playback-readiness":
-            self.json_response(playback_readiness())
+            try:
+                self.json_response(playback_readiness())
+            except Exception:
+                self.json_response({"error": "Internal server error occurred while checking playback readiness."}, 500)
             return
         if path == "/api/integrations":
-            with ThreadPoolExecutor(max_workers=10) as pool:
-                integrations = list(pool.map(probe_integration, INTEGRATIONS))
-            env = read_saved_env()
-            for item, (_, service, _, _) in zip(integrations, INTEGRATIONS):
-                if item.get("enabled", True):
-                    ui_url = service_ui_url(service, self.headers.get("Host", "localhost"), env)
-                    if ui_url:
-                        item["uiUrl"] = ui_url
-                    proxy_path = SERVICE_UI_PATHS.get(service)
-                    if proxy_path is not None:
-                        if service == "postersplus":
-                            p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
-                            if p_key:
-                                proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
-                        item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
-            self.json_response({"integrations": integrations})
+            try:
+                with ThreadPoolExecutor(max_workers=10) as pool:
+                    integrations = list(pool.map(probe_integration, INTEGRATIONS))
+                env = read_saved_env()
+                for item, (_, service, _, _) in zip(integrations, INTEGRATIONS):
+                    if item.get("enabled", True):
+                        ui_url = service_ui_url(service, self.headers.get("Host", "localhost"), env)
+                        if ui_url:
+                            item["uiUrl"] = ui_url
+                        proxy_path = SERVICE_UI_PATHS.get(service)
+                        if proxy_path is not None:
+                            if service == "postersplus":
+                                p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
+                                if p_key:
+                                    proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
+                            item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
+                self.json_response({"integrations": integrations})
+            except Exception:
+                self.json_response({"error": "Internal server error occurred while checking integrations."}, 500)
             return
         if path == "/api/maintenance":
-            self.json_response(maintenance_snapshot())
+            try:
+                self.json_response(maintenance_snapshot())
+            except Exception:
+                self.json_response({"error": "Internal server error occurred while retrieving maintenance snapshot."}, 500)
             return
         if path == "/api/search-status":
             try:
@@ -2163,10 +2221,16 @@ button:hover {{ background: #0369a1; }}
             self.wfile.write(body)
             return
         if path == "/api/diagnostics":
-            self.json_response(diagnostics_snapshot())
+            try:
+                self.json_response(diagnostics_snapshot())
+            except Exception:
+                self.json_response({"error": "Internal server error occurred while retrieving diagnostics."}, 500)
             return
         if path == "/api/config-export":
-            self.json_response(config_export())
+            try:
+                self.json_response(config_export())
+            except Exception:
+                self.json_response({"error": "Internal server error occurred while exporting config."}, 500)
             return
         if path == "/api/export-profile":
             try:
@@ -2358,6 +2422,10 @@ button:hover {{ background: #0369a1; }}
             return super().do_GET()
 
         if self.check_proxy_referer_fallback(path, url_parts.query):
+            return
+
+        if path.startswith("/api/"):
+            self.json_response({"error": "Endpoint not found"}, 404)
             return
 
         return super().do_GET()
@@ -2596,11 +2664,8 @@ button:hover {{ background: #0369a1; }}
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": res.returncode == 0, "output": output}).encode("utf-8"))
-            except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
+            except Exception:
+                self.json_response({"success": False, "error": "Internal server error occurred while rebuilding Lumiere database."}, 500)
             return
 
         if self.check_proxy_referer_fallback(path, url_parts.query):
@@ -2661,219 +2726,225 @@ button:hover {{ background: #0369a1; }}
             pass
 
     def handle_api_status(self, env_only=False):
-        env_vars = {}
-        if os.path.isfile(ENV_PATH):
-            with open(ENV_PATH, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        env_vars[k.strip()] = v.strip()
-        elif os.path.isfile(ENV_EXAMPLE_PATH):
-            with open(ENV_EXAMPLE_PATH, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        env_vars[k.strip()] = v.strip()
-
-        now = time.monotonic()
-        if not env_only and (now - _STATUS_PROBE_CACHE["timestamp"] < 5.0):
-            docker_ready = _STATUS_PROBE_CACHE["docker_ready"]
-            aggregator_ready = _STATUS_PROBE_CACHE["aggregator_ready"]
-        else:
-            docker_ready = False
-            try:
-                if not env_only:
-                    res = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
-                    docker_ready = (res.returncode == 0)
-            except Exception:
-                docker_ready = False
-
-            aggregator_ready = False
-            if not env_only:
-                # Fallback: check if aiostreams aggregator is reachable
-                import urllib.request
-                aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-                endpoints = [aio_url + "/api/v1/status"]
-                fb = get_service_fallback_url(endpoints[0])
-                if fb and fb not in endpoints:
-                    endpoints.append(fb)
-                for endpoint in endpoints:
-                    try:
-                        with urllib.request.urlopen(endpoint, timeout=1) as resp_check:
-                            if resp_check.status in (200, 301, 302):
-                                aggregator_ready = True
-                                break
-                    except Exception:
-                        pass
-            if not env_only:
-                _STATUS_PROBE_CACHE["docker_ready"] = docker_ready
-                _STATUS_PROBE_CACHE["aggregator_ready"] = aggregator_ready
-                _STATUS_PROBE_CACHE["timestamp"] = now
-
-        # Send only saved-key indicators, never stored credential values.
         try:
-            base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
-        except Exception:
-            base_val = "http://localhost:3001"
-        aiom_val = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST") or derive_aiometadata_host(base_val)
-        mode_val = env_vars.get("STREAMING_MODE")
-        if not mode_val:
-            has_usenet = bool(env_vars.get("USENET_HOST") and (env_vars.get("USENET_USER") or env_vars.get("USENET_USER_B64")))
-            debrid_keys = ("REALDEBRID_API_KEY", "PREMIUMIZE_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY")
-            has_debrid = any(env_vars.get(k) for k in debrid_keys)
-            if has_usenet and not has_debrid:
-                mode_val = "usenet"
-            elif has_usenet and has_debrid:
-                mode_val = "hybrid"
+            env_vars = {}
+            if os.path.isfile(ENV_PATH):
+                with open(ENV_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            env_vars[k.strip()] = v.strip()
+            elif os.path.isfile(ENV_EXAMPLE_PATH):
+                with open(ENV_EXAMPLE_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            env_vars[k.strip()] = v.strip()
+
+            now = time.monotonic()
+            if not env_only and (now - _STATUS_PROBE_CACHE["timestamp"] < 5.0):
+                docker_ready = _STATUS_PROBE_CACHE["docker_ready"]
+                aggregator_ready = _STATUS_PROBE_CACHE["aggregator_ready"]
             else:
-                mode_val = "debrid"
-        cf_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
-        cf_meta = {}
-        if cf_token:
+                docker_ready = False
+                try:
+                    if not env_only:
+                        res = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                        docker_ready = (res.returncode == 0)
+                except Exception:
+                    docker_ready = False
+
+                aggregator_ready = False
+                if not env_only:
+                    # Fallback: check if aiostreams aggregator is reachable
+                    import urllib.request
+                    aio_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
+                    endpoints = [aio_url + "/api/v1/status"]
+                    fb = get_service_fallback_url(endpoints[0])
+                    if fb and fb not in endpoints:
+                        endpoints.append(fb)
+                    for endpoint in endpoints:
+                        try:
+                            with urllib.request.urlopen(endpoint, timeout=1) as resp_check:
+                                if resp_check.status in (200, 301, 302):
+                                    aggregator_ready = True
+                                    break
+                        except Exception:
+                            pass
+                if not env_only:
+                    _STATUS_PROBE_CACHE["docker_ready"] = docker_ready
+                    _STATUS_PROBE_CACHE["aggregator_ready"] = aggregator_ready
+                    _STATUS_PROBE_CACHE["timestamp"] = now
+
+            # Send only saved-key indicators, never stored credential values.
             try:
-                from tools.cloudflare_helper import parse_tunnel_token
-                cf_meta = parse_tunnel_token(cf_token)
+                base_val = normalize_base_url(env_vars.get("BASE_URL") or os.environ.get("BASE_URL"))
             except Exception:
-                cf_meta = {}
+                base_val = "http://localhost:3001"
+            aiom_val = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST") or derive_aiometadata_host(base_val)
+            mode_val = env_vars.get("STREAMING_MODE")
+            if not mode_val:
+                has_usenet = bool(env_vars.get("USENET_HOST") and (env_vars.get("USENET_USER") or env_vars.get("USENET_USER_B64")))
+                debrid_keys = ("REALDEBRID_API_KEY", "PREMIUMIZE_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY")
+                has_debrid = any(env_vars.get(k) for k in debrid_keys)
+                if has_usenet and not has_debrid:
+                    mode_val = "usenet"
+                elif has_usenet and has_debrid:
+                    mode_val = "hybrid"
+                else:
+                    mode_val = "debrid"
+            cf_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+            cf_meta = {}
+            if cf_token:
+                try:
+                    from tools.cloudflare_helper import parse_tunnel_token
+                    cf_meta = parse_tunnel_token(cf_token)
+                except Exception:
+                    cf_meta = {}
 
-        resp_env = {
-            **public_settings(env_vars),
-            "STREAMING_MODE": mode_val,
-            "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
-            "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
-            "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
-            "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
-            "JELLYFIN_ENABLED": env_vars.get("JELLYFIN_ENABLED", "true"),
-            "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
-            "BASE_URL": base_val,
-            "AIOMETADATA_HOST": aiom_val,
-            "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
-            "BACKUP_SCHEDULE": env_vars.get("BACKUP_SCHEDULE", "daily"),
-            "CLOUDFLARE_TUNNEL_TOKEN_SAVED": bool(cf_token),
-            "CLOUDFLARE_TUNNEL_METADATA": cf_meta,
-            "configuredKeys": sorted(key for key, value in env_vars.items()
-                                     if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
-        }
+            resp_env = {
+                **public_settings(env_vars),
+                "STREAMING_MODE": mode_val,
+                "ENABLE_TORRENTIO": env_vars.get("ENABLE_TORRENTIO", "true"),
+                "TORRENTIO_URL": env_vars.get("TORRENTIO_URL", ""),
+                "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
+                "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
+                "JELLYFIN_ENABLED": env_vars.get("JELLYFIN_ENABLED", "true"),
+                "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
+                "BASE_URL": base_val,
+                "AIOMETADATA_HOST": aiom_val,
+                "AIOMETADATA_TEMPLATE": env_vars.get("AIOMETADATA_TEMPLATE", "tamtaro-aiometadata-with-anime.json"),
+                "BACKUP_SCHEDULE": env_vars.get("BACKUP_SCHEDULE", "daily"),
+                "CLOUDFLARE_TUNNEL_TOKEN_SAVED": bool(cf_token),
+                "CLOUDFLARE_TUNNEL_METADATA": cf_meta,
+                "configuredKeys": sorted(key for key, value in env_vars.items()
+                                         if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
+            }
 
-        def safe_port(val, default):
-            try:
-                p = int(val)
-                return p if 1 <= p <= 65535 else default
-            except (ValueError, TypeError):
-                return default
+            def safe_port(val, default):
+                try:
+                    p = int(val)
+                    return p if 1 <= p <= 65535 else default
+                except (ValueError, TypeError):
+                    return default
 
-        ports = {
-            "portal": safe_port(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL"), 8088),
-            "aiostreams": safe_port(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001),
-            "aiometadata": safe_port(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005),
-        }
-        for port_key in ("PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA"):
-            val = env_vars.get(port_key) or os.environ.get(port_key)
-            if val:
-                resp_env[port_key] = val
-        resp_env["ports"] = ports
+            ports = {
+                "portal": safe_port(env_vars.get("PORT_PORTAL") or os.environ.get("PORT_PORTAL"), 8088),
+                "aiostreams": safe_port(env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001),
+                "aiometadata": safe_port(env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005),
+            }
+            for port_key in ("PORT_PORTAL", "PORT_AIOSTREAMS", "PORT_AIOMETADATA"):
+                val = env_vars.get(port_key) or os.environ.get(port_key)
+                if val:
+                    resp_env[port_key] = val
+            resp_env["ports"] = ports
 
-        resp = {
-            "appliance": True,
-            "status": "online",
-            "docker_ready": docker_ready,
-            "aggregator_ready": aggregator_ready,
-            "version": APP_VERSION,
-            "ports": ports,
-            "env": resp_env
-        }
-        self.json_response(resp_env if env_only else resp)
+            resp = {
+                "appliance": True,
+                "status": "online",
+                "docker_ready": docker_ready,
+                "aggregator_ready": aggregator_ready,
+                "version": APP_VERSION,
+                "ports": ports,
+                "env": resp_env
+            }
+            self.json_response(resp_env if env_only else resp)
+        except Exception:
+            self.json_response({"error": "Internal server error occurred while retrieving status."}, 500)
 
     def handle_api_manifest_info(self):
-        install_info = {}
-        candidates = [
-            os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
-            os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
-            "/data/aiostreams/aiostreams_install.json",
-            "/data/aiostreams_install.json"
-        ]
-        for c in candidates:
-            if os.path.isfile(c):
-                try:
-                    with open(c, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        enc_cand = data.get("encrypted_password") or data.get("encryptedPassword")
-                        if data.get("uuid") and enc_cand:
-                            install_info = data
-                            break
-                        elif not install_info:
-                            install_info = data
-                except Exception:
-                    pass
+        try:
+            install_info = {}
+            candidates = [
+                os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
+                os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
+                "/data/aiostreams/aiostreams_install.json",
+                "/data/aiostreams_install.json"
+            ]
+            for c in candidates:
+                if os.path.isfile(c):
+                    try:
+                        with open(c, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            enc_cand = data.get("encrypted_password") or data.get("encryptedPassword")
+                            if data.get("uuid") and enc_cand:
+                                install_info = data
+                                break
+                            elif not install_info:
+                                install_info = data
+                    except Exception:
+                        pass
 
-        env_vars = {}
-        if os.path.isfile(ENV_PATH):
-            with open(ENV_PATH, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        env_vars[k.strip()] = v.strip().strip('"').strip("'")
+            env_vars = {}
+            if os.path.isfile(ENV_PATH):
+                with open(ENV_PATH, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            env_vars[k.strip()] = v.strip().strip('"').strip("'")
 
-        request_host = self.headers.get("Host", "localhost")
-        base_url = dashboard_origin(
-            env_vars.get("BASE_URL") or os.environ.get("BASE_URL"),
-            request_host, env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001,
-        )
-        raw_uuid = install_info.get("uuid") or env_vars.get("DEFAULT_AIO_UUID")
-        raw_enc = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or env_vars.get("DEFAULT_AIO_ENCRYPTED_PASSWORD")
+            request_host = self.headers.get("Host", "localhost")
+            base_url = dashboard_origin(
+                env_vars.get("BASE_URL") or os.environ.get("BASE_URL"),
+                request_host, env_vars.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001,
+            )
+            raw_uuid = install_info.get("uuid") or env_vars.get("DEFAULT_AIO_UUID")
+            raw_enc = install_info.get("encrypted_password") or install_info.get("encryptedPassword") or env_vars.get("DEFAULT_AIO_ENCRYPTED_PASSWORD")
 
-        uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() not in ("null", "None", "") else None
-        encrypted_password = str(raw_enc).strip() if raw_enc and str(raw_enc).strip() not in ("null", "None", "") else None
+            uuid = str(raw_uuid).strip() if raw_uuid and str(raw_uuid).strip() not in ("null", "None", "") else None
+            encrypted_password = str(raw_enc).strip() if raw_enc and str(raw_enc).strip() not in ("null", "None", "") else None
 
-        direct_manifest = f"{base_url}/stremio/{uuid}/{encrypted_password}/manifest.json" if uuid and encrypted_password else None
-        alias_manifest = f"{base_url}/stremio/u/local/manifest.json"
+            direct_manifest = f"{base_url}/stremio/{uuid}/{encrypted_password}/manifest.json" if uuid and encrypted_password else None
+            alias_manifest = f"{base_url}/stremio/u/local/manifest.json"
 
-        # AIOMetadata public subdomain and manifest
-        aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") if "AIOMETADATA_PROFILE_UUID" in env_vars else os.environ.get("AIOMETADATA_PROFILE_UUID")
-        configured_meta = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST")
-        aiom_host = dashboard_origin(
-            configured_meta, request_host,
-            env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005,
-            public_fallback=derive_aiometadata_host(base_url) if base_url.startswith("https://") else None,
-        )
-        aiom_path = f"/stremio/{urllib.parse.quote(aiom_profile, safe='')}" if aiom_profile else ""
-        aiom_manifest = f"{aiom_host}{aiom_path}/manifest.json" if aiom_path else None
+            # AIOMetadata public subdomain and manifest
+            aiom_profile = env_vars.get("AIOMETADATA_PROFILE_UUID") if "AIOMETADATA_PROFILE_UUID" in env_vars else os.environ.get("AIOMETADATA_PROFILE_UUID")
+            configured_meta = env_vars.get("AIOMETADATA_HOST") or os.environ.get("AIOMETADATA_HOST")
+            aiom_host = dashboard_origin(
+                configured_meta, request_host,
+                env_vars.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"), 4005,
+                public_fallback=derive_aiometadata_host(base_url) if base_url.startswith("https://") else None,
+            )
+            aiom_path = f"/stremio/{urllib.parse.quote(aiom_profile, safe='')}" if aiom_profile else ""
+            aiom_manifest = f"{aiom_host}{aiom_path}/manifest.json" if aiom_path else None
 
-        jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
-        jellyfin_server = f"{base_url}/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else f"{base_url}/jellyfin"
-        jellyfin_web_player = f"{base_url}/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else f"{base_url}/jellyfin/web"
-        jellyfin_web_player_proxy = f"/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else "/jellyfin/web/"
-        jellyfin_server_proxy = f"/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else "/jellyfin"
-        resp = {
-            "success": True,
-            "uuid": uuid,
-            "encryptedPassword": encrypted_password,
-            "baseUrl": base_url,
-            "directManifest": direct_manifest,
-            "aliasManifest": alias_manifest,
-            "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/configure",
-            "aiostreamsDashboard": f"{base_url}/admin",
-            "watchUrl": "/watch/",
-            "jellyfinServer": jellyfin_server,
-            "jellyfinWebPlayer": jellyfin_web_player,
-            "jellyfinWebPlayerProxy": jellyfin_web_player_proxy,
-            "jellyfinServerProxy": jellyfin_server_proxy,
-            "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
-            "officialWebPlayer": "https://web.aiostreams.org",
-            "jellyfinUser": "admin",
-            "remuxDbEnabled": env_vars.get("ENABLE_REMUXDB", "true").lower() not in ("false", "0", "no"),
-            "mediaInfoProbeEnabled": True,
-            "jellyfinEnabled": jellyfin_enabled_val,
-            "aiometadataHost": aiom_host,
-            "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
-            "aiometadataManifest": aiom_manifest,
-            "aiometadataProfileUuid": aiom_profile or None,
-            "aiometadataTemplate": env_vars.get("AIOMETADATA_TEMPLATE") or os.environ.get("AIOMETADATA_TEMPLATE") or "tamtaro-aiometadata-with-anime.json",
-        }
-        self.json_response(resp)
+            jellyfin_enabled_val = (env_vars.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED", "true")).lower() not in ("false", "0", "no")
+            jellyfin_server = f"{base_url}/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else f"{base_url}/jellyfin"
+            jellyfin_web_player = f"{base_url}/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else f"{base_url}/jellyfin/web"
+            jellyfin_web_player_proxy = f"/jellyfin/{uuid}/{encrypted_password}/web/" if uuid and encrypted_password else "/jellyfin/web/"
+            jellyfin_server_proxy = f"/jellyfin/{uuid}/{encrypted_password}" if uuid and encrypted_password else "/jellyfin"
+            resp = {
+                "success": True,
+                "uuid": uuid,
+                "encryptedPassword": encrypted_password,
+                "baseUrl": base_url,
+                "directManifest": direct_manifest,
+                "aliasManifest": alias_manifest,
+                "aiostreamsConfigure": f"{base_url}/stremio/u/local/configure" if direct_manifest else f"{base_url}/configure",
+                "aiostreamsDashboard": f"{base_url}/admin",
+                "watchUrl": "/watch/",
+                "jellyfinServer": jellyfin_server,
+                "jellyfinWebPlayer": jellyfin_web_player,
+                "jellyfinWebPlayerProxy": jellyfin_web_player_proxy,
+                "jellyfinServerProxy": jellyfin_server_proxy,
+                "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
+                "officialWebPlayer": "https://web.aiostreams.org",
+                "jellyfinUser": "admin",
+                "remuxDbEnabled": env_vars.get("ENABLE_REMUXDB", "true").lower() not in ("false", "0", "no"),
+                "mediaInfoProbeEnabled": True,
+                "jellyfinEnabled": jellyfin_enabled_val,
+                "aiometadataHost": aiom_host,
+                "aiometadataConfigure": f"{aiom_host}{aiom_path}/configure",
+                "aiometadataManifest": aiom_manifest,
+                "aiometadataProfileUuid": aiom_profile or None,
+                "aiometadataTemplate": env_vars.get("AIOMETADATA_TEMPLATE") or os.environ.get("AIOMETADATA_TEMPLATE") or "tamtaro-aiometadata-with-anime.json",
+            }
+            self.json_response(resp)
+        except Exception:
+            self.json_response({"error": "Internal server error occurred while retrieving manifest info."}, 500)
 
     def redact_service_logs(self, output):
         values = {**os.environ, **read_saved_env()}
@@ -3204,7 +3275,7 @@ button:hover {{ background: #0369a1; }}
             with open(archive, "rb") as f:
                 shutil.copyfileobj(f, self.wfile)
         except Exception:
-            self.send_error(500, "Backup creation failed")
+            self.json_response({"error": "Backup creation failed"}, 500)
 
     def handle_api_health_stats(self):
         try:
@@ -3288,8 +3359,10 @@ button:hover {{ background: #0369a1; }}
                 return
             saved = save_player_preferences(body)
             self.json_response({"success": True, "preferences": saved})
-        except Exception as e:
-            self.json_response({"error": f"Failed to save preferences: {e}"}, 500)
+        except ValueError as e:
+            self.json_response({"error": str(e)}, 400)
+        except Exception:
+            self.json_response({"error": "Internal server error occurred while saving preferences."}, 500)
 
     def handle_api_config_bundle_raw(self):
         if not self.authorize():
@@ -3357,8 +3430,8 @@ button:hover {{ background: #0369a1; }}
                 "nextPollAt": data.get("nextPollAt") if data else None,
             }
             self.json_response(result)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while retrieving Lumiere statistics."}, 500)
 
     def handle_api_lumiere_search(self):
         try:
@@ -3415,8 +3488,8 @@ button:hover {{ background: #0369a1; }}
                 "count": len(items),
                 "items": items
             })
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while searching Lumiere database."}, 500)
 
     def handle_api_backups_list(self):
         try:
@@ -3492,8 +3565,8 @@ button:hover {{ background: #0369a1; }}
                 "tunnel_metadata": meta,
                 "current_host": parsed_host
             })
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while checking Cloudflare status."}, 500)
 
     def handle_api_cloudflare_push_dns(self):
         if not self.authorize():
@@ -3540,8 +3613,10 @@ button:hover {{ background: #0369a1; }}
                 zone_id=zone_id
             )
             self.json_response(res, 200 if res.get("success") else 400)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except ValueError as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while pushing Cloudflare DNS."}, 500)
 
     def handle_api_cloudflare_tunnel_action(self):
         if not self.authorize():
@@ -3553,8 +3628,10 @@ button:hover {{ background: #0369a1; }}
             action = payload.get("action", "status")
             res = manage_local_tunnel(action, cwd=WEB_ROOT)
             self.json_response(res, 200 if res.get("success") else 400)
-        except Exception as e:
-            self.json_response({"success": False, "error": str(e)}, 500)
+        except ValueError as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while managing Cloudflare tunnel."}, 500)
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
