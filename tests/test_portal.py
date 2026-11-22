@@ -359,6 +359,10 @@ class PortalTests(unittest.TestCase):
         self.assertNotIn("Access-Control-Allow-Origin", headers)
         self.assertEqual(headers["Cache-Control"], "no-store")
 
+    def test_assets_cache_control_headers(self):
+        headers = self.request("/assets/test.png")[2]
+        self.assertEqual(headers.get("Cache-Control"), "no-cache, no-store, must-revalidate")
+
     def test_invalid_config_does_not_change_file(self):
         before = (self.root / ".env").read_bytes()
         for value in ([1], {"bad-key": "x"}, {"KEY": "x\nINJECTED=yes"},
@@ -1961,6 +1965,53 @@ class PortalTests(unittest.TestCase):
             data = json.loads(body.decode("utf-8"))
             self.assertTrue(data["success"])
             self.assertEqual(data["action"], "start")
+
+    def test_cloudflare_push_dns_fallback_to_saved_env(self):
+        mock_push = {
+            "success": True,
+            "action": "created",
+            "hostname": "watch.example.com",
+            "cname_target": "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com",
+            "zone_name": "example.com",
+            "record_id": "rec-saved-123",
+            "message": "✓ Successfully created Cloudflare CNAME record"
+        }
+        with patch.object(portal, "read_saved_env", return_value={"CLOUDFLARE_TUNNEL_TOKEN": "c7b74447-4951-4d37-882f-2d4e73b22cf1", "CLOUDFLARE_ZONE_ID": "zone-xyz"}):
+            with patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=mock_push) as mock_fn:
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "tunnel_token": ""
+                }, auth=True)
+                self.assertEqual(status, 200)
+                mock_fn.assert_called_once()
+                call_kwargs = mock_fn.call_args[1]
+                self.assertEqual(call_kwargs["cname_target"], "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com")
+                self.assertEqual(call_kwargs["tunnel_id"], "c7b74447-4951-4d37-882f-2d4e73b22cf1")
+                self.assertEqual(call_kwargs["zone_id"], "zone-xyz")
+
+    def test_cloudflare_env_persistence_and_exposure(self):
+        before = (self.root / ".env").read_bytes()
+        try:
+            save_payload = {
+                "CLOUDFLARE_TUNNEL_TOKEN": "cloudflared tunnel run --token c7b74447-4951-4d37-882f-2d4e73b22cf1",
+                "CLOUDFLARE_ZONE_ID": "my_zone_123",
+                "CLOUDFLARE_API_TOKEN": "secret_api_token"
+            }
+            status, body, _ = self.request("/api/save-env", "POST", save_payload, auth=True)
+            self.assertEqual(status, 200)
+
+            status, body, _ = self.request("/api/env", "GET", auth=True)
+            self.assertEqual(status, 200)
+            env_data = json.loads(body.decode("utf-8"))
+            self.assertTrue(env_data.get("CLOUDFLARE_TUNNEL_TOKEN_SAVED"))
+            self.assertEqual(env_data.get("CLOUDFLARE_ZONE_ID"), "my_zone_123")
+            self.assertTrue(env_data.get("CLOUDFLARE_API_TOKEN_SAVED"))
+            self.assertNotIn("CLOUDFLARE_API_TOKEN", env_data)
+            self.assertTrue(env_data.get("CLOUDFLARE_TUNNEL_METADATA", {}).get("valid"))
+            self.assertEqual(env_data.get("CLOUDFLARE_TUNNEL_METADATA", {}).get("tunnel_id"), "c7b74447-4951-4d37-882f-2d4e73b22cf1")
+        finally:
+            (self.root / ".env").write_bytes(before)
 
 
     def test_unmapped_api_get_returns_json_404(self):

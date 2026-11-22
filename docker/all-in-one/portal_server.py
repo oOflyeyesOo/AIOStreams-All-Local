@@ -1511,7 +1511,10 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
             return
         if hasattr(self, "path") and self.path in ("/", "/index.html", "/dashboard", "/admin", "/dashboard.html"):
             self.send_header("Set-Cookie", "active_service_proxy=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0")
-        self.send_header("Cache-Control", "no-store")
+        if hasattr(self, "path") and (self.path.startswith("/assets/") or "/assets/" in self.path):
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        else:
+            self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "same-origin")
@@ -2915,6 +2918,8 @@ button:hover {{ background: #0369a1; }}
                 "BACKUP_SCHEDULE": env_vars.get("BACKUP_SCHEDULE", "daily"),
                 "CLOUDFLARE_TUNNEL_TOKEN_SAVED": bool(cf_token),
                 "CLOUDFLARE_TUNNEL_METADATA": cf_meta,
+                "CLOUDFLARE_ZONE_ID": env_vars.get("CLOUDFLARE_ZONE_ID", "") or os.environ.get("CLOUDFLARE_ZONE_ID", ""),
+                "CLOUDFLARE_API_TOKEN_SAVED": bool(env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN")),
                 "configuredKeys": sorted(key for key, value in env_vars.items()
                                          if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
             }
@@ -3241,6 +3246,25 @@ button:hover {{ background: #0369a1; }}
                 password = data["ADDON_PASSWORD"]
                 if not isinstance(password, str) or not re.fullmatch(r"[A-Za-z0-9_.!@%+~=-]{8,64}", password):
                     raise ValueError("Use 8–64 characters: letters, numbers, or _ . ! @ % + ~ = -")
+
+            for cf_key in ("CLOUDFLARE_TUNNEL_TOKEN", "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_API_TOKEN"):
+                if cf_key in data and isinstance(data[cf_key], str):
+                    val = data[cf_key].strip()
+                    if cf_key == "CLOUDFLARE_TUNNEL_TOKEN":
+                        token_match = re.search(r'(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["\']?)([^"\'\s]+)\1', val, re.IGNORECASE)
+                        if token_match:
+                            val = token_match.group(2)
+                        else:
+                            val = val.strip("\"'")
+                            words = val.split()
+                            if len(words) > 1:
+                                longest = max(words, key=len)
+                                if len(longest) >= 20:
+                                    val = longest
+                    else:
+                        val = val.strip("\"'")
+                    data[cf_key] = val.strip()
+
             data = form_updates(data, read_saved_env())
             for key, value in data.items():
                 if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
@@ -3702,12 +3726,35 @@ button:hover {{ background: #0369a1; }}
                 return
 
             # Resolve target and metadata
-            tunnel_token = (payload.get("tunnel_token") or "").strip() or env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+            req_tunnel_token = (payload.get("tunnel_token") or "").strip()
+            saved_tunnel_token = (env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or "").strip()
+            tunnel_token = req_tunnel_token or saved_tunnel_token
+
             meta = parse_tunnel_token(tunnel_token) if tunnel_token else {"valid": False}
-            cname_target = (payload.get("cname_target") or "").strip() or (meta.get("cname_target") if meta.get("valid") else "")
+            cname_target = (payload.get("cname_target") or "").strip()
+            if not cname_target and meta.get("valid"):
+                cname_target = meta.get("cname_target") or ""
+
+            # If cname_target is still empty and saved token exists, fallback to saved token metadata
+            if not cname_target and saved_tunnel_token:
+                saved_meta = parse_tunnel_token(saved_tunnel_token)
+                if saved_meta.get("valid"):
+                    cname_target = saved_meta.get("cname_target") or ""
+                    if not meta.get("valid"):
+                        meta = saved_meta
+
             account_id = payload.get("account_id") or meta.get("account_id")
             tunnel_id = payload.get("tunnel_id") or meta.get("tunnel_id")
-            zone_id = (payload.get("zone_id") or "").strip() or None
+
+            # If cname_target is provided directly, try to parse tunnel_id/account_id from it if missing
+            if not tunnel_id and cname_target:
+                target_meta = parse_tunnel_token(cname_target)
+                if target_meta.get("valid"):
+                    tunnel_id = target_meta.get("tunnel_id")
+                    if not account_id:
+                        account_id = target_meta.get("account_id")
+
+            zone_id = (payload.get("zone_id") or "").strip() or env_vars.get("CLOUDFLARE_ZONE_ID") or os.environ.get("CLOUDFLARE_ZONE_ID") or None
 
             if not cname_target:
                 self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)

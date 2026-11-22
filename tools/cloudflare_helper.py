@@ -9,6 +9,7 @@ Provides utilities to:
 """
 
 import base64
+import ipaddress
 import json
 import os
 import re
@@ -20,8 +21,9 @@ import urllib.request
 
 def parse_tunnel_token(token: str) -> dict:
     """
-    Parses a Cloudflare Zero-Trust Tunnel token (Base64-encoded JSON)
-    to extract account tag, tunnel UUID, and canonical CNAME target.
+    Parses a Cloudflare Zero-Trust Tunnel token (Base64-encoded JSON,
+    raw tunnel UUID, or CNAME target) to extract account tag, tunnel UUID,
+    and canonical CNAME target.
     Handles raw tokens, commands containing --token, and surrounding quotes.
     """
     if not token or not isinstance(token, str):
@@ -31,7 +33,7 @@ def parse_tunnel_token(token: str) -> dict:
         return {"valid": False}
 
     # Extract token if user pasted a shell command or flag like --token <token>
-    token_match = re.search(r'(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["\']?)([A-Za-z0-9_-]+)\1', raw, re.IGNORECASE)
+    token_match = re.search(r'(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["\']?)([^"\'\s]+)\1', raw, re.IGNORECASE)
     if token_match:
         raw = token_match.group(2)
     else:
@@ -42,7 +44,11 @@ def parse_tunnel_token(token: str) -> dict:
             if len(longest) >= 20:
                 raw = longest
 
-    # Handle base64 URL-safe replacements and padding
+    raw = raw.strip("\"' \t\r\n")
+    if not raw:
+        return {"valid": False}
+
+    # 1. Base64 JSON token (standard cloudflared token: eyJh...)
     normalized = raw.replace("-", "+").replace("_", "/")
     padded = normalized + "=" * ((4 - len(normalized) % 4) % 4)
     try:
@@ -60,6 +66,42 @@ def parse_tunnel_token(token: str) -> dict:
                 }
     except Exception:
         pass
+
+    # 2. Full CNAME target (e.g. *.cfargotunnel.com or <uuid>.cfargotunnel.com)
+    clean_target = raw.lower()
+    if "://" in clean_target:
+        clean_target = clean_target.split("://")[-1]
+    clean_target = clean_target.split("/")[0].split(":")[0].strip().rstrip(".")
+    if clean_target.endswith(".cfargotunnel.com") or ".cfargotunnel.com" in clean_target:
+        cname_uuid_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})', clean_target)
+        if cname_uuid_match:
+            tunnel_id = cname_uuid_match.group(1).lower()
+            return {
+                "valid": True,
+                "account_id": "",
+                "tunnel_id": tunnel_id,
+                "cname_target": f"{tunnel_id}.cfargotunnel.com"
+            }
+        prefix = clean_target.split(".cfargotunnel.com")[0].split(".")[-1].strip()
+        if prefix:
+            return {
+                "valid": True,
+                "account_id": "",
+                "tunnel_id": prefix,
+                "cname_target": f"{prefix}.cfargotunnel.com"
+            }
+
+    # 3. Raw tunnel UUID (e.g. 8-4-4-4-12 hex UUID or 32-char hex)
+    uuid_match = re.fullmatch(r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{32})', raw)
+    if uuid_match:
+        tunnel_id = uuid_match.group(1).lower()
+        return {
+            "valid": True,
+            "account_id": "",
+            "tunnel_id": tunnel_id,
+            "cname_target": f"{tunnel_id}.cfargotunnel.com"
+        }
+
     return {"valid": False}
 
 
@@ -155,6 +197,20 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
         parsed = urllib.parse.urlsplit(clean_host)
         clean_host = parsed.netloc or parsed.path
     clean_host = clean_host.split(":")[0].strip().rstrip(".")
+
+    is_ip = False
+    try:
+        ipaddress.ip_address(clean_host)
+        is_ip = True
+    except ValueError:
+        if re.match(r'^(?:\d{1,3}\.){3}\d{1,3}$', clean_host) or re.match(r'^(?:(?:\d{1,3}|x)\.){3}(?:\d{1,3}|x)$', clean_host, re.IGNORECASE):
+            is_ip = True
+
+    if clean_host == "localhost" or clean_host.startswith("localhost.") or clean_host.endswith(".localhost") or is_ip:
+        return {
+            "success": False,
+            "error": "Cloudflare DNS requires a public domain name (e.g. watch.yourdomain.com), not a local IP address."
+        }
 
     if not clean_host or "." not in clean_host:
         return {"success": False, "error": f"Enter a valid domain or subdomain (received '{clean_host}')."}

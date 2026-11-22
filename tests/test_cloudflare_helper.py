@@ -48,6 +48,46 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertTrue(res2["valid"])
         self.assertEqual(res2["tunnel_id"], "tun-cmd")
 
+    def test_parse_tunnel_token_raw_uuid(self):
+        # 8-4-4-4-12 hex UUID
+        uuid_std = "c7b74447-4951-4d37-882f-2d4e73b22cf1"
+        res = parse_tunnel_token(uuid_std)
+        self.assertTrue(res["valid"])
+        self.assertEqual(res["tunnel_id"], uuid_std)
+        self.assertEqual(res["cname_target"], f"{uuid_std}.cfargotunnel.com")
+
+        # Uppercase UUID
+        res_upper = parse_tunnel_token("C7B74447-4951-4D37-882F-2D4E73B22CF1")
+        self.assertTrue(res_upper["valid"])
+        self.assertEqual(res_upper["tunnel_id"], uuid_std)
+        self.assertEqual(res_upper["cname_target"], f"{uuid_std}.cfargotunnel.com")
+
+        # 32-char hex UUID
+        hex32 = "c7b7444749514d37882f2d4e73b22cf1"
+        res_hex = parse_tunnel_token(hex32)
+        self.assertTrue(res_hex["valid"])
+        self.assertEqual(res_hex["tunnel_id"], hex32)
+        self.assertEqual(res_hex["cname_target"], f"{hex32}.cfargotunnel.com")
+
+    def test_parse_tunnel_token_cname_target(self):
+        uuid_std = "c7b74447-4951-4d37-882f-2d4e73b22cf1"
+        cname = f"{uuid_std}.cfargotunnel.com"
+        res = parse_tunnel_token(cname)
+        self.assertTrue(res["valid"])
+        self.assertEqual(res["tunnel_id"], uuid_std)
+        self.assertEqual(res["cname_target"], f"{uuid_std}.cfargotunnel.com")
+
+        # With URL scheme
+        res_url = parse_tunnel_token(f"https://{cname}/")
+        self.assertTrue(res_url["valid"])
+        self.assertEqual(res_url["tunnel_id"], uuid_std)
+        self.assertEqual(res_url["cname_target"], f"{uuid_std}.cfargotunnel.com")
+
+        # Wildcard / prefix target
+        res_wildcard = parse_tunnel_token("*.cfargotunnel.com")
+        self.assertTrue(res_wildcard["valid"])
+        self.assertEqual(res_wildcard["cname_target"], "*.cfargotunnel.com")
+
     def test_parse_tunnel_token_invalid(self):
         self.assertFalse(parse_tunnel_token("not-a-token")["valid"])
         self.assertFalse(parse_tunnel_token("")["valid"])
@@ -78,9 +118,16 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertFalse(res1["success"])
         self.assertIn("API Token is required", res1["error"])
 
-        res2 = push_cloudflare_dns("api_token_123", "localhost", "target.cfargotunnel.com")
-        self.assertFalse(res2["success"])
-        self.assertIn("valid domain", res2["error"])
+        # Localhost and local IPs must return public domain error
+        for bad_host in ("localhost", "127.0.0.1", "192.168.1.1", "10.0.0.1", "192.168.x.x"):
+            res = push_cloudflare_dns("api_token_123", bad_host, "target.cfargotunnel.com")
+            self.assertFalse(res["success"])
+            self.assertEqual(res["error"], "Cloudflare DNS requires a public domain name (e.g. watch.yourdomain.com), not a local IP address.")
+
+        # Non-IP without dots
+        res_nodot = push_cloudflare_dns("api_token_123", "myinternalhost", "target.cfargotunnel.com")
+        self.assertFalse(res_nodot["success"])
+        self.assertIn("Enter a valid domain or subdomain", res_nodot["error"])
 
         res3 = push_cloudflare_dns("api_token_123", "watch.example.com", "")
         self.assertFalse(res3["success"])
