@@ -44,6 +44,7 @@ function form(saved){
     }});
   const load=source.match(/async function loadSettings\(options\) \{[\s\S]*?\n\}/)[0];
   const submit=source.slice(source.indexOf("document.getElementById('setup-form').addEventListener('submit'"),source.indexOf("document.getElementById('refresh-services').addEventListener"));
+  vm.runInContext(source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0],context);
   vm.runInContext(load+'\n'+submit,context);
   return {context,nodes,calls,document};
 }
@@ -715,3 +716,28 @@ test('btn-push-cf-dns rejects private/local IP hostnames and resolves cname_targ
 
 
 
+
+
+test('Cloudflare preview escapes raw, encoded and saved tunnel metadata',()=>{
+  const malicious='<img src=x onerror=alert(1)>';
+  const nodes=new Map();
+  const document={getElementById(id){
+    if(!nodes.has(id)) nodes.set(id,{value:'',style:{},textContent:'',innerHTML:''});
+    return nodes.get(id);
+  }};
+  const context=vm.createContext({document,URL,Buffer,cachedCloudflareStatus:null});
+  vm.runInContext(source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0],context);
+  vm.runInContext(source.slice(source.indexOf('function parseClientTunnelToken('),source.indexOf('async function refreshCloudflareStatus(')),context);
+  for(const value of [JSON.stringify({t:malicious}),Buffer.from(JSON.stringify({t:malicious})).toString('base64')]){
+    document.getElementById('cf-tunnel-token').value=value;
+    vm.runInContext('updateClientTokenPreview()',context);
+    const html=nodes.get('cf-token-meta-text').innerHTML;
+    assert.ok(!html.includes('<img'));
+    assert.ok(html.includes('&lt;img'));
+  }
+  document.getElementById('cf-tunnel-token').value='';
+  context.cachedCloudflareStatus={tunnel_metadata:{valid:true,tunnel_id:malicious,cname_target:malicious}};
+  vm.runInContext('updateClientTokenPreview()',context);
+  assert.ok(!nodes.get('cf-token-meta-text').innerHTML.includes('<img'));
+  assert.equal(nodes.get('cf-cname-target').textContent,malicious);
+});

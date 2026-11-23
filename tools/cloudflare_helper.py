@@ -21,18 +21,13 @@ import urllib.parse
 import urllib.request
 
 
-def parse_tunnel_token(token: str) -> dict:
-    """
-    Parses a Cloudflare Zero-Trust Tunnel token (Base64-encoded JSON,
-    raw tunnel UUID, or CNAME target) to extract account tag, tunnel UUID,
-    and canonical CNAME target.
-    Handles raw tokens, commands containing --token, and surrounding quotes.
-    """
+def normalize_tunnel_token(token: str) -> str:
+    """Extract a token from pasted commands without exposing it in metadata."""
     if not token or not isinstance(token, str):
-        return {"valid": False}
+        return ""
     raw = token.strip()
     if not raw:
-        return {"valid": False}
+        return ""
 
     # Extract token if user pasted a shell command or flag like --token <token>
     token_match = re.search(r'(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["\']?)([^"\'\s]+)\1', raw, re.IGNORECASE)
@@ -47,6 +42,12 @@ def parse_tunnel_token(token: str) -> dict:
                 raw = longest
 
     raw = raw.strip("\"' \t\r\n")
+    return raw
+
+
+def parse_tunnel_token(token: str) -> dict:
+    """Return public tunnel identifiers and capabilities, never credentials."""
+    raw = normalize_tunnel_token(token)
     if not raw:
         return {"valid": False}
 
@@ -66,8 +67,7 @@ def parse_tunnel_token(token: str) -> dict:
                     "account_id": account_id,
                     "tunnel_id": tunnel_id,
                     "cname_target": f"{tunnel_id}.cfargotunnel.com",
-                    "is_run_token": has_secret or True,
-                    "token": raw
+                    "is_run_token": has_secret and bool(account_id)
                 }
     except Exception:
         pass
@@ -461,6 +461,7 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
     if action not in ("start", "stop", "restart", "status"):
         return {"success": False, "error": f"Invalid tunnel action '{action}'. Use start, stop, restart, or status."}
 
+    run_env = os.environ.copy()
     # Resolve token before starting
     if action in ("start", "restart"):
         env_token = (token or "").strip() or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN", "").strip()
@@ -488,37 +489,62 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
                 "action": action,
                 "error": "Cloudflare Tunnel Token is not configured in .env. Enter your tunnel token first to start the connector."
             }
+        run_env["CLOUDFLARE_TUNNEL_TOKEN"] = normalize_tunnel_token(env_token)
 
-    cmd = ["docker", "compose", "--profile", "tunnel"]
+    compose = ["docker", "compose"]
+    root = Path(cwd or ".")
+    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+    if project:
+        compose.extend(["-p", project])
+    if not (root / "docker-compose.yml").exists() and (root / "compose.manager.yml").exists():
+        if not project:
+            return {"success": False, "action": action,
+                    "error": "Compose project name is unavailable. Recreate the portal from your Docker manager before starting a tunnel."}
+        compose.extend(["-f", str((root / "compose.manager.yml").resolve())])
+    compose.extend(["--profile", "tunnel"])
+    cmd = list(compose)
     if action == "start":
         cmd.extend(["up", "-d", "cloudflared"])
     elif action == "stop":
         cmd.extend(["stop", "cloudflared"])
     elif action == "restart":
-        cmd.extend(["restart", "cloudflared"])
+        # A plain restart retains the previous container command and old token.
+        cmd.extend(["up", "-d", "--force-recreate", "cloudflared"])
     elif action == "status":
         cmd.extend(["ps", "cloudflared", "--format", "json"])
 
     try:
-        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30)
+        res = subprocess.run(cmd, cwd=cwd, env=run_env, capture_output=True, text=True, timeout=30)
         output = (res.stdout or res.stderr or "").strip()
         if res.returncode != 0:
             return {"success": False, "action": action, "output": output, "error": output}
 
         if action in ("start", "restart"):
             time.sleep(1.0)
+            selected = subprocess.run(
+                compose + ["ps", "--all", "-q", "cloudflared"],
+                cwd=cwd, env=run_env, capture_output=True, text=True, timeout=8
+            )
+            container_ids = (selected.stdout or "").strip().splitlines()
+            if selected.returncode != 0 or len(container_ids) != 1:
+                return {"success": False, "action": action, "status": "unknown",
+                        "error": "Could not locate this stack's tunnel container. Check Docker access and retry."}
+            container_id = container_ids[0]
             insp = subprocess.run(
-                ["docker", "inspect", "-f", "{{.State.Status}} {{.State.Running}}", "aio-tunnel"],
+                ["docker", "inspect", "-f", "{{.State.Status}} {{.State.Running}}", container_id],
                 capture_output=True, text=True, timeout=8
             )
             insp_out = (insp.stdout or "").strip().lower()
-            if insp.returncode == 0 and "running true" not in insp_out:
+            if insp.returncode != 0:
+                return {"success": False, "action": action, "status": "unknown",
+                        "error": "Could not verify the local tunnel container. Check Docker access and retry."}
+            if insp_out != "running true":
                 logs_res = subprocess.run(
-                    ["docker", "logs", "--tail", "6", "aio-tunnel"],
+                    ["docker", "logs", "--tail", "6", container_id],
                     capture_output=True, text=True, timeout=8
                 )
                 err_log = (logs_res.stdout or logs_res.stderr or "").strip()
-                subprocess.run(["docker", "compose", "--profile", "tunnel", "stop", "cloudflared"], cwd=cwd, capture_output=True, timeout=10)
+                subprocess.run(compose + ["stop", "cloudflared"], cwd=cwd, env=run_env, capture_output=True, timeout=10)
                 return {
                     "success": False,
                     "action": action,
@@ -529,7 +555,7 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
                 "success": True,
                 "action": action,
                 "status": "running",
-                "output": "aio-tunnel container is running and connected."
+                "output": "aio-tunnel container is running. Cloudflare connectivity has not been verified."
             }
 
         return {

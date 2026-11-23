@@ -19,6 +19,24 @@ spec.loader.exec_module(portal)
 
 
 class PortalTests(unittest.TestCase):
+    def test_nntp_success_survives_socket_cleanup(self):
+        sock = MagicMock()
+        sock.makefile.return_value.readline.side_effect = [b"200 ready\r\n", b"381 password\r\n", b"281 accepted\r\n"]
+        with patch("socket.create_connection", return_value=sock):
+            ok, detail = portal.test_nntp_login("news.example.org", 119, "fixture-user", "fixture-pass", False)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "Authentication accepted")
+        sock.close.assert_called_once()
+
+    def test_nntp_rejection_and_connection_failure_survive_cleanup(self):
+        sock = MagicMock()
+        sock.makefile.return_value.readline.side_effect = [b"200 ready\r\n", b"502 denied\r\n"]
+        with patch("socket.create_connection", return_value=sock):
+            self.assertFalse(portal.test_nntp_login("news.example.org", 119, "fixture", "fixture", False)[0])
+        sock.close.assert_called_once()
+        with patch("socket.create_connection", side_effect=OSError("fixture connection failed")):
+            self.assertFalse(portal.test_nntp_login("news.example.org", 119, "fixture", "fixture", False)[0])
+
     def test_appliance_startup_portal_cannot_save_or_launch_host_bootstrap(self):
         with patch.dict(os.environ, {"AIO_STARTUP_ONLY": "true"}), patch.object(portal.subprocess, "Popen") as start:
             self.assertEqual(portal.setup_snapshot()["status"], "running")
@@ -841,7 +859,7 @@ class PortalTests(unittest.TestCase):
             "NZB_INDEXER_URL": "https://api.althub.co.za",
             "NZB_INDEXER_API_KEY": "dummy_nzb_key"
         })
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><searching></searching></caps>"
             mock_resp.status = 200
@@ -1117,7 +1135,7 @@ class PortalTests(unittest.TestCase):
             self.assertIn("token=tb-secret-token", req2.full_url)
 
     def test_validate_provider_nzb_drunkenslug_explicit_url_and_key(self):
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><searching></searching></caps>"
             mock_resp.status = 200
@@ -1164,7 +1182,7 @@ class PortalTests(unittest.TestCase):
         portal.save_env_updates({
             "USENET_EXTRA_INDEXERS_B64": base64.b64encode(json.dumps(slug_indexer).encode()).decode()
         })
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><server version=\"1.0\"/></caps>"
             mock_resp.status = 200
@@ -1911,6 +1929,40 @@ class PortalTests(unittest.TestCase):
                 self.assertEqual(status, 302)
                 self.assertEqual(headers.get("Location"), "https://stream.example.com/jellyfin/test-uuid/test-enc-pass/web/")
 
+    def test_cloudflare_status_does_not_expose_run_token(self):
+        token = base64.b64encode(json.dumps({"a": "fixture-account", "t": "fixture-tunnel", "s": "fixture-secret"}).encode()).decode()
+        with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value={}), \
+             patch.object(portal, "read_saved_env", return_value={"CLOUDFLARE_TUNNEL_TOKEN": token}):
+            for path in ("/api/cloudflare/status", "/api/env"):
+                status, body, _ = self.request(path, "GET", auth=True)
+                self.assertEqual(status, 200)
+                self.assertNotIn(token.encode(), body)
+                self.assertNotIn(b"fixture-secret", body)
+
+    def test_cloudflare_start_passes_saved_or_entered_token(self):
+        for payload, expected in (({"action": "start"}, "saved-fixture"),
+                                  ({"action": "restart", "token": "new-fixture"}, "new-fixture")):
+            with patch.object(portal, "read_saved_env", return_value={"CLOUDFLARE_TUNNEL_TOKEN": "saved-fixture"}), \
+                 patch.object(portal, "save_env_updates"), \
+                 patch("tools.cloudflare_helper.manage_local_tunnel", return_value={"success": True}) as manage:
+                status, _, _ = self.request("/api/cloudflare/tunnel", "POST", payload, auth=True)
+                self.assertEqual(status, 200)
+                self.assertEqual(manage.call_args.kwargs["token"], expected)
+
+    def test_cloudflare_dns_reuses_api_key_but_not_another_tunnels_token(self):
+        token = base64.b64encode(json.dumps({"a": "fixture-account", "t": "old-tunnel", "s": "fixture-secret"}).encode()).decode()
+        saved = {"CLOUDFLARE_API_TOKEN": "saved-api-fixture", "CLOUDFLARE_TUNNEL_TOKEN": token}
+        with patch.object(portal, "read_saved_env", return_value=saved), \
+             patch.object(portal, "save_env_updates"), \
+             patch("tools.cloudflare_helper.push_cloudflare_dns", return_value={"success": True, "message": "DNS updated", "account_id": "fixture-account", "tunnel_id": "new-tunnel"}) as push, \
+             patch("tools.cloudflare_helper.fetch_cloudflare_tunnel_token", return_value={"success": False}), \
+             patch("tools.cloudflare_helper.manage_local_tunnel") as manage:
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {"hostname": "watch.example.com", "cname_target": "new-tunnel.cfargotunnel.com"}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(push.call_args.kwargs["api_token"], "saved-api-fixture")
+            self.assertFalse(json.loads(body)["tunnel_started"])
+            manage.assert_not_called()
+
     def test_cloudflare_status_endpoint(self):
         mock_containers = {
             "available": True,
@@ -1931,7 +1983,8 @@ class PortalTests(unittest.TestCase):
 
     def test_cloudflare_push_dns_endpoint(self):
         # 1. Missing api_token -> 400
-        with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
+        with patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": ""}), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
             status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {"api_token": ""}, auth=True)
             self.assertEqual(status, 400)
             data = json.loads(body.decode("utf-8"))

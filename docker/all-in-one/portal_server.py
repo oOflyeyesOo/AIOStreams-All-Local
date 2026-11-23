@@ -427,94 +427,8 @@ def validate_provider(provider, key=None, url=None, indexer_id=None):
         return {"status": "valid" if ok else "rejected", "detail": f"Usenet NNTP server ({host}:{port}): {msg}"}
 
     if provider == "nzb":
-        env_vars = read_saved_env()
-        raw_url = (url or "").strip() if isinstance(url, str) else ""
-        if raw_url:
-            base_url = raw_url.rstrip("/")
-        else:
-            base_url = (env_vars.get("NZB_INDEXER_URL") or "https://api.althub.co.za").strip().rstrip("/")
-
-        clean_key = (key or "").strip() if isinstance(key, str) else ""
-        if not clean_key or clean_key.lower() == "saved":
-            matched_key = None
-            try:
-                indexers = newznab_indexers(env_vars)
-            except Exception:
-                indexers = []
-            if not indexers and "USENET_EXTRA_INDEXERS" in env_vars:
-                raw_extra = env_vars.get("USENET_EXTRA_INDEXERS")
-                if isinstance(raw_extra, list):
-                    indexers = raw_extra
-                elif isinstance(raw_extra, str) and raw_extra.strip():
-                    try:
-                        parsed = json.loads(raw_extra)
-                        if isinstance(parsed, list):
-                            indexers = parsed
-                    except Exception:
-                        pass
-
-            target_netloc = urllib.parse.urlsplit(base_url).netloc.lower()
-            if not target_netloc and "://" not in base_url and base_url:
-                target_netloc = urllib.parse.urlsplit(f"http://{base_url}").netloc.lower()
-            target_domain = target_netloc.split(":")[0]
-
-            if indexer_id:
-                for idx in indexers:
-                    if isinstance(idx, dict) and str(idx.get("id") or "").strip() == str(indexer_id).strip():
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-
-            if not matched_key and (target_netloc or target_domain):
-                for idx in indexers:
-                    if not isinstance(idx, dict):
-                        continue
-                    idx_url = (idx.get("url") or "").strip()
-                    idx_netloc = urllib.parse.urlsplit(idx_url).netloc.lower()
-                    if not idx_netloc and "://" not in idx_url and idx_url:
-                        idx_netloc = urllib.parse.urlsplit(f"http://{idx_url}").netloc.lower()
-                    idx_domain = idx_netloc.split(":")[0]
-                    if target_netloc and idx_netloc and target_netloc == idx_netloc:
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-                    if target_domain and idx_domain and (target_domain == idx_domain or target_domain.endswith("." + idx_domain) or idx_domain.endswith("." + target_domain)):
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-
-            if matched_key:
-                clean_key = str(matched_key).strip()
-            else:
-                fallback_key = env_vars.get("NZB_INDEXER_API_KEY") or os.environ.get("NZB_INDEXER_API_KEY") or ""
-                clean_key = str(fallback_key).strip()
-
-        if not clean_key:
-            return {"status": "invalid", "detail": "No NZB API key configured."}
-
-        clean_base = base_url if base_url.endswith("/api") else f"{base_url}/api"
-        test_url = f"{clean_base}?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
-        headers = {"User-Agent": "AIO-Local/1.0", "Accept": "*/*"}
-        request = urllib.request.Request(test_url, headers=headers)
-        try:
-            with urllib.request.urlopen(request, timeout=8) as response:
-                body = response.read().decode("utf-8", errors="ignore")
-            if "<error " in body:
-                desc = "Invalid or rejected API key."
-                m = re.search(r'description="([^"]+)"', body)
-                if m:
-                    desc = m.group(1)
-                return {"status": "rejected", "detail": f"Indexer rejected API key: {desc}"}
-            if "<caps>" in body or "<categories>" in body or response.status == 200:
-                host_label = urllib.parse.urlsplit(base_url).netloc or base_url
-                return {"status": "valid", "detail": f"NZB indexer ({host_label}) verified successfully."}
-            return {"status": "rejected", "detail": "Indexer did not return standard Newznab capabilities."}
-        except urllib.error.HTTPError as error:
-            if error.code in (401, 403):
-                return {"status": "rejected", "detail": f"NZB API key rejected (HTTP {error.code}). Check your indexer profile API key."}
-            return {"status": "rejected", "detail": f"Indexer returned HTTP {error.code}."}
-        except (OSError, ValueError):
-            return {"status": "unavailable", "detail": f"Could not connect to NZB indexer at {base_url}."}
+        from tools.indexer_validation import validate_indexer
+        return validate_indexer(read_saved_env(), key, url, indexer_id)
 
     if provider not in PROVIDER_VALIDATORS:
         return {"status": "invalid", "detail": "Choose a supported provider."}
@@ -599,7 +513,6 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
                 raw_sock.close()
             except Exception:
                 pass
-        return False, str(e)
 
 
 def playback_readiness():
@@ -3709,9 +3622,10 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel
+            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel, normalize_tunnel_token
             payload = self.read_json_body()
-            api_token = (payload.get("api_token") or "").strip()
+            env_vars = read_saved_env()
+            api_token = (payload.get("api_token") or env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
             if not api_token:
                 self.json_response({"success": False, "error": "Cloudflare API Token is required. Generate one in Cloudflare Dashboard -> My Profile -> API Tokens."}, 400)
                 return
@@ -3772,7 +3686,7 @@ button:hover {{ background: #0369a1; }}
 
             # If the user provided a full run token, persist it
             if req_tunnel_token and meta.get("is_run_token"):
-                env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = req_tunnel_token
+                env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = normalize_tunnel_token(req_tunnel_token)
             elif account_id and tunnel_id and api_token and not meta.get("is_run_token"):
                 try:
                     tok_res = fetch_cloudflare_tunnel_token(api_token, account_id, tunnel_id)
@@ -3800,6 +3714,8 @@ button:hover {{ background: #0369a1; }}
                 resolved_tun = res.get("tunnel_id") or tunnel_id
                 curr_env = read_saved_env()
                 curr_token = curr_env.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+                if curr_token and resolved_tun and parse_tunnel_token(curr_token).get("tunnel_id") != resolved_tun:
+                    curr_token = ""
                 if not curr_token and resolved_acc and resolved_tun and api_token:
                     try:
                         fetch_res = fetch_cloudflare_tunnel_token(api_token, resolved_acc, resolved_tun)
@@ -3813,7 +3729,7 @@ button:hover {{ background: #0369a1; }}
                     t_start = manage_local_tunnel("start", cwd=WEB_ROOT, token=curr_token)
                     if t_start.get("success"):
                         res["tunnel_started"] = True
-                        res["message"] += " Local tunnel connector aio-tunnel started and connected successfully! 🚀"
+                        res["message"] += " Local tunnel container started. Remote connectivity has not been verified."
                     else:
                         res["tunnel_started"] = False
                         res["tunnel_error"] = t_start.get("error")
@@ -3833,14 +3749,16 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import manage_local_tunnel, fetch_cloudflare_tunnel_token
+            from tools.cloudflare_helper import manage_local_tunnel, fetch_cloudflare_tunnel_token, normalize_tunnel_token
             payload = self.read_json_body()
-            action = payload.get("action", "status")
+            action = str(payload.get("action", "status")).strip().lower()
+            curr_token = None
 
             if action in ("start", "restart"):
-                token_arg = (payload.get("token") or "").strip()
+                token_arg = normalize_tunnel_token(payload.get("token") or "")
                 if token_arg:
                     save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": token_arg})
+                    curr_token = token_arg
                 else:
                     env_vars = read_saved_env()
                     curr_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
@@ -3852,8 +3770,9 @@ button:hover {{ background: #0369a1; }}
                             fres = fetch_cloudflare_tunnel_token(api_tok, acc_id, tun_id)
                             if fres.get("success") and fres.get("token"):
                                 save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": fres["token"]})
+                                curr_token = fres["token"]
 
-            res = manage_local_tunnel(action, cwd=WEB_ROOT)
+            res = manage_local_tunnel(action, cwd=WEB_ROOT, token=curr_token)
             self.json_response(res, 200 if res.get("success") else 400)
         except ValueError as e:
             self.json_response({"success": False, "error": str(e)}, 400)

@@ -1981,7 +1981,7 @@ function updateClientTokenPreview() {
 
   if (meta && (meta.tunnel_id || meta.cname_target)) {
     const target = meta.cname_target || `${meta.tunnel_id}.cfargotunnel.com`;
-    let previewContent = `Tunnel ID: <code>${meta.tunnel_id || 'valid'}</code> · CNAME Target: <code>${target}</code>`;
+    let previewContent = `Tunnel ID: <code>${escapeHtml(meta.tunnel_id || 'valid')}</code> · CNAME Target: <code>${escapeHtml(target)}</code>`;
     if (meta.is_run_token === false) {
       previewContent += ` <span style="color:#fbbf24;font-size:11px;">(UUID detected — paste full token for connector)</span>`;
     }
@@ -2066,7 +2066,7 @@ async function refreshCloudflareStatus() {
       if (hostBadge) hostBadge.style.display = 'none';
       if (hintBox) hintBox.style.display = 'none';
       if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
-        html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is active and connected.</div>
+        html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is running. Remote connectivity is not verified.</div>
                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
       } else if (res.token_configured) {
         html += `<div style="color:#fbbf24;font-weight:600;">⚠️ Tunnel token is saved, but local container aio-tunnel is stopped. Click 'Start Local Tunnel ▶' below to route traffic.</div>`;
@@ -2404,20 +2404,20 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
 
     if (res.success) {
       if (res.tunnel_started) {
-        notify('✓ Cloudflare DNS CNAME pushed & local tunnel connected! 🚀');
+        notify('✓ Cloudflare DNS CNAME pushed & local tunnel started. Remote connectivity is not verified.');
       } else {
         notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
       }
       await refreshCloudflareStatus();
       if (resultBox) {
         resultBox.style.display = 'block';
-        let statusHtml = `<span style="color:#34d399;font-weight:700;">✓ ${res.message}</span>
+        let statusHtml = `<span style="color:#34d399;font-weight:700;">✓ ${escapeHtml(res.message)}</span>
           <div style="margin-top:4px;color:var(--text-muted);font-size:11.5px;">
-            Hostname: <code>${res.hostname}</code> &rarr; Target: <code>${res.cname_target}</code> (Zone: <code>${res.zone_name}</code>, Proxied: ON)
+            Hostname: <code>${escapeHtml(res.hostname)}</code> &rarr; Target: <code>${escapeHtml(res.cname_target)}</code> (Zone: <code>${escapeHtml(res.zone_name)}</code>, Proxied: ON)
           </div>`;
         if (!res.tunnel_started) {
           statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:12px;color:#fbbf24;">
-            <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but your local tunnel container (aio-tunnel) is stopped. Enter your Tunnel Token (eyJh...) above and click <strong>Start Local Tunnel ▶</strong> to resolve Bad Gateway.
+            <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but local connector startup was not confirmed. Check its status and logs, then use <strong>Start Local Tunnel ▶</strong> if needed. A running connector alone does not verify the origin service.
           </div>`;
         }
         resultBox.innerHTML = statusHtml;
@@ -2429,7 +2429,7 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     notify(`Cloudflare DNS push failed: ${err.message}`, true);
     if (resultBox) {
       resultBox.style.display = 'block';
-      resultBox.innerHTML = `<span style="color:#f87171;font-weight:700;">✗ ${err.message}</span>`;
+      resultBox.innerHTML = `<span style="color:#f87171;font-weight:700;">✗ ${escapeHtml(err.message)}</span>`;
     }
   } finally {
     btn.disabled = false;
