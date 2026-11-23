@@ -4,6 +4,7 @@ Unit tests for Cloudflare Tunnel & DNS Automation Helper.
 
 import base64
 import json
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
@@ -12,7 +13,8 @@ from tools.cloudflare_helper import (
     parse_tunnel_token,
     check_cloudflare_containers,
     push_cloudflare_dns,
-    manage_local_tunnel
+    manage_local_tunnel,
+    fetch_cloudflare_tunnel_token
 )
 
 
@@ -228,13 +230,34 @@ class TestCloudflareHelper(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_manage_local_tunnel(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="Started cloudflared", stderr="")
-        res = manage_local_tunnel("start")
-        self.assertTrue(res["success"])
-        self.assertEqual(res["action"], "start")
+        # 1. Missing token returns error
+        with patch.dict(os.environ, {"CLOUDFLARE_TUNNEL_TOKEN": ""}):
+            res_no_tok = manage_local_tunnel("start", cwd=None)
+            self.assertFalse(res_no_tok["success"])
+            self.assertIn("not configured", res_no_tok["error"])
+
+        # 2. Configured token succeeds
+        with patch.dict(os.environ, {"CLOUDFLARE_TUNNEL_TOKEN": "eyJhIjoidGVzdCJ9"}):
+            mock_run.return_value = MagicMock(returncode=0, stdout="running true", stderr="")
+            res = manage_local_tunnel("start")
+            self.assertTrue(res["success"])
+            self.assertEqual(res["action"], "start")
 
         res_invalid = manage_local_tunnel("bad_action")
         self.assertFalse(res_invalid["success"])
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_cloudflare_tunnel_token(self, mock_urlopen):
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__.return_value.read.return_value = json.dumps({
+            "success": True,
+            "result": "eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwtMTIzIiwicyI6InNlY3JldCJ9"
+        }).encode("utf-8")
+        mock_urlopen.return_value = mock_ctx
+
+        res = fetch_cloudflare_tunnel_token("api_token_xyz", "acc_123", "tun_456")
+        self.assertTrue(res["success"])
+        self.assertEqual(res["token"], "eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwtMTIzIiwicyI6InNlY3JldCJ9")
 
 
 if __name__ == "__main__":

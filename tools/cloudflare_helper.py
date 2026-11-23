@@ -12,8 +12,10 @@ import base64
 import ipaddress
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,12 +59,15 @@ def parse_tunnel_token(token: str) -> dict:
         if isinstance(data, dict):
             tunnel_id = str(data.get("t") or data.get("tunnel_id") or data.get("TunnelID") or "").strip()
             account_id = str(data.get("a") or data.get("account_id") or data.get("AccountTag") or "").strip()
+            has_secret = bool(data.get("s") or data.get("secret") or data.get("TunnelSecret"))
             if tunnel_id:
                 return {
                     "valid": True,
                     "account_id": account_id,
                     "tunnel_id": tunnel_id,
-                    "cname_target": f"{tunnel_id}.cfargotunnel.com"
+                    "cname_target": f"{tunnel_id}.cfargotunnel.com",
+                    "is_run_token": has_secret or True,
+                    "token": raw
                 }
     except Exception:
         pass
@@ -80,7 +85,8 @@ def parse_tunnel_token(token: str) -> dict:
                 "valid": True,
                 "account_id": "",
                 "tunnel_id": tunnel_id,
-                "cname_target": f"{tunnel_id}.cfargotunnel.com"
+                "cname_target": f"{tunnel_id}.cfargotunnel.com",
+                "is_run_token": False
             }
         prefix = clean_target.split(".cfargotunnel.com")[0].split(".")[-1].strip()
         if prefix:
@@ -88,7 +94,8 @@ def parse_tunnel_token(token: str) -> dict:
                 "valid": True,
                 "account_id": "",
                 "tunnel_id": prefix,
-                "cname_target": f"{prefix}.cfargotunnel.com"
+                "cname_target": f"{prefix}.cfargotunnel.com",
+                "is_run_token": False
             }
 
     # 3. Raw tunnel UUID (e.g. 8-4-4-4-12 hex UUID or 32-char hex)
@@ -99,10 +106,52 @@ def parse_tunnel_token(token: str) -> dict:
             "valid": True,
             "account_id": "",
             "tunnel_id": tunnel_id,
-            "cname_target": f"{tunnel_id}.cfargotunnel.com"
+            "cname_target": f"{tunnel_id}.cfargotunnel.com",
+            "is_run_token": False
         }
 
     return {"valid": False}
+
+
+def fetch_cloudflare_tunnel_token(api_token: str, account_id: str, tunnel_id: str) -> dict:
+    """
+    Fetches the full cloudflared run token for a specific tunnel from the Cloudflare API.
+    GET /client/v4/accounts/{account_id}/cfd_tunnel/{tunnel_id}/token
+    Requires Cloudflare One Connectors / Tunnel read permissions on the API token.
+    """
+    api_token = (api_token or "").strip()
+    account_id = (account_id or "").strip()
+    tunnel_id = (tunnel_id or "").strip()
+    if not api_token or not account_id or not tunnel_id:
+        return {"success": False, "error": "api_token, account_id, and tunnel_id are all required."}
+
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/cfd_tunnel/{tunnel_id}/token"
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+        "User-Agent": "AIOStreams-Stack-Manager/1.0"
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if data.get("success") and data.get("result"):
+            return {"success": True, "token": str(data["result"]).strip()}
+        errors = data.get("errors", [])
+        msg = "; ".join(err.get("message", "") for err in errors if isinstance(err, dict)) or "Failed to retrieve tunnel token."
+        return {"success": False, "error": msg}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        err_msg = f"Cloudflare API error ({e.code})"
+        try:
+            err_json = json.loads(body)
+            if err_json.get("errors"):
+                err_msg = "; ".join(err.get("message", "") for err in err_json["errors"] if err.get("message")) or err_msg
+        except Exception:
+            pass
+        return {"success": False, "error": err_msg}
+    except Exception as e:
+        return {"success": False, "error": f"Failed to connect to Cloudflare API: {str(e)}"}
 
 
 def check_cloudflare_containers() -> dict:
@@ -172,13 +221,17 @@ def check_cloudflare_containers() -> dict:
         if is_local:
             local_tunnel = entry
         else:
+            is_active = state.lower() in ("running", "restarting") or status.lower().startswith("up")
+            entry["is_active"] = is_active
             external_connectors.append(entry)
 
+    active_external = [c for c in external_connectors if c.get("is_active", True)]
     return {
         "available": True,
         "local_tunnel": local_tunnel or {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True},
         "external_connectors": external_connectors,
-        "has_external": len(external_connectors) > 0
+        "active_external_connectors": active_external,
+        "has_external": len(active_external) > 0
     }
 
 
@@ -274,6 +327,8 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
 
         zone_id = matching_zone["id"]
         zone_name = matching_zone["name"]
+        if not account_id and isinstance(matching_zone.get("account"), dict):
+            account_id = matching_zone["account"].get("id") or account_id
 
     # 2. Check if a DNS record already exists for clean_host
     query_url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?name={urllib.parse.quote(clean_host)}&per_page=10"
@@ -388,6 +443,8 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
         "cname_target": clean_target,
         "zone_name": zone_name,
         "zone_id": zone_id,
+        "account_id": account_id,
+        "tunnel_id": tunnel_id,
         "record_id": record_info.get("id"),
         "proxied": True,
         "ingress_configured": ingress_configured,
@@ -395,7 +452,7 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
     }
 
 
-def manage_local_tunnel(action: str, cwd: str = None) -> dict:
+def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict:
     """
     Controls the local cloudflared container via Docker Compose.
     Supported actions: 'start', 'stop', 'restart', 'status'.
@@ -403,6 +460,34 @@ def manage_local_tunnel(action: str, cwd: str = None) -> dict:
     action = (action or "").strip().lower()
     if action not in ("start", "stop", "restart", "status"):
         return {"success": False, "error": f"Invalid tunnel action '{action}'. Use start, stop, restart, or status."}
+
+    # Resolve token before starting
+    if action in ("start", "restart"):
+        env_token = (token or "").strip() or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN", "").strip()
+        if not env_token:
+            search_paths = []
+            if cwd:
+                search_paths.append(Path(cwd) / ".env")
+            search_paths.append(Path(".env"))
+            for env_path in search_paths:
+                if env_path.exists():
+                    try:
+                        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                            line = line.strip()
+                            if line.startswith("CLOUDFLARE_TUNNEL_TOKEN="):
+                                env_token = line.split("=", 1)[1].strip().strip("\"'")
+                                break
+                    except Exception:
+                        pass
+                if env_token:
+                    break
+
+        if not env_token:
+            return {
+                "success": False,
+                "action": action,
+                "error": "Cloudflare Tunnel Token is not configured in .env. Enter your tunnel token first to start the connector."
+            }
 
     cmd = ["docker", "compose", "--profile", "tunnel"]
     if action == "start":
@@ -417,11 +502,41 @@ def manage_local_tunnel(action: str, cwd: str = None) -> dict:
     try:
         res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30)
         output = (res.stdout or res.stderr or "").strip()
+        if res.returncode != 0:
+            return {"success": False, "action": action, "output": output, "error": output}
+
+        if action in ("start", "restart"):
+            time.sleep(1.0)
+            insp = subprocess.run(
+                ["docker", "inspect", "-f", "{{.State.Status}} {{.State.Running}}", "aio-tunnel"],
+                capture_output=True, text=True, timeout=8
+            )
+            insp_out = (insp.stdout or "").strip().lower()
+            if insp.returncode == 0 and "running true" not in insp_out:
+                logs_res = subprocess.run(
+                    ["docker", "logs", "--tail", "6", "aio-tunnel"],
+                    capture_output=True, text=True, timeout=8
+                )
+                err_log = (logs_res.stdout or logs_res.stderr or "").strip()
+                subprocess.run(["docker", "compose", "--profile", "tunnel", "stop", "cloudflared"], cwd=cwd, capture_output=True, timeout=10)
+                return {
+                    "success": False,
+                    "action": action,
+                    "status": "failed",
+                    "error": f"aio-tunnel container failed to run ({err_log or 'container exited immediately'}). Verify your Cloudflare Tunnel Token is valid."
+                }
+            return {
+                "success": True,
+                "action": action,
+                "status": "running",
+                "output": "aio-tunnel container is running and connected."
+            }
+
         return {
-            "success": res.returncode == 0,
+            "success": True,
             "action": action,
             "output": output,
-            "error": None if res.returncode == 0 else output
+            "error": None
         }
     except Exception as e:
         return {"success": False, "action": action, "error": str(e)}

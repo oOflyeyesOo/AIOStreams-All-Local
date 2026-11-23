@@ -3695,6 +3695,9 @@ button:hover {{ background: #0369a1; }}
                 "external_connectors": containers.get("external_connectors", []),
                 "has_external": containers.get("has_external", False),
                 "token_configured": bool(token),
+                "api_token_configured": bool(env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN")),
+                "zone_id": env_vars.get("CLOUDFLARE_ZONE_ID") or os.environ.get("CLOUDFLARE_ZONE_ID") or "",
+                "is_run_token": meta.get("is_run_token", False),
                 "tunnel_metadata": meta,
                 "current_host": parsed_host
             })
@@ -3706,7 +3709,7 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token
+            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel
             payload = self.read_json_body()
             api_token = (payload.get("api_token") or "").strip()
             if not api_token:
@@ -3760,6 +3763,28 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)
                 return
 
+            # Persist credentials into .env so they survive restarts
+            env_updates = {}
+            if api_token:
+                env_updates["CLOUDFLARE_API_TOKEN"] = api_token
+            if zone_id:
+                env_updates["CLOUDFLARE_ZONE_ID"] = zone_id
+
+            # If the user provided a full run token, persist it
+            if req_tunnel_token and meta.get("is_run_token"):
+                env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = req_tunnel_token
+            elif account_id and tunnel_id and api_token and not meta.get("is_run_token"):
+                try:
+                    tok_res = fetch_cloudflare_tunnel_token(api_token, account_id, tunnel_id)
+                    if tok_res.get("success") and tok_res.get("token"):
+                        env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = tok_res["token"]
+                        tunnel_token = tok_res["token"]
+                except Exception:
+                    pass
+
+            if env_updates:
+                save_env_updates(env_updates)
+
             res = push_cloudflare_dns(
                 api_token=api_token,
                 hostname=hostname,
@@ -3768,6 +3793,35 @@ button:hover {{ background: #0369a1; }}
                 tunnel_id=tunnel_id,
                 zone_id=zone_id
             )
+
+            # If DNS push succeeded, ensure local tunnel is running
+            if res.get("success"):
+                resolved_acc = res.get("account_id") or account_id
+                resolved_tun = res.get("tunnel_id") or tunnel_id
+                curr_env = read_saved_env()
+                curr_token = curr_env.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+                if not curr_token and resolved_acc and resolved_tun and api_token:
+                    try:
+                        fetch_res = fetch_cloudflare_tunnel_token(api_token, resolved_acc, resolved_tun)
+                        if fetch_res.get("success") and fetch_res.get("token"):
+                            save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": fetch_res["token"]})
+                            curr_token = fetch_res["token"]
+                    except Exception:
+                        pass
+
+                if curr_token:
+                    t_start = manage_local_tunnel("start", cwd=WEB_ROOT, token=curr_token)
+                    if t_start.get("success"):
+                        res["tunnel_started"] = True
+                        res["message"] += " Local tunnel connector aio-tunnel started and connected successfully! 🚀"
+                    else:
+                        res["tunnel_started"] = False
+                        res["tunnel_error"] = t_start.get("error")
+                        res["message"] += f" Note: Local tunnel container could not start automatically ({t_start.get('error')})."
+                else:
+                    res["tunnel_started"] = False
+                    res["message"] += " Note: Cloudflare DNS is active, but the local tunnel connector is not running. Paste your Cloudflare Tunnel Token (eyJh...) and click 'Start Local Tunnel' to route traffic and resolve 502 Bad Gateway."
+
             self.json_response(res, 200 if res.get("success") else 400)
         except ValueError as e:
             self.json_response({"success": False, "error": str(e)}, 400)
@@ -3779,9 +3833,26 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import manage_local_tunnel
+            from tools.cloudflare_helper import manage_local_tunnel, fetch_cloudflare_tunnel_token
             payload = self.read_json_body()
             action = payload.get("action", "status")
+
+            if action in ("start", "restart"):
+                token_arg = (payload.get("token") or "").strip()
+                if token_arg:
+                    save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": token_arg})
+                else:
+                    env_vars = read_saved_env()
+                    curr_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+                    api_tok = env_vars.get("CLOUDFLARE_API_TOKEN") or ""
+                    if not curr_token and api_tok:
+                        acc_id = payload.get("account_id") or ""
+                        tun_id = payload.get("tunnel_id") or ""
+                        if acc_id and tun_id:
+                            fres = fetch_cloudflare_tunnel_token(api_tok, acc_id, tun_id)
+                            if fres.get("success") and fres.get("token"):
+                                save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": fres["token"]})
+
             res = manage_local_tunnel(action, cwd=WEB_ROOT)
             self.json_response(res, 200 if res.get("success") else 400)
         except ValueError as e:

@@ -1927,18 +1927,7 @@ function parseClientTunnelToken(token) {
     }
   }
 
-  // Plain tunnel UUID check (e.g. 84144369-15de-4d76-a2a5-48faea71a4f0 or 84144369-15de-4d76-a2a5-48faea71a4f0.cfargotunnel.com)
-  const uuidMatch = str.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-  if (uuidMatch) {
-    const tid = uuidMatch[1].toLowerCase();
-    return {
-      tunnel_id: tid,
-      account_id: '',
-      cname_target: `${tid}.cfargotunnel.com`
-    };
-  }
-
-  // 3. Decode base64
+  // 3. Decode base64 (standard Cloudflare token format: eyJh...)
   try {
     let b64 = str.trim().replace(/-/g, '+').replace(/_/g, '/');
     b64 += '='.repeat((4 - (b64.length % 4)) % 4);
@@ -1952,10 +1941,24 @@ function parseClientTunnelToken(token) {
       return {
         tunnel_id: cleanTid,
         account_id: String(parsed.a || parsed.account_id || parsed.AccountTag || '').trim(),
-        cname_target: `${cleanTid}.cfargotunnel.com`
+        cname_target: `${cleanTid}.cfargotunnel.com`,
+        is_run_token: true
       };
     }
   } catch (_) {}
+
+  // 4. Plain tunnel UUID check (e.g. 84144369-15de-4d76-a2a5-48faea71a4f0 or 84144369-15de-4d76-a2a5-48faea71a4f0.cfargotunnel.com)
+  const uuidMatch = str.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (uuidMatch) {
+    const tid = uuidMatch[1].toLowerCase();
+    return {
+      tunnel_id: tid,
+      account_id: '',
+      cname_target: `${tid}.cfargotunnel.com`,
+      is_run_token: false
+    };
+  }
+
   return null;
 }
 if (typeof window !== 'undefined') window.parseClientTunnelToken = parseClientTunnelToken;
@@ -1978,7 +1981,11 @@ function updateClientTokenPreview() {
 
   if (meta && (meta.tunnel_id || meta.cname_target)) {
     const target = meta.cname_target || `${meta.tunnel_id}.cfargotunnel.com`;
-    if (previewText) previewText.textContent = `Tunnel ID: ${meta.tunnel_id || 'valid'} · CNAME Target: ${target}`;
+    let previewContent = `Tunnel ID: <code>${meta.tunnel_id || 'valid'}</code> · CNAME Target: <code>${target}</code>`;
+    if (meta.is_run_token === false) {
+      previewContent += ` <span style="color:#fbbf24;font-size:11px;">(UUID detected — paste full token for connector)</span>`;
+    }
+    if (previewText) previewText.innerHTML = previewContent;
     if (previewBox) previewBox.style.display = 'block';
 
     if (cnameCard) {
@@ -2019,8 +2026,12 @@ async function refreshCloudflareStatus() {
     cachedCloudflareStatus = res;
 
     const tokenInput = document.getElementById('cf-tunnel-token');
-    if (tokenInput && res.token_configured && !tokenInput.value) {
-      tokenInput.placeholder = 'Saved · enter to replace';
+    if (tokenInput && !tokenInput.value) {
+      if (res.token_configured) {
+        tokenInput.placeholder = 'Saved · enter to replace';
+      } else {
+        tokenInput.placeholder = 'eyJhIjoi... (paste token from Cloudflare Zero Trust)';
+      }
     }
 
     updateClientTokenPreview();
@@ -2057,8 +2068,10 @@ async function refreshCloudflareStatus() {
       if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
         html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is active and connected.</div>
                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
+      } else if (res.token_configured) {
+        html += `<div style="color:#fbbf24;font-weight:600;">⚠️ Tunnel token is saved, but local container aio-tunnel is stopped. Click 'Start Local Tunnel ▶' below to route traffic.</div>`;
       } else {
-        html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No external Cloudflare connectors detected on Docker host. You can use the built-in tunnel container below.</div>`;
+        html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No running Cloudflare connectors detected. Enter your Tunnel Token below and click 'Start Local Tunnel ▶'.</div>`;
       }
     }
 
@@ -2180,17 +2193,32 @@ document.getElementById('btn-save-cf-token')?.addEventListener('click', async ()
     }
   }
 
+  const parsed = parseClientTunnelToken(token);
+  if (parsed && parsed.is_run_token === false) {
+    notify('⚠️ Notice: You entered a Tunnel UUID. Cloudflared needs the full base64 token starting with eyJh... to authenticate the container.', true);
+  }
+
   try {
     await api('/api/save-env', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ CLOUDFLARE_TUNNEL_TOKEN: token })
     });
-    notify('Cloudflare Tunnel Token saved to configuration! 💾');
+    notify('✓ Cloudflare Tunnel Token saved to configuration! 💾');
     input.value = '';
     input.placeholder = 'Saved · enter to replace';
     if (typeof cachedEnv !== 'undefined' && cachedEnv) {
       cachedEnv.CLOUDFLARE_TUNNEL_TOKEN_SAVED = true;
+    }
+    // Automatically trigger local tunnel start if it is a run token
+    if (!parsed || parsed.is_run_token !== false) {
+      try {
+        await api('/api/cloudflare/tunnel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'start' })
+        });
+      } catch (_) {}
     }
     await refreshCloudflareStatus();
   } catch (err) {
@@ -2237,12 +2265,14 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
   btn.disabled = true;
   btn.textContent = 'Starting…';
   try {
+    const startPayload = { action: 'start' };
+    if (tokenVal) startPayload.token = tokenVal;
     const res = await api('/api/cloudflare/tunnel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'start' })
+      body: JSON.stringify(startPayload)
     });
-    notify(res.success ? '✓ Local Cloudflare tunnel container started!' : `Tunnel start failed: ${res.error}`, !res.success);
+    notify(res.success ? '✓ Local Cloudflare tunnel container (aio-tunnel) is active and running!' : `Tunnel start failed: ${res.error}`, !res.success);
     await refreshCloudflareStatus();
   } catch (err) {
     notify(`Could not start tunnel: ${err.message}`, true);
@@ -2373,13 +2403,24 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     });
 
     if (res.success) {
-      notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
+      if (res.tunnel_started) {
+        notify('✓ Cloudflare DNS CNAME pushed & local tunnel connected! 🚀');
+      } else {
+        notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
+      }
+      await refreshCloudflareStatus();
       if (resultBox) {
         resultBox.style.display = 'block';
-        resultBox.innerHTML = `<span style="color:#34d399;font-weight:700;">✓ ${res.message}</span>
+        let statusHtml = `<span style="color:#34d399;font-weight:700;">✓ ${res.message}</span>
           <div style="margin-top:4px;color:var(--text-muted);font-size:11.5px;">
             Hostname: <code>${res.hostname}</code> &rarr; Target: <code>${res.cname_target}</code> (Zone: <code>${res.zone_name}</code>, Proxied: ON)
           </div>`;
+        if (!res.tunnel_started) {
+          statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:12px;color:#fbbf24;">
+            <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but your local tunnel container (aio-tunnel) is stopped. Enter your Tunnel Token (eyJh...) above and click <strong>Start Local Tunnel ▶</strong> to resolve Bad Gateway.
+          </div>`;
+        }
+        resultBox.innerHTML = statusHtml;
       }
     } else {
       throw new Error(res.error || 'Failed to push DNS record');
