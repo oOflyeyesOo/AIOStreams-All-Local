@@ -22,7 +22,6 @@ services:
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8181:8181"   # Zilean DMM Cache
       - "${INTERNAL_BIND_IP:-127.0.0.1}:9696:9696"   # Prowlarr Indexer Manager
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8080:8080"   # StremThru Debrid Proxy
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:3333:3333"   # Bitmagnet Autonomous DHT Indexer
       - "${INTERNAL_BIND_IP:-127.0.0.1}:8001:8001"   # Jikan Anime DB API (Optional)
     environment:
       # Empty overrides preserve the appliance's saved settings and inner defaults.

@@ -127,7 +127,6 @@ function Test-SystemPrerequisites {
         @{ Port = 7005; Service = "Anime Kitsu" }
         @{ Port = 4005; Service = "AIOMetadata" }
         @{ Port = 3100; Service = "SubSense Subtitles" }
-        @{ Port = 3333; Service = "Bitmagnet DHT Crawler" }
     )
 
     $conflicts = @()
