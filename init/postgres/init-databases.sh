@@ -16,7 +16,7 @@ done
 
 echo "[init-postgres] shared-postgres is ready! Verifying and provisioning application databases..."
 
-for db in zilean aiometadata bitmagnet; do
+for db in zilean aiometadata; do
   echo "[init-postgres] Checking database '$db'..."
   exists=$(psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$db';")
   if [ "$exists" != "1" ]; then
@@ -30,8 +30,6 @@ done
 
 echo "[init-postgres] Ensuring user 'aio' exists with proper permissions..."
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
-psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER DATABASE bitmagnet OWNER TO aio;" 2>/dev/null || true
-psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE bitmagnet TO aio;" 2>/dev/null || true
 
 echo "[init-postgres] Applying PostgreSQL autovacuum & performance optimizations..."
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();" 2>/dev/null || true

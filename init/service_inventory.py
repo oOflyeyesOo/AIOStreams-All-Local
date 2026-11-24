@@ -10,7 +10,6 @@ INTEGRATIONS = (
     ("Posters+", "postersplus", 8000, "Metadata"),
     ("SubSense", "subsense", 3100, "Subtitles"),
     ("StremThru", "stremthru", 8080, "Proxies"),
-    ("Bitmagnet", "bitmagnet", 3333, "Indexers"),
     ("LumiereDB", "lumiere-db", 8000, "Metadata"),
 )
 

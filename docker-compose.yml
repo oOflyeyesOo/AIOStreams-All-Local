@@ -82,7 +82,6 @@ services:
       - FLARESOLVERR_URL=${FLARESOLVERR_URL:-http://flaresolverr:8191}
       - ZILEAN_URL=${ZILEAN_URL:-http://zilean:8181}
       - STREMTHRU_URL=${STREMTHRU_URL:-http://stremthru:8080}
-      - BITMAGNET_URL=${BITMAGNET_URL:-http://bitmagnet:3333}
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
       - PORTAL_AUTH_REQUIRED=${PORTAL_AUTH_REQUIRED:-false}
       - BASE_URL=${BASE_URL:-}
@@ -158,8 +157,6 @@ services:
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]
       - BUILTIN_ZILEAN_URL=${BUILTIN_ZILEAN_URL:-http://zilean:8181}
       - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
-      - BUILTIN_BITMAGNET_URL=${BUILTIN_BITMAGNET_URL:-http://bitmagnet:3333}
-      - BUILTIN_DEFAULT_BITMAGNET_TIMEOUT=${BUILTIN_DEFAULT_BITMAGNET_TIMEOUT:-5000}
 
       # --- RemuxDB & Media Info Probing ---
       - REMUXDB_ENABLED=${ENABLE_REMUXDB:-true}
@@ -261,54 +258,6 @@ services:
     depends_on:
       init-postgres:
         condition: service_completed_successfully
-
-  # Autonomous DHT crawler & BitTorrent indexer
-  bitmagnet:
-    image: ghcr.io/bitmagnet-io/bitmagnet:latest
-    container_name: bitmagnet
-    profiles: ["core", "scrapers", "all"]
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: ${BITMAGNET_MEM_LIMIT:-512m}
-    ports:
-      - "${INTERNAL_BIND_IP:-127.0.0.1}:3333:3333"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL http://localhost:3333/ > /dev/null 2>&1 || curl -fsSL http://localhost:3333/torznab/api > /dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    environment:
-      - POSTGRES_HOST=shared-postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=aio
-      - POSTGRES_PASSWORD=aio_local_secret
-      - POSTGRES_DB=bitmagnet
-      - POSTGRES_SSLMODE=disable
-      - POSTGRES_MAX_OPEN_CONNS=25
-      - POSTGRES_MAX_IDLE_CONNS=10
-      - DHT_CRAWLER_SAVE_PIECES=false
-      - LOG_LEVEL=${BITMAGNET_LOG_LEVEL:-warn}
-      - REDIS_ADDR=shared-redis:6379
-      - REDIS_HOST=shared-redis:6379
-      - REDIS_URL=redis://shared-redis:6379
-    command:
-      - worker
-      - run
-      - --keys=http_server
-      - --keys=queue_server
-      - --keys=dht_crawler
-    volumes:
-      - ./data/bitmagnet:/root/.local/share/bitmagnet
-    networks:
-      stremio-net:
-        aliases:
-          - bitmagnet
-    depends_on:
-      init-postgres:
-        condition: service_completed_successfully
-      shared-redis:
-        condition: service_healthy
 
   # ============================================================================
   # 4. TRACKER AGGREGATORS & CLOUDFLARE BYPASS
@@ -437,7 +386,6 @@ services:
       - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
       - ANILIST_TOKEN=${ANILIST_TOKEN:-}
       - AIOMETADATA_TEMPLATE=${AIOMETADATA_TEMPLATE:-tamtaro-aiometadata-with-anime.json}
-      - BITMAGNET_URL=${BITMAGNET_URL:-http://bitmagnet:3333}
       - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
     command: python3 -u /init/setup_stack.py
     networks:
@@ -832,12 +780,10 @@ services:
         else
           echo "[init-postgres] Waiting for shared-postgres..."
           until psql -h shared-postgres -U postgres -d postgres -c "SELECT 1;" >/dev/null 2>&1; do sleep 1; done
-          for db in zilean aiometadata bitmagnet; do
+          for db in zilean aiometadata; do
             psql -h shared-postgres -U postgres -d postgres -c "CREATE DATABASE $$db;" 2>/dev/null || true
           done
           psql -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
-          psql -h shared-postgres -U postgres -d postgres -c "ALTER DATABASE bitmagnet OWNER TO aio;" 2>/dev/null || true
-          psql -h shared-postgres -U postgres -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE bitmagnet TO aio;" 2>/dev/null || true
           psql -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();" 2>/dev/null || true
           echo "[init-postgres] Done!"
           exit 0
