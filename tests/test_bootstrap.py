@@ -613,12 +613,8 @@ class BootstrapTests(unittest.TestCase):
              patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "bitmagnet" in url):
             bootstrap.setup_prowlarr_indexers()
 
-        bitmagnet_req = next((d for u, d in requests if d.get("name") == "Bitmagnet (Torznab Local)"), None)
-        self.assertIsNotNone(bitmagnet_req)
-        # Direct Torznab preset in AIOStreams queries Bitmagnet directly; Prowlarr indexer is kept disabled to prevent 2x duplicate load
-        self.assertFalse(bitmagnet_req["enable"])
-        fields = {f["name"]: f["value"] for f in bitmagnet_req["fields"]}
-        self.assertEqual(fields["baseUrl"], "http://bitmagnet:3333/torznab")
+        bitmagnet_req = next((d for u, d in requests if "Bitmagnet" in str(d.get("name"))), None)
+        self.assertIsNone(bitmagnet_req)
 
     def test_bitmagnet_aiostreams_preset_when_configured(self):
         with patch.dict(os.environ, {"BITMAGNET_URL": "http://bitmagnet:3333"}), \
@@ -626,11 +622,7 @@ class BootstrapTests(unittest.TestCase):
              patch.object(bootstrap, "is_url_reachable", side_effect=lambda url, timeout=1.0: "bitmagnet" in url or "aiostreams" in url):
             config = bootstrap.build_default_config(probe_services=True)
             preset = next((p for p in config.get("presets", []) if p.get("instanceId") == "bitmagnet-local"), None)
-            self.assertIsNotNone(preset)
-            self.assertEqual(preset["type"], "torznab")
-            self.assertTrue(preset["enabled"])
-            self.assertEqual(preset["options"]["url"], "http://bitmagnet:3333/torznab")
-            self.assertEqual(preset["options"]["api"]["url"], "http://bitmagnet:3333/torznab")
+            self.assertIsNone(preset)
 
     def test_bitmagnet_aiostreams_preset_omitted_when_unreachable(self):
         base = {
@@ -658,6 +650,7 @@ class BootstrapTests(unittest.TestCase):
                 {"type": "custom", "instanceId": "clean-custom-1", "options": {"url": "http://comet:8000"}},
                 {"type": "custom", "instanceId": "clean-custom-2", "options": {"manifestUrl": "http://sootio:55771/manifest.json"}},
                 {"type": "custom", "instanceId": "clean-custom-3", "options": {"url": "http://debrid-search:5000/api"}},
+                {"type": "torznab", "instanceId": "bitmagnet-local", "options": {"url": "http://bitmagnet:3333/torznab"}},
                 {"type": "prowlarr", "instanceId": "prowlarr-scraper", "options": {"sources": ["torrent"]}},
             ]
         }
@@ -676,6 +669,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn("clean-custom-1", preset_ids)
         self.assertNotIn("clean-custom-2", preset_ids)
         self.assertNotIn("clean-custom-3", preset_ids)
+        self.assertNotIn("bitmagnet-local", preset_ids)
         self.assertNotIn("comet", preset_types)
         self.assertNotIn("sootio", preset_types)
         self.assertIn("prowlarr-scraper", preset_ids)

@@ -957,7 +957,7 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(result["enabled"])
             result = portal.probe_integration(("Jikan API", "jikan-api", 8080, "Metadata"))
             self.assertTrue(result["enabled"])
-            result = portal.probe_integration(("Bitmagnet", "bitmagnet", 3333, "Indexers"))
+            result = portal.probe_integration(("Zilean", "zilean", 8181, "Indexers"))
             self.assertFalse(result["enabled"])
 
     def test_legacy_profiles_probe_and_normalization(self):
@@ -1017,7 +1017,6 @@ class PortalTests(unittest.TestCase):
             ("lumiere-db", 8000, "Metadata"),
             ("prowlarr", 9696, "Indexers"),
             ("flaresolverr", 8191, "Tools"),
-            ("bitmagnet", 3333, "Indexers"),
             ("zilean", 8181, "Indexers"),
             ("stremthru", 8080, "Debrid"),
         ]
