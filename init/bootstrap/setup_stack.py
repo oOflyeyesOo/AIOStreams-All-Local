@@ -141,7 +141,6 @@ SERVICE_PORT_MAP = {
     "subsense": (3100, 3100, "PORT_SUBSENSE"),
     "stremio-subsense": (3100, 3100, "PORT_SUBSENSE"),
     "anime-kitsu": (7000, 7005, "PORT_ANIME_KITSU"),
-    "bitmagnet": (3333, 3333, "PORT_BITMAGNET"),
     "lumiere-db": (8000, 8000, "PORT_LUMIERE_DB"),
     "jikan-api": (8080, 8001, "PORT_JIKAN_API"),
 }
@@ -593,30 +592,6 @@ def setup_prowlarr_indexers():
                 print("[Prowlarr Setup] ✓ Successfully provisioned Zilean DMM local Torznab indexer.", flush=True)
                 added_count += 1
 
-    # Ensure Bitmagnet local Torznab indexer is provisioned if reachable or configured
-    bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
-    if not any("bitmagnet" in d for d in existing_definitions):
-        torznab_schema = next((s for s in schemas if isinstance(s, dict) and s.get("implementation") == "Torznab"), None)
-        if torznab_schema and (is_url_reachable(bitmagnet_url, timeout=1.0) or is_url_reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or os.environ.get("BITMAGNET_URL")):
-            b_payload = dict(torznab_schema)
-            b_payload["name"] = "Bitmagnet (Torznab Local)"
-            # AIOStreams queries Bitmagnet directly; keep disabled in Prowlarr to avoid duplicate scraping
-            b_payload["enable"] = False
-            b_payload["priority"] = 2
-            b_payload["appProfileId"] = 1
-            for f in b_payload.get("fields", []):
-                if isinstance(f, dict):
-                    if f.get("name") == "baseUrl":
-                        f["value"] = f"{bitmagnet_url}/torznab"
-                    elif f.get("name") == "apiPath":
-                        f["value"] = "/api"
-                    elif f.get("name") == "apiKey":
-                        f["value"] = os.environ.get("BITMAGNET_API_KEY", "") or PROWLARR_API_KEY
-            res = make_request(f"{PROWLARR_URL}/api/v1/indexer", method="POST", data=b_payload, headers=headers)
-            if isinstance(res, dict) and "id" in res:
-                print("[Prowlarr Setup] ✓ Successfully provisioned Bitmagnet Torznab local indexer.", flush=True)
-                added_count += 1
-
     print(f"[Prowlarr Setup] Prowlarr indexer provisioning complete. Added {added_count} new indexers.", flush=True)
 
 # ==============================================================================
@@ -626,10 +601,9 @@ def tune_prowlarr_indexers():
     active_indexers = make_request(f"{PROWLARR_URL}/api/v1/indexer", headers=headers)
     if not isinstance(active_indexers, list):
         return
-    disabled_names = ["acg.rip", "zilean", "bitmagnet"]
+    disabled_names = ["acg.rip", "zilean"]
     priority_map = {
         "zilean": 1,
-        "bitmagnet": 2,
         "animetosho": 5,
         "animetosho-xyz": 5,
         "althub": 5,
@@ -1161,7 +1135,7 @@ def wait_for_aiostreams(max_attempts=30, interval=2):
     return False
 
 DEPRECATED_PRESET_TARGETS = (
-    "comet", "sootio", "debrid-search", "mediaflow", "mediafusion", "slicksync", "nuvio", "stremio-web"
+    "comet", "sootio", "debrid-search", "mediaflow", "mediafusion", "slicksync", "nuvio", "stremio-web", "bitmagnet"
 )
 
 def is_deprecated_preset(preset):
@@ -1654,29 +1628,6 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     "useMultipleInstances": False
                 }
             })
-        bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
-        if not any(p.get("instanceId") == "bitmagnet-local" for p in presets):
-            bitmagnet_reachable = reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0) or reachable(f"{bitmagnet_url}/torznab/api", timeout=1.0)
-            if bitmagnet_reachable or (os.environ.get("BITMAGNET_URL") and not probe_services):
-                presets.append({
-                    "type": "torznab",
-                    "instanceId": "bitmagnet-local",
-                    "enabled": True,
-                    "options": {
-                        "name": "Bitmagnet (Local)",
-                        "api": {
-                            "url": f"{bitmagnet_url}/torznab",
-                            "apiKey": os.environ.get("BITMAGNET_API_KEY", "")
-                        },
-                        "url": f"{bitmagnet_url}/torznab",
-                        "torznabUrl": f"{bitmagnet_url}/torznab",
-                        "apiKey": os.environ.get("BITMAGNET_API_KEY", ""),
-                        "timeout": 3500,
-                        "resources": ["stream"],
-                        "mediaTypes": [],
-                        "useMultipleInstances": False
-                    }
-                })
 
     subtitle_config = {"languages": ["eng"]}
     for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
@@ -1852,10 +1803,13 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     removed_preset_ids.add(pid)
                 continue
             opts["timeout"] = int(opts.get("timeout") or SCRAPER_TIMEOUT_MS)
-            bitmagnet_url = os.environ.get("BITMAGNET_URL", "http://bitmagnet:3333").rstrip("/")
             api_sub = opts.get("api") if isinstance(opts.get("api"), dict) else {}
-            torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl") or f"{bitmagnet_url}/torznab"
-            api_key = api_sub.get("apiKey") or opts.get("apiKey") or os.environ.get("BITMAGNET_API_KEY", "")
+            torznab_url = api_sub.get("url") or opts.get("url") or opts.get("torznabUrl")
+            if not torznab_url:
+                if pid:
+                    removed_preset_ids.add(pid)
+                continue
+            api_key = api_sub.get("apiKey") or opts.get("apiKey") or ""
             opts["api"] = {
                 "url": torznab_url,
                 "apiKey": api_key,
@@ -1863,14 +1817,14 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             opts["url"] = torznab_url
             opts["torznabUrl"] = torznab_url
 
-            if probe_services and not (reachable(torznab_url, timeout=1.0) or reachable(bitmagnet_url, timeout=1.0) or reachable(f"{bitmagnet_url}/torznab", timeout=1.0)):
-                print(f"[AIOStreams Setup] ℹ️ Bitmagnet is unreachable; preset omitted.", flush=True)
+            if probe_services and not reachable(torznab_url, timeout=1.0):
+                print(f"[AIOStreams Setup] ℹ️ Torznab indexer {opts.get('name') or pid} is unreachable; preset omitted.", flush=True)
                 if pid:
                     removed_preset_ids.add(pid)
                 continue
 
             p["enabled"] = True
-            print("[AIOStreams Setup] ✓ Bitmagnet Torznab (Local) is online and active.", flush=True)
+            print(f"[AIOStreams Setup] ✓ Torznab preset ({opts.get('name') or pid}) is online and active.", flush=True)
             validated_presets.append(p)
         elif ptype == "custom":
             # For custom addons, verify reachability before sending to AIOStreams.

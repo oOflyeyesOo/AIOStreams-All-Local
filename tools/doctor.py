@@ -113,11 +113,11 @@ def check_postgres(env: dict) -> dict:
             return {"status": "error", "error": str(e)}
 
     # Check database presence
-    dbs = ["zilean", "aiometadata", "bitmagnet"]
+    dbs = ["zilean", "aiometadata"]
     found_dbs = []
     try:
         cmd = ["docker", "exec", "shared-postgres", "psql", "-U", "postgres", "-d", "postgres", "-tAc",
-               "SELECT datname FROM pg_database WHERE datname IN ('zilean', 'aiometadata', 'bitmagnet');"]
+               "SELECT datname FROM pg_database WHERE datname IN ('zilean', 'aiometadata');"]
         db_res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if db_res.returncode == 0:
             found_dbs = [line.strip() for line in db_res.stdout.splitlines() if line.strip()]

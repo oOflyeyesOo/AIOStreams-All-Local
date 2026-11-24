@@ -142,13 +142,13 @@ HOST_PORT_MAP = {
     "aiostreams": 3001, "aiometadata": 4005, "zilean": 8181,
     "prowlarr": 9696, "flaresolverr": 8191, "anime-kitsu": 7005, "postersplus": 9039,
     "subsense": 3100, "stremthru": 8080, "lumiere-db": 8000,
-    "bitmagnet": 3333, "jikan-api": 8001
+    "jikan-api": 8001
 }
 SERVICE_UI_PATHS = {
     "aiostreams": "/configure", "aiometadata": "/configure",
     "prowlarr": "/",
     "subsense": "/configure", "postersplus": "/admin", "stremthru": "/",
-    "anime-kitsu": "/", "bitmagnet": "/", "lumiere-db": "/stats",
+    "anime-kitsu": "/", "lumiere-db": "/stats",
     "jikan-api": "/v4",
 }
 
@@ -163,7 +163,6 @@ INTERNAL_SERVICE_TARGETS = {
     "stremthru": ("stremthru", 8080, 8080),
     "anime-kitsu": ("anime-kitsu", 7000, 7005),
     "lumiere-db": ("lumiere-db", 8000, 8000),
-    "bitmagnet": ("bitmagnet", 3333, 3333),
     "jikan-api": ("jikan-api", 8080, 8001),
 }
 
@@ -242,7 +241,6 @@ def probe_integration(item):
         "lumiere-db": {"core", "scrapers", "all"},
         "prowlarr": {"core", "scrapers", "all"},
         "flaresolverr": {"core", "scrapers", "all"},
-        "bitmagnet": {"core", "scrapers", "all"},
         "zilean": {"core", "scrapers", "all"},
         "stremthru": {"core", "scrapers", "all"},
         "anime-kitsu": {"anime", "anime-db", "scrapers", "all"},
@@ -3073,7 +3071,7 @@ button:hover {{ background: #0369a1; }}
             "prowlarr", "zilean", "shared-postgres", "shared-redis",
             "postersplus", "anime-kitsu", "subsense",
             "stremthru", "aiometadata", "lumiere-db", "setup",
-            "bitmagnet", "jikan-api"
+            "jikan-api"
         }
 
         if container:

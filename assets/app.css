@@ -3242,11 +3242,6 @@ a.disabled, button.disabled {
   border: 1px solid rgba(168, 85, 247, 0.35);
   box-shadow: 0 0 14px rgba(168, 85, 247, 0.18);
 }
-.icon-bitmagnet {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.18);
-}
 .hub-card-title-group h3 {
   margin: 0;
   font-size: 15.5px;
@@ -3278,11 +3273,6 @@ a.disabled, button.disabled {
   background: rgba(168, 85, 247, 0.14);
   color: #c084fc;
   border: 1px solid rgba(168, 85, 247, 0.3);
-}
-.badge-bitmagnet {
-  background: rgba(239, 68, 68, 0.14);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 .status-pill {
   display: inline-flex;

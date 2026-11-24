@@ -587,13 +587,6 @@ async function loadSettings(options) {
     }
   }
 
-  const bitmagnetPort = (env.ports && env.ports.bitmagnet) || env.PORT_BITMAGNET || '3333';
-  const bitmagnetUrl = location.protocol === 'https:' ? `${location.origin}/bitmagnet` : `http://${location.hostname}:${bitmagnetPort}`;
-  const bitmagnetLink = document.getElementById('open-bitmagnet');
-  if (bitmagnetLink) bitmagnetLink.href = bitmagnetUrl;
-  const bitmagnetDisplay = document.getElementById('bitmagnet-endpoint-display');
-  if (bitmagnetDisplay) bitmagnetDisplay.textContent = bitmagnetUrl;
-
   const isLocal = !baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') || baseUrl.includes('192.168.') || baseUrl.includes('10.') || /^https?:\/\/(172\.(1[6-9]|2[0-9]|3[0-1])\.|[^\/:]+\.(local|internal|lan|home\.arpa))/.test(baseUrl);
   if (typeof setAccessScope === 'function') setAccessScope(isLocal ? 'local' : 'remote');
   if (typeof refreshCloudflareStatus === 'function') {
@@ -1250,14 +1243,6 @@ async function refreshServices() {
   }
   if (topbarDot) {
     topbarDot.style.background = reachableCount === active.length ? 'var(--accent-green, #10b981)' : (reachableCount > 0 ? 'var(--accent-gold, #f59e0b)' : 'var(--accent-red, #ef4444)');
-  }
-
-  const bitmagnetPill = document.getElementById('bitmagnet-status-pill');
-  if (bitmagnetPill) {
-    const bitService = result.integrations?.find(s => s.name?.toLowerCase().includes('bitmagnet') || s.host === 'bitmagnet');
-    const isOnline = bitService ? bitService.reachable : true;
-    bitmagnetPill.textContent = isOnline ? 'Active' : 'Offline';
-    bitmagnetPill.className = `status-pill ${isOnline ? 'online' : 'offline'}`;
   }
 
   const aioSvc = result.integrations.find(s => s.name === 'AIOStreams' || s.host === 'aiostreams');
@@ -2882,12 +2867,6 @@ async function runOperations() {
   };
   document.getElementById('import-config')?.addEventListener('change', handleImportConfig);
   document.getElementById('quick-import-config')?.addEventListener('change', handleImportConfig);
-
-  document.getElementById('copy-bitmagnet-url')?.addEventListener('click', () => {
-    const bitmagnetLink = document.getElementById('open-bitmagnet');
-    const url = (bitmagnetLink && bitmagnetLink.href) || 'http://localhost:3333';
-    copyToClipboard(url, 'Bitmagnet URL copied to clipboard.', document.getElementById('copy-bitmagnet-url'));
-  });
 
   document.getElementById('logs-container-select')?.addEventListener('change', (e) => {
     showContainerLogs(e.target.value);
