@@ -45,7 +45,7 @@ def resolve_compose_project() -> str:
             )
             if inspect_res.returncode == 0:
                 found = inspect_res.stdout.strip()
-                if found and found != "<no value>":
+                if found and found != "<no value>" and re.fullmatch(r"[a-zA-Z0-9._-]+", found):
                     return found
         except Exception:
             pass
