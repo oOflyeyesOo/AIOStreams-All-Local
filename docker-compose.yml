@@ -10,6 +10,8 @@ services:
     profiles: ["test"]
     image: python:3.11-alpine
     logging: *default-logging
+    environment:
+      - COMPOSE_PROFILES=${COMPOSE_PROFILES:-core}
     volumes:
       - ./init:/init:ro
       - ./tests/check_stack.py:/check_stack.py:ro

@@ -17,6 +17,8 @@ services:
         max-size: 10m
         max-file: '3'
         compress: 'true'
+    environment:
+    - COMPOSE_PROFILES=${COMPOSE_PROFILES:-core}
     volumes:
     - aiostreams-data:/app/data/aiostreams:ro
     command: python3 /check_stack.py

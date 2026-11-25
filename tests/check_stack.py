@@ -23,6 +23,24 @@ TCP_CHECKS = {"shared-postgres": 5432, "shared-redis": 6379, **{
 }}
 
 
+ANIME_PROFILES = {"anime", "anime-db", "scrapers", "all"}
+
+
+def parse_profiles(raw_profiles):
+    cleaned = (raw_profiles or "core").split("#", 1)[0].strip().strip("\"'")
+    profiles = {p.strip().strip("\"'").lower() for p in cleaned.split(",") if p.strip().strip("\"'")}
+    return profiles or {"core"}
+
+
+def active_checks(profiles=None):
+    selected = parse_profiles(os.environ.get("COMPOSE_PROFILES")) if profiles is None else profiles
+    http_names = [
+        name for name in HTTP_CHECKS
+        if name != "anime-kitsu" or bool(selected.intersection(ANIME_PROFILES))
+    ]
+    return http_names + list(TCP_CHECKS)
+
+
 def check(name):
     try:
         if name in HTTP_CHECKS:
@@ -41,8 +59,9 @@ def check(name):
 
 
 if __name__ == "__main__":
+    checks = active_checks()
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(check, list(HTTP_CHECKS) + list(TCP_CHECKS)))
+        results = list(pool.map(check, checks))
     for name, passed, detail in results:
         print(f"{name}: {'PASS' if passed else 'FAIL'} ({detail})")
     print(f"{sum(item[1] for item in results)}/{len(results)} internal endpoint checks passed.")

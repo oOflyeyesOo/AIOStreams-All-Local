@@ -95,3 +95,9 @@ class PackagedPortalTests(unittest.TestCase):
             env=(root/'target'/'.env').read_text()
             self.assertIn('PORT_PROWLARR=29696',env)
             self.assertIn('PORT_AIOMETADATA=24005',env)
+
+    def test_stack_check_respects_optional_anime_profile(self):
+        from tests import check_stack
+        self.assertNotIn('anime-kitsu', check_stack.active_checks({'core'}))
+        self.assertIn('anime-kitsu', check_stack.active_checks({'core', 'anime'}))
+        self.assertIn('anime-kitsu', check_stack.active_checks({'all'}))
