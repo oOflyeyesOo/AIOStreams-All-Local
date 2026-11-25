@@ -31,8 +31,17 @@ done
 echo "[init-postgres] Ensuring user 'aio' exists with proper permissions..."
 psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
 
-echo "[init-postgres] Applying PostgreSQL autovacuum & performance optimizations..."
-psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; SELECT pg_reload_conf();" 2>/dev/null || true
+echo "[init-postgres] Applying PostgreSQL autovacuum, ZFS-safe I/O & performance optimizations..."
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET synchronous_commit = 'off';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '200';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET checkpoint_completion_target = '0.9';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET maintenance_work_mem = '128MB';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET work_mem = '32MB';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET shared_buffers = '256MB';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET effective_cache_size = '512MB';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET max_connections = '50';" 2>/dev/null || true
+psql -v ON_ERROR_STOP=1 -h shared-postgres -U postgres -d postgres -c "SELECT pg_reload_conf();" 2>/dev/null || true
 
 echo "[init-postgres] All application databases successfully verified and ready!"
 exit 0

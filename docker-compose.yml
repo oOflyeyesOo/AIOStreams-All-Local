@@ -70,7 +70,7 @@ services:
       - control-socket:/runtime
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     working_dir: /app
-    command: sh -c "apk add --no-cache docker-cli >/dev/null 2>&1; exec python3 -u /app/docker/all-in-one/portal_server.py"
+    command: sh -c "apk add --no-cache docker-cli docker-cli-compose >/dev/null 2>&1; exec python3 -u /app/docker/all-in-one/portal_server.py"
     environment:
       - AIO_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
       - COMPOSE_CONTROL_SOCKET=/runtime/control.sock
@@ -396,7 +396,8 @@ services:
 
   flaresolverr:
     image: ghcr.io/thephaseless/byparr:latest
-    shm_size: "1gb"
+    shm_size: "512mb"
+    pids_limit: 200
     container_name: flaresolverr
     profiles: ["core", "scrapers", "all"]
     restart: unless-stopped
@@ -744,7 +745,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
-    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes --save "" --appendonly no
     volumes:
       - ./data/redis:/data
     healthcheck:

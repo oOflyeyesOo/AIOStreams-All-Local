@@ -416,7 +416,8 @@ services:
         - bootstrap
   flaresolverr:
     image: ghcr.io/thephaseless/byparr:latest
-    shm_size: 1gb
+    shm_size: 512mb
+    pids_limit: 200
     restart: unless-stopped
     logging:
       driver: json-file
@@ -794,7 +795,8 @@ services:
         max-file: '3'
         compress: 'true'
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
-    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes --save "" --appendonly
+      no
     volumes:
     - redis-data:/data
     healthcheck:
