@@ -486,7 +486,8 @@ function readExtraUsenetSources(payload) {
         const values = row.dataset.sourceId ? { id: row.dataset.sourceId } : {};
         for (const input of row.querySelectorAll('[data-source-field]')) {
           const field = input.dataset.sourceField;
-          const val = input.type === 'checkbox' ? input.checked : (input.value ? input.value.trim() : '');
+          const preserveCredential = source.key === 'USENET_EXTRA_SERVERS' && (field === 'username' || field === 'password');
+          const val = input.type === 'checkbox' ? input.checked : (preserveCredential ? input.value : (input.value ? input.value.trim() : ''));
           if (field === source.secret && !val) continue;
           values[field] = val;
         }
@@ -504,8 +505,17 @@ for (const source of extraUsenetSources) {
   });
 }
 
+let settingsEditRevision = 0;
+let settingsLoadSequence = 0;
+let setupSaveInFlight = false;
+
 async function loadSettings(options) {
-  const env = await api('/api/env', options);
+  const {expectedEditRevision = settingsEditRevision, ...requestOptions} = options || {};
+  if (expectedEditRevision !== settingsEditRevision) return false;
+  const sequence = ++settingsLoadSequence;
+  const env = await api('/api/env', requestOptions);
+  // An older response must not replace edits or a newer settings response.
+  if (expectedEditRevision !== settingsEditRevision || sequence !== settingsLoadSequence) return false;
   const passwordField = document.getElementById('stack-admin-password');
   if (passwordField) passwordField.value = '';
   cachedEnv = env;
@@ -634,6 +644,7 @@ async function loadSettings(options) {
     if (testEl) testEl.hidden = !saved;
   }
   if (typeof setFormDirty === 'function') setFormDirty(false);
+  return true;
 }
 
 let cachedManifestInfo = null;
@@ -886,6 +897,13 @@ function closeLumiereStatsDialog() {
 }
 window.closeLumiereStatsDialog = closeLumiereStatsDialog;
 
+function lumiereStatusLabel(stats) {
+  if (stats.online === false || stats.phase === 'offline') return 'Offline · cached metrics only';
+  if (stats.phase === 'idle') return stats.ready === true ? 'Ready (idle)' : 'Not ready (idle)';
+  if (stats.phase) return `Reported phase: ${stats.phase}`;
+  return stats.ready === true ? 'Ready' : 'Readiness not confirmed';
+}
+
 async function showLumiereStats() {
   const dialog = document.getElementById('lumiere-stats-dialog');
   const content = document.getElementById('lumiere-stats-content');
@@ -899,24 +917,22 @@ async function showLumiereStats() {
   try {
     const res = await api('/api/lumiere/stats');
     if (!res || !res.success) throw new Error(res?.error || 'Failed to fetch stats');
-    const docCount = res.docs ? Number(res.docs).toLocaleString() : '319,117';
-    const epCount = res.episodes ? Number(res.episodes).toLocaleString() : '4,580,131';
-    const peopleCount = res.people ? Number(res.people).toLocaleString() : '2,829,639';
-    const nameCount = res.names ? Number(res.names).toLocaleString() : '1,211,454';
-    const isIdle = res.phase === 'idle';
-    const statusText = isIdle ? 'Ready (Idle)' : `Rebuilding (${res.phase})`;
-    const datasetDate = res.datasetDate || '2026-11-16';
-    const builtAt = res.builtAt ? new Date(res.builtAt).toLocaleString() : 'Recent';
-    const genId = res.generationId || 'gen-2026-11-16-18-v13';
+    const metric = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value).toLocaleString() : 'Not reported';
+    const docCount = metric(res.docs);
+    const epCount = metric(res.episodes);
+    const peopleCount = metric(res.people);
+    const nameCount = metric(res.names);
+    const statusText = lumiereStatusLabel(res);
+    const datasetDate = res.datasetDate || 'Not reported';
+    const date = res.builtAt ? new Date(res.builtAt) : null;
+    const builtAt = date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : 'Not reported';
+    const genId = res.generationId || 'Not reported';
 
     content.innerHTML = `
       <div class="lumiere-progress-card">
         <div class="lumiere-progress-header">
-          <span>ETL Indexing Progress: <strong>${isIdle ? '100% Synced' : 'Indexing…'}</strong></span>
-          <span class="lumiere-phase-tag ${isIdle ? 'synced' : 'indexing'}">${isIdle ? '✓ Optimal LSM State' : res.phase}</span>
-        </div>
-        <div class="lumiere-progress-track">
-          <div class="lumiere-progress-fill ${isIdle ? 'synced' : 'indexing'}" style="width: ${isIdle ? '100%' : '65%'}"></div>
+          <span>Index status: <strong>${escapeHtml(statusText)}</strong></span>
+          <span>Progress percentage is not reported.</span>
         </div>
       </div>
       <div class="lumiere-stats-grid">
@@ -938,16 +954,14 @@ async function showLumiereStats() {
         </div>
       </div>
       <div class="lumiere-details-list">
-        <div class="lumiere-detail-row"><span>Index Status</span><strong>${statusText}</strong></div>
-        <div class="lumiere-detail-row"><span>IMDb Snapshot Date</span><strong>${datasetDate}</strong></div>
-        <div class="lumiere-detail-row"><span>Current Generation</span><code>${genId}</code></div>
-        <div class="lumiere-detail-row"><span>Last Index Build</span><strong>${builtAt}</strong></div>
-        <div class="lumiere-detail-row"><span>ETL Scheduler Sync</span><strong>Hourly (Auto-sync)</strong></div>
-        <div class="lumiere-detail-row"><span>Database Storage Engine</span><strong>Pebble LSM Key-Value + Slices</strong></div>
+        <div class="lumiere-detail-row"><span>Index Status</span><strong>${escapeHtml(statusText)}</strong></div>
+        <div class="lumiere-detail-row"><span>IMDb Snapshot Date</span><strong>${escapeHtml(datasetDate)}</strong></div>
+        <div class="lumiere-detail-row"><span>Current Generation</span><code>${escapeHtml(genId)}</code></div>
+        <div class="lumiere-detail-row"><span>Last Index Build</span><strong>${escapeHtml(builtAt)}</strong></div>
       </div>
     `;
   } catch (err) {
-    content.innerHTML = `<p style="color:var(--red);padding:1rem;">Could not load stats: ${err.message}</p>`;
+    content.innerHTML = `<p style="color:var(--red);padding:1rem;">Could not load stats: ${escapeHtml(err.message)}</p>`;
   }
 }
 window.showLumiereStats = showLumiereStats;
@@ -968,75 +982,109 @@ async function handleLumiereSandboxSearch(e) {
   try {
     const res = await api(`/api/lumiere/search?q=${encodeURIComponent(query)}&limit=8`);
     if (!res || !res.success) throw new Error(res?.error || 'Search lookup failed');
-    const items = res.items || [];
+    const items = Array.isArray(res.items) ? res.items.filter(item => item && typeof item === 'object') : [];
     if (!items.length) {
-      resultsEl.innerHTML = `<span style="color:var(--text-muted);font-size:0.78rem;">No titles found for "${query}" (Latency: ${res.latencyMs || 0}ms)</span>`;
+      resultsEl.innerHTML = `<span style="color:var(--text-muted);font-size:0.78rem;">No titles found for "${escapeHtml(query)}" (Latency: ${escapeHtml(res.latencyMs ?? 'unknown')}ms)</span>`;
       return;
     }
     const html = items.map(item => `
       <div class="lumiere-result-item">
         <div class="lumiere-result-main">
-          <strong class="lumiere-result-title">${item.title}</strong>
-          ${item.year ? `<span class="lumiere-result-year">(${item.year})</span>` : ''}
-          <span class="lumiere-result-type">${item.type || 'title'}</span>
+          <strong class="lumiere-result-title">${escapeHtml(item.title)}</strong>
+          ${item.year ? `<span class="lumiere-result-year">(${escapeHtml(item.year)})</span>` : ''}
+          <span class="lumiere-result-type">${escapeHtml(item.type || 'title')}</span>
         </div>
         <div class="lumiere-result-meta">
-          <a href="https://www.imdb.com/title/${item.imdbId}/" target="_blank" rel="noopener noreferrer" class="lumiere-result-imdb">${item.imdbId}</a>
-          <span class="lumiere-result-pop">★ ${item.popularity || 0}</span>
+          ${/^tt\d+$/.test(item.imdbId) ? `<a href="https://www.imdb.com/title/${item.imdbId}/" target="_blank" rel="noopener noreferrer" class="lumiere-result-imdb">${item.imdbId}</a>` : '<span>IMDb link unavailable</span>'}
+          <span class="lumiere-result-pop">★ ${escapeHtml(item.popularity ?? 'Not reported')}</span>
         </div>
       </div>
     `).join('');
     resultsEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0.25rem 0.2rem 0.4rem;font-size:0.75rem;color:var(--text-muted);border-bottom:1px solid rgba(255,255,255,0.06);">
-        <span>Found <strong>${res.count}</strong> matches</span>
-        <span class="lumiere-latency-tag">⚡ ${res.latencyMs}ms</span>
+        <span>Found <strong>${escapeHtml(res.count ?? items.length)}</strong> matches</span>
+        <span class="lumiere-latency-tag">⚡ ${escapeHtml(res.latencyMs ?? 'unknown')}ms</span>
       </div>
       ${html}
     `;
   } catch (err) {
-    resultsEl.innerHTML = `<span style="color:var(--red);font-size:0.78rem;">Lookup error: ${err.message}</span>`;
+    resultsEl.innerHTML = `<span style="color:var(--red);font-size:0.78rem;">Lookup error: ${escapeHtml(err.message)}</span>`;
   } finally {
     if (btn) btn.disabled = false;
   }
 }
 window.handleLumiereSandboxSearch = handleLumiereSandboxSearch;
 
-function pollLumiereRebuildProgress(button, badge) {
+let lumiereRebuildPending = false;
+
+async function startLumiereRebuild(button, badge) {
+  if (lumiereRebuildPending) {
+    showToast('A LumiereDB rebuild is already being monitored.');
+    return false;
+  }
+  lumiereRebuildPending = true;
+  if (button) { button.disabled = true; button.textContent = 'Requesting rebuild…'; }
+  try {
+    let baseline = null;
+    try { baseline = await api('/api/lumiere/stats'); } catch (_) {}
+    const result = await api('/api/lumiere/rebuild', { method: 'POST' });
+    if (!result?.success) throw new Error(result?.error || 'The rebuild request was not accepted.');
+    showToast('LumiereDB rebuild request accepted. Waiting for completion evidence…');
+    return await pollLumiereRebuildProgress(button, badge, baseline);
+  } catch (error) {
+    if (badge) badge.textContent = 'Rebuild request failed';
+    showToast('Failed to request rebuild: ' + error.message);
+    return false;
+  } finally {
+    lumiereRebuildPending = false;
+    if (button) { button.disabled = false; button.textContent = 'Rebuild index ↻'; }
+  }
+}
+
+function pollLumiereRebuildProgress(button, badge, baseline = null) {
   let attempts = 0;
-  const interval = setInterval(async () => {
-    attempts++;
-    try {
-      const stats = await api('/api/lumiere/stats');
-      if (stats && stats.success) {
-        if (badge && stats.phase && stats.phase !== 'idle') {
-          badge.textContent = `⚡ Rebuilding (${stats.phase})…`;
-          if (button) button.textContent = `Rebuilding (${stats.phase})…`;
-        } else if (stats.phase === 'idle' && attempts > 1) {
-          clearInterval(interval);
-          if (button) {
-            button.disabled = false;
-            button.textContent = 'Rebuild index ↻';
+  let observedActivity = false;
+  const baselineGeneration = baseline?.success && baseline.online === true && typeof baseline.generationId === 'string' ? baseline.generationId : null;
+  if (button) button.textContent = 'Waiting for rebuild…';
+  return new Promise(resolve => {
+    const poll = async () => {
+      attempts++;
+      try {
+        const stats = await api('/api/lumiere/stats');
+        if (stats?.success && stats.online === true) {
+          if (['error', 'failed'].includes(stats.phase)) {
+            if (badge) badge.textContent = 'Index reports a failure; check logs';
+            showToast('LumiereDB reports a failure. Rebuild completion was not verified.');
+            resolve(false);
+            return;
           }
-          const docStr = (typeof stats.docs === 'number' && stats.docs >= 1000) ? (stats.docs / 1000).toFixed(1) + 'k' : (stats.docs ?? '0');
-          const epStr = (stats.episodes && !isNaN(stats.episodes))
-            ? (stats.episodes >= 1000000 ? (stats.episodes / 1000000).toFixed(2) + 'M' : (stats.episodes >= 1000 ? (stats.episodes / 1000).toFixed(0) + 'k' : stats.episodes))
-            : '0k';
-          if (badge) badge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
-          showToast('LumiereDB index rebuild completed successfully!');
-          refreshServices();
-          return;
+          const active = typeof stats.phase === 'string' && stats.phase && !['idle', 'offline', 'unknown'].includes(stats.phase);
+          if (active) observedActivity = true;
+          const changedGeneration = baselineGeneration && typeof stats.generationId === 'string' && stats.generationId && stats.generationId !== baselineGeneration;
+          if (stats.phase === 'idle' && stats.ready === true && (changedGeneration || observedActivity)) {
+            if (badge) badge.textContent = 'Ready · rebuild completion observed';
+            showToast('LumiereDB returned to ready after an observed index update.');
+            resolve(true);
+            return;
+          }
+          if (badge) badge.textContent = active ? `Reported phase: ${stats.phase}` : 'Waiting for rebuild completion evidence…';
+          if (button) button.textContent = active ? `Index: ${stats.phase}…` : 'Waiting for rebuild…';
+        } else if (badge) {
+          badge.textContent = 'Index unavailable · rebuild not verified';
         }
+      } catch (_) {
+        if (badge) badge.textContent = 'Status unavailable · rebuild not verified';
       }
-    } catch (_) {}
-    if (attempts >= 60) {
-      clearInterval(interval);
-      if (button) {
-        button.disabled = false;
-        button.textContent = 'Rebuild index ↻';
+      if (attempts >= 60) {
+        if (badge) badge.textContent = 'Rebuild completion not verified; check logs';
+        showToast('Could not verify rebuild completion. It may still be running; check service logs before retrying.');
+        resolve(false);
+        return;
       }
-      refreshServices();
-    }
-  }, 2500);
+      setTimeout(poll, 2500);
+    };
+    setTimeout(poll, 2500);
+  });
 }
 window.pollLumiereRebuildProgress = pollLumiereRebuildProgress;
 
@@ -1163,22 +1211,22 @@ async function refreshServices() {
 
       api('/api/lumiere/stats').then((res) => {
         if (res && res.success) {
-          if (res.phase && res.phase !== 'idle') {
-            statsBadge.textContent = `⚡ Rebuilding (${res.phase})…`;
-          } else if (res.docs) {
+          if (res.online === false || res.phase !== 'idle' || res.ready !== true) {
+            statsBadge.textContent = lumiereStatusLabel(res);
+          } else if (res.docs !== null && res.docs !== undefined) {
             const docStr = (typeof res.docs === 'number' && res.docs >= 1000) ? (res.docs / 1000).toFixed(1) + 'k' : (res.docs ?? '0');
-            const epStr = (res.episodes && !isNaN(res.episodes))
+            const epStr = (res.episodes !== null && res.episodes !== undefined && !isNaN(res.episodes))
               ? (res.episodes >= 1000000 ? (res.episodes / 1000000).toFixed(2) + 'M' : (res.episodes >= 1000 ? (res.episodes / 1000).toFixed(0) + 'k' : res.episodes))
-              : '0k';
-            statsBadge.textContent = `Ready · ${docStr} titles · ${epStr} episodes`;
+              : 'unknown';
+            statsBadge.textContent = `Index · ${docStr} titles · ${epStr} episodes`;
           } else {
-            statsBadge.textContent = 'Index: Ready';
+            statsBadge.textContent = 'Index metrics not reported';
           }
         } else {
-          statsBadge.textContent = 'Index: Active';
+          statsBadge.textContent = 'Index metrics unavailable';
         }
       }).catch(() => {
-        statsBadge.textContent = 'Index: Active';
+        statsBadge.textContent = 'Index metrics unavailable';
       });
 
       const statsBtn = document.createElement('button');
@@ -1201,24 +1249,7 @@ async function refreshServices() {
       rebuildBtn.setAttribute('aria-label', 'Rebuild LumiereDB search index');
       rebuildBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        rebuildBtn.disabled = true;
-        rebuildBtn.textContent = 'Rebuilding…';
-        statsBadge.textContent = '⚡ Rebuilding index…';
-        try {
-          const res = await api('/api/lumiere/rebuild', { method: 'POST' });
-          if (res && res.success) {
-            showToast('LumiereDB rebuild triggered. Monitoring progress…');
-            pollLumiereRebuildProgress(rebuildBtn, statsBadge);
-          } else {
-            showToast('Rebuild: ' + (res?.error || res?.output || 'Triggered'));
-            rebuildBtn.disabled = false;
-            rebuildBtn.textContent = 'Rebuild index ↻';
-          }
-        } catch (err) {
-          showToast('Failed to trigger rebuild: ' + err.message);
-          rebuildBtn.disabled = false;
-          rebuildBtn.textContent = 'Rebuild index ↻';
-        }
+        await startLumiereRebuild(rebuildBtn, statsBadge);
       });
       actions.append(rebuildBtn);
     }
@@ -1390,6 +1421,7 @@ if (baseUrlInput && aiomInput) {
 
 document.getElementById('setup-form').addEventListener('submit',async event=>{
   event.preventDefault();
+  if (setupSaveInFlight) return;
   const payload = {
     ENABLE_TORRENTIO: document.getElementById('enable-torrentio')?.checked ? 'true' : 'false',
     TORRENTIO_URL: document.getElementById('torrentio-url')?.value.trim() || '',
@@ -1457,24 +1489,48 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     return;
   }
   const button = document.getElementById('setup-button'); button.disabled = true;
+  setupSaveInFlight = true;
   if (typeof setFormDirty === 'function') setFormDirty(true);
+  const submittedRevision = settingsEditRevision;
   setProgress('Saving your configuration','Connecting local services and checking your keys.',true);
   try {
     await api('/api/save-env',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const headers = newPassword ? {Authorization: 'Basic ' + btoa('admin:' + newPassword)} : undefined;
     await api('/api/setup', {method:'POST', headers});
-    await loadSettings(headers ? {headers} : undefined);
+    await loadSettings({headers, expectedEditRevision: submittedRevision});
     lastJobStatus = 'running';
     renderPlaybackReadiness();
-    if (typeof setFormDirty === 'function') setFormDirty(false);
     await pollSetup();
   } catch(error) { setProgress('Setup needs attention',error.message); button.disabled=false; notify(error.message, true); }
+  finally { setupSaveInFlight = false; }
 });
 
 document.getElementById('refresh-services').addEventListener('click',()=>refreshServices().catch(error=>notify(error.message, true)));
 
 async function copyToClipboard(text, successMsg, triggerBtn) {
-  if (!text) return;
+  if (!text) return false;
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.append(textarea);
+    try {
+      textarea.select();
+      copied = document.execCommand('copy');
+    } catch (_) {
+      copied = false;
+    } finally {
+      textarea.remove();
+    }
+  }
+  if (!copied) {
+    notify('Could not copy. Select the value and copy it manually.', true);
+    return false;
+  }
   if (triggerBtn && !triggerBtn._origContent) {
     triggerBtn._origContent = triggerBtn.innerHTML || triggerBtn.textContent || '';
     triggerBtn.textContent = 'Copied! ✓';
@@ -1493,19 +1549,8 @@ async function copyToClipboard(text, successMsg, triggerBtn) {
       }, 2000);
     }
   }
-  try {
-    await navigator.clipboard.writeText(text);
-    notify(successMsg);
-  } catch {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-    document.body.append(textarea);
-    textarea.select();
-    let copied = false;
-    try { copied = document.execCommand('copy'); } finally { textarea.remove(); }
-    notify(copied ? successMsg : 'Select the URL above and copy it.');
-  }
+  notify(successMsg);
+  return true;
 }
 
 document.getElementById('btn-test-playback')?.addEventListener('click', () => {
@@ -1742,6 +1787,7 @@ if (syncAiomBtn) {
 }
 
 function setFormDirty(dirty) {
+  if (dirty) settingsEditRevision++;
   setupFormDirty = dirty;
   renderPlaybackReadiness();
   const syncText = document.getElementById('setup-sync-text');
@@ -2992,30 +3038,8 @@ async function runOperations() {
   });
 
   document.getElementById('btn-rebuild-lumiere-from-modal')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Rebuilding…';
-    }
-    try {
-      const res = await api('/api/lumiere/rebuild', { method: 'POST' });
-      if (res && res.success) {
-        showToast('LumiereDB rebuild triggered.');
-      } else {
-        showToast('Rebuild: ' + (res?.error || res?.output || 'Triggered'));
-      }
-    } catch (err) {
-      showToast('Failed to trigger rebuild: ' + err.message);
-    } finally {
-      setTimeout(() => {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Rebuild index ↻';
-        }
-        showLumiereStats();
-        refreshServices();
-      }, 3000);
-    }
+    e.preventDefault();
+    await startLumiereRebuild(e.currentTarget);
   });
 
   const frameDialog = document.getElementById('service-frame-modal');
@@ -3075,10 +3099,13 @@ async function runOperations() {
   });
 
   document.getElementById('btn-discard-changes')?.addEventListener('click', () => {
-    loadSettings().then(() => {
-      setFormDirty(false);
-      notify('Unsaved changes discarded');
-    });
+    if (setupSaveInFlight) {
+      notify('Wait for the current save before discarding changes.', true);
+      return;
+    }
+    loadSettings().then(applied => {
+      if (applied) notify('Unsaved changes discarded');
+    }).catch(error => notify(error.message, true));
   });
 
   function revealAndScroll(hash) {

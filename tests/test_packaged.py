@@ -2,6 +2,9 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import yaml
+
+from scripts.generate_manager_compose import generate
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('packaged_entrypoint', ROOT / 'docker/packaged/portal_entrypoint.py')
@@ -10,6 +13,42 @@ spec.loader.exec_module(entrypoint)
 
 
 class PackagedPortalTests(unittest.TestCase):
+    def test_manager_profiles_match_source_and_keep_anime_optional(self):
+        source = yaml.safe_load((ROOT / 'docker-compose.yml').read_text(encoding='utf-8'))
+        manager = generate(yaml.safe_load((ROOT / 'docker-compose.yml').read_text(encoding='utf-8')))
+
+        def selected(config, profiles):
+            return {name for name, service in config['services'].items()
+                    if not service.get('profiles') or set(service['profiles']).intersection(profiles)}
+
+        for profiles in ({'core'}, {'core', 'anime'}, {'scrapers'}, {'core', 'anime-db'}, {'all'}):
+            with self.subTest(profiles=profiles):
+                self.assertEqual(selected(manager, profiles), selected(source, profiles))
+                active = selected(manager, profiles)
+                for name in active:
+                    for dependency in manager['services'][name].get('depends_on', {}):
+                        self.assertIn(dependency, active, f'{name} requires inactive {dependency}')
+        default = selected(manager, set())
+        self.assertEqual(default, selected(source, {'core'}))
+        self.assertNotIn('jikan-api', default)
+        self.assertNotIn('jikan-mongo', default)
+        self.assertNotIn('anime-kitsu', default)
+        self.assertIn('COMPOSE_PROFILES=${COMPOSE_PROFILES:-}', manager['services']['portal']['environment'])
+
+    def test_profile_selection_survives_reseed_and_accepts_manager_override(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'image'
+            source.mkdir()
+            target = root / 'config'
+            entrypoint.seed(source, target, {})
+            self.assertIn('COMPOSE_PROFILES=core\n', (target / '.env').read_text())
+            (target / '.env').write_text('COMPOSE_PROFILES=core,anime\n')
+            entrypoint.seed(source, target, {'COMPOSE_PROFILES': ''})
+            self.assertIn('COMPOSE_PROFILES=core,anime\n', (target / '.env').read_text())
+            entrypoint.seed(source, target, {'COMPOSE_PROFILES': 'core'})
+            self.assertIn('COMPOSE_PROFILES=core\n', (target / '.env').read_text())
+
     def test_first_install_and_upgrade_keep_provider_keys_and_data(self):
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / 'image'

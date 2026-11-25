@@ -234,7 +234,7 @@ def probe_integration(item):
         else:
             profiles.add(p)
     if not profiles:
-        profiles = {"core", "all"}
+        profiles = {"core"}
     service_profiles = {
         "aiometadata": {"core", "scrapers", "all"},
         "postersplus": {"core", "scrapers", "all"},
@@ -819,13 +819,13 @@ def config_export():
     env_vars = read_saved_env()
     values = {
         "BASE_URL": env_vars.get("BASE_URL", ""),
-        "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
+        "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES") or "core",
         "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
     }
     return {
         "format": "aio-local-config-v1",
         "baseUrl": env_vars.get("BASE_URL", ""),
-        "profile": env_vars.get("COMPOSE_PROFILES", "all"),
+        "profile": env_vars.get("COMPOSE_PROFILES") or "core",
         "values": values,
         "configuredKeys": sorted(key for key, value in env_vars.items() if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)),
         "secrets": {key: bool(value) for key, value in env_vars.items() if re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)},
@@ -892,7 +892,7 @@ def optimized_profile_export():
 
     return {
         "format": "aio-local-optimized-profile-v1",
-        "profile": "all",
+        "profile": saved_env.get("COMPOSE_PROFILES") or "core",
         "providerKeys": sorted(
             key for key in ("REALDEBRID_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY",
                             "PREMIUMIZE_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY",
@@ -2667,15 +2667,32 @@ button:hover {{ background: #0369a1; }}
             if not self.authorize():
                 return
             try:
+                project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+                if not project and os.environ.get("HOSTNAME"):
+                    own = subprocess.run(
+                        ["docker", "inspect", "--format", '{{index .Config.Labels "com.docker.compose.project"}}', os.environ["HOSTNAME"]],
+                        capture_output=True, text=True, timeout=8)
+                    if own.returncode == 0:
+                        project = own.stdout.strip()
+                if not project or project == "<no value>":
+                    self.json_response({"success": False, "error": "Cannot identify this Compose project. Recreate the portal through your stack manager and retry."}, 503)
+                    return
+                selected = subprocess.run(
+                    ["docker", "ps", "--filter", f"label=com.docker.compose.project={project}",
+                     "--filter", "label=com.docker.compose.service=lumiere-db", "--format", "{{.ID}}"],
+                    capture_output=True, text=True, timeout=8)
+                targets = selected.stdout.strip().splitlines()
+                if selected.returncode != 0 or len(targets) != 1:
+                    self.json_response({"success": False, "error": "Could not find one running Lumiere service in this stack. Check service status before rebuilding."}, 503)
+                    return
                 res = subprocess.run(
-                    ["docker", "exec", "lumiere-db", "/app/api", "rebuild"],
+                    ["docker", "exec", targets[0], "/app/api", "rebuild"],
                     capture_output=True, text=True, timeout=15
                 )
-                output = (res.stdout or res.stderr or "Rebuild command executed").strip()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": res.returncode == 0, "output": output}).encode("utf-8"))
+                if res.returncode != 0:
+                    self.json_response({"success": False, "error": "Lumiere rejected the rebuild request. Check its service logs."}, 502)
+                    return
+                self.json_response({"success": True, "output": "Rebuild request accepted. Completion has not been verified."})
             except Exception:
                 self.json_response({"success": False, "error": "Internal server error occurred while rebuilding Lumiere database."}, 500)
             return
@@ -3440,8 +3457,10 @@ button:hover {{ background: #0369a1; }}
                     req = urllib.request.Request(ep, headers={"User-Agent": "AIO-Portal"})
                     with urllib.request.urlopen(req, timeout=2) as resp:
                         if resp.status == 200:
-                            data = json.loads(resp.read().decode("utf-8"))
-                            break
+                            candidate = json.loads(resp.read().decode("utf-8"))
+                            if isinstance(candidate, dict):
+                                data = candidate
+                                break
                 except Exception:
                     continue
 
@@ -3452,25 +3471,30 @@ button:hover {{ background: #0369a1; }}
                 if manifest_files:
                     manifest_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
                     try:
-                        manifest_info = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+                        candidate = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+                        if isinstance(candidate, dict):
+                            manifest_info = candidate
                     except Exception:
                         pass
 
-            if not data and not manifest_info:
+            if data is None and not manifest_info:
                 self.json_response({"success": False, "error": "LumiereDB is unreachable or not initialized yet."}, 503)
                 return
 
+            online = data is not None
+            index = (data or {}).get("index")
+            index = index if isinstance(index, dict) else {}
             result = {
                 "success": True,
-                "online": bool(data),
-                "phase": data.get("phase", "idle") if data else "offline",
-                "ready": data.get("index", {}).get("ready", False) if data else bool(manifest_info),
-                "generationId": data.get("index", {}).get("generationId", "") if data else manifest_info.get("indexVersion", ""),
+                "online": online,
+                "phase": data.get("phase") if online else "offline",
+                "ready": online and index.get("ready") is True,
+                "generationId": index.get("generationId", "") if online else manifest_info.get("indexVersion", ""),
                 "datasetDate": manifest_info.get("datasetDate", ""),
-                "docs": manifest_info.get("docs", 0),
-                "episodes": manifest_info.get("episodes", 0),
-                "people": manifest_info.get("people", 0),
-                "names": manifest_info.get("names", 0),
+                "docs": manifest_info.get("docs"),
+                "episodes": manifest_info.get("episodes"),
+                "people": manifest_info.get("people"),
+                "names": manifest_info.get("names"),
                 "builtAt": manifest_info.get("builtAt", ""),
                 "lastPollAt": data.get("lastPollAt") if data else None,
                 "nextPollAt": data.get("nextPollAt") if data else None,

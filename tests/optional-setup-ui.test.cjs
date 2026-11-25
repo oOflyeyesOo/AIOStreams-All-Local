@@ -45,9 +45,96 @@ function form(saved){
   const load=source.match(/async function loadSettings\(options\) \{[\s\S]*?\n\}/)[0];
   const submit=source.slice(source.indexOf("document.getElementById('setup-form').addEventListener('submit'"),source.indexOf("document.getElementById('refresh-services').addEventListener"));
   vm.runInContext(source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0],context);
-  vm.runInContext(load+'\n'+submit,context);
+  const state=source.slice(source.indexOf('let settingsEditRevision ='),source.indexOf('async function loadSettings('));
+  const dirty=source.match(/function setFormDirty\(dirty\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(state+'\n'+dirty+'\n'+load+'\n'+submit,context);
   return {context,nodes,calls,document};
 }
+
+function deferred() {
+  let resolve,reject;
+  const promise=new Promise((res,rej)=>{resolve=res;reject=rej;});
+  return {promise,resolve,reject};
+}
+
+test('pending save blocks duplicate submission and preserves newer edits and dirty state',async()=>{
+  const env=form({configuredKeys:['PROVIDER_KEY'],BASE_URL:'http://saved.example'});
+  await vm.runInContext('loadSettings()',env.context);
+  const pending=deferred();
+  const api=env.context.api;
+  env.context.api=async(path,options)=>{
+    const result=await api(path,options);
+    if(path==='/api/save-env')await pending.promise;
+    return result;
+  };
+  const submit=env.nodes.get('setup-form').handlers.submit;
+  const first=submit({preventDefault(){}});
+  env.nodes.get('base-url').value='http://newer-edit.example';
+  vm.runInContext('setFormDirty(true)',env.context);
+  await submit({preventDefault(){}});
+  assert.equal(env.calls.filter(c=>c.path==='/api/save-env').length,1);
+  pending.resolve();
+  await first;
+  assert.equal(env.nodes.get('base-url').value,'http://newer-edit.example');
+  assert.equal(vm.runInContext('setupFormDirty',env.context),true);
+  assert.equal(env.calls.filter(c=>c.path==='/api/setup').length,1);
+  assert.equal(vm.runInContext('setupSaveInFlight',env.context),false);
+});
+
+test('settings response cannot overwrite an edit made during post-save reload',async()=>{
+  const saved={configuredKeys:['PROVIDER_KEY'],BASE_URL:'http://saved.example'};
+  const env=form(saved);
+  await vm.runInContext('loadSettings()',env.context);
+  const pending=deferred(),started=deferred();
+  const api=env.context.api;
+  env.context.api=async(path,options)=>{
+    if(path==='/api/env'){started.resolve();return pending.promise;}
+    return api(path,options);
+  };
+  const saving=env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
+  await started.promise;
+  env.nodes.get('stack-admin-password').value='newer-unsaved-password';
+  vm.runInContext('setFormDirty(true)',env.context);
+  pending.resolve(saved);
+  await saving;
+  assert.equal(env.nodes.get('stack-admin-password').value,'newer-unsaved-password');
+  assert.equal(vm.runInContext('setupFormDirty',env.context),true);
+});
+
+test('older settings response cannot overwrite a newer response',async()=>{
+  const env=form({configuredKeys:[]});
+  const older=deferred(),newer=deferred();
+  let requests=0;
+  env.context.api=()=>++requests===1?older.promise:newer.promise;
+  const first=vm.runInContext('loadSettings()',env.context);
+  const second=vm.runInContext('loadSettings()',env.context);
+  newer.resolve({BASE_URL:'http://new.example',configuredKeys:[]});
+  await second;
+  older.resolve({BASE_URL:'http://old.example',configuredKeys:[]});
+  assert.equal(await first,false);
+  assert.equal(env.nodes.get('base-url').value,'http://new.example');
+});
+
+test('failed save remains dirty and releases the guard so the user can retry',async()=>{
+  const env=form({configuredKeys:['PROVIDER_KEY']});
+  await vm.runInContext('loadSettings()',env.context);
+  const api=env.context.api,messages=[];
+  env.context.notify=message=>messages.push(message);
+  env.context.api=async(path,options)=>{
+    if(path==='/api/save-env')throw Error('fixture save failure');
+    return api(path,options);
+  };
+  const submit=env.nodes.get('setup-form').handlers.submit;
+  await submit({preventDefault(){}});
+  assert.equal(vm.runInContext('setupFormDirty',env.context),true);
+  assert.equal(vm.runInContext('setupSaveInFlight',env.context),false);
+  assert.equal(env.nodes.get('setup-button').disabled,false);
+  assert.ok(messages.includes('fixture save failure'));
+  env.context.api=api;
+  await submit({preventDefault(){}});
+  assert.equal(env.calls.filter(c=>c.path==='/api/save-env').length,1);
+  assert.equal(vm.runInContext('setupFormDirty',env.context),false);
+});
 
 test('Usenet-only saved account reloads safely and resubmits without clearing its password',async()=>{
   const env=form({USENET_ENABLED:'true',USENET_HOST:'news.fixture',USENET_PORT:'563',USENET_USER:'fixture-user',USENET_CONNECTIONS:'10',USENET_SSL:'true',USENET_PASSWORD_SAVED:true,configuredKeys:['NZB_INDEXER_API_KEY']});
@@ -296,7 +383,7 @@ test('proxy format change auto-regenerates snippet and displays output', async (
   assert.equal(outputEl.textContent, 'config for traefik');
 });
 
-test('copy buttons for guide player url and proxy config trigger instant feedback', async () => {
+test('copy button for guide player url confirms successful clipboard write', async () => {
   const env = form({});
   let copiedText = null;
   env.context.navigator = {
@@ -315,8 +402,8 @@ test('copy buttons for guide player url and proxy config trigger instant feedbac
   const copyGuideBtn = env.document.getElementById('btn-copy-guide-player-url');
 
   copyGuideBtn.handlers.click({ currentTarget: copyGuideBtn });
-  assert.equal(copyGuideBtn.textContent, 'Copied! ✓');
   await new Promise(resolve => setImmediate(resolve));
+  assert.equal(copyGuideBtn.textContent, 'Copied! ✓');
   assert.equal(copiedText, 'https://watch.customdomain.com');
   assert.equal(env.context.lastNotification, 'Remote Web Player URL copied!');
 });
@@ -557,6 +644,33 @@ test('loadExtraUsenetSources and readExtraUsenetSources unify NZB indexers and p
   assert.equal(emptyPayload.NZB_INDEXER_API_KEY, '');
   assert.equal(emptyPayload.USENET_EXTRA_INDEXERS.length, 0);
   assert.equal(savedKeys.has('NZB_INDEXER_API_KEY'), false);
+});
+
+test('extra NNTP form serialization preserves exact credentials while trimming server fields', () => {
+  const logic = source.slice(source.indexOf('const extraUsenetSources = ['), source.indexOf('async function loadSettings(options) {'));
+  const inputs = [
+    {dataset:{sourceField:'username'},value:' user name '},
+    {dataset:{sourceField:'password'},value:' secret $ value '},
+    {dataset:{sourceField:'host'},value:' news.example.org '},
+    {dataset:{sourceField:'port'},value:' 563 '},
+    {dataset:{sourceField:'tls'},type:'checkbox',checked:true}
+  ];
+  const row = {dataset:{sourceId:'saved-server'},querySelectorAll:()=>inputs};
+  const context = vm.createContext({URL,document:{getElementById:id=>id === 'extra-usenet-servers' ? {children:[row]} : null}});
+  vm.runInContext(logic,context);
+  const payload = {};
+  context.readExtraUsenetSources(payload);
+  const server = payload.USENET_EXTRA_SERVERS[0];
+  assert.equal(server.id,'saved-server');
+  assert.equal(server.username,' user name ');
+  assert.equal(server.password,' secret $ value ');
+  assert.equal(server.host,'news.example.org');
+  assert.equal(server.port,'563');
+  assert.equal(server.tls,true);
+  inputs[1].value = '';
+  const edit = {};
+  context.readExtraUsenetSources(edit);
+  assert.equal('password' in edit.USENET_EXTRA_SERVERS[0],false,'blank edit preserves saved password');
 });
 
 test('setup-form and loadSettings preserve saved Cloudflare credentials and submit newly entered tokens', async () => {

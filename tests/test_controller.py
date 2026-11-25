@@ -11,6 +11,25 @@ spec.loader.exec_module(controller)
 
 
 class ControllerTests(unittest.TestCase):
+    def test_missing_profile_starts_core_without_optional_anime(self):
+        own = {'Config': {'Labels': {'com.docker.compose.project': 'aio-test'}},
+               'Mounts': [{'Destination': '/workspace', 'Source': '/srv/aio'}]}
+        config = {'services': {'aiostreams': {},
+                              'zilean': {'profiles': ['core', 'all']},
+                              'jikan-api': {'profiles': ['anime', 'all']},
+                              'anime-kitsu': {'profiles': ['anime', 'all']},
+                              'stack-bootstrap': {'restart': 'no'}}}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(controller, 'ROOT', Path(directory)), \
+             patch.dict(controller.os.environ, {'HOSTNAME': 'test'}), \
+             patch.object(controller, 'command_json', side_effect=[[own], config]), \
+             patch.object(controller, 'log_command') as logged:
+            controller.apply()
+        self.assertEqual(controller.JOB['status'], 'complete')
+        starts = [call.args[0] for call in logged.call_args_list if 'up' in call.args[0]]
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(starts[0][starts[0].index('--wait-timeout') + 2:], ['aiostreams', 'zilean'])
+
     def test_rewrite_only_host_sources(self):
         config = {'services': {'controller': {'volumes': [
             {'type': 'bind', 'source': '/workspace', 'target': '/workspace'},

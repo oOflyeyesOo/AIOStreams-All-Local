@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import json
+import hashlib
 import base64
 import builtins
 import re
@@ -31,7 +32,7 @@ for parent in (*Path(__file__).resolve().parents, Path('/app')):
     if (parent / 'tools' / 'usenet_config.py').is_file():
         sys.path.insert(0, str(parent))
         break
-from tools.usenet_config import newznab_indexers, credential, extra_sources
+from tools.usenet_config import newznab_indexers, newznab_endpoint, credential, extra_sources
 
 def load_env_file():
     if os.environ.get("AIO_SKIP_ENV_FILE") == "true":
@@ -852,8 +853,8 @@ def sync_aiostreams_native_usenet():
         extras = extra_sources(os.environ, 'USENET_EXTRA_SERVERS')
         for idx, ex in enumerate(extras):
             e_host = str(ex.get('host') or '').strip()
-            e_user = str(ex.get('username') or '').strip()
-            e_pass = str(ex.get('password') or '').strip()
+            e_user = str(ex.get('username') or '')
+            e_pass = str(ex.get('password') or '')
             if not e_host or not e_user or not e_pass:
                 continue
             try:
@@ -1448,6 +1449,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     ])
 
     removed_preset_ids = set()
+    renamed_preset_ids = {}
     cleaned_presets = []
     for p in presets:
         if is_deprecated_preset(p):
@@ -1540,15 +1542,20 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             presets.append(target)
 
     # Ensure Usenet indexers are provisioned as direct Newznab presets in AIOStreams.
-    # Direct Newznab searches achieve sub-second parallel resolution (~250ms), bypassing
-    # Prowlarr's serialized multi-tracker overhead and FlareSolverr timeouts.
+    # Keep portal-managed identities stable when addresses change; custom presets
+    # with unrelated endpoints remain under the user's control.
+    active_managed_newznab_ids = set()
     if usenet_active:
         rows = newznab_indexers(os.environ)
-        for row in rows:
+        seen_endpoints = set()
+        for row_number, row in enumerate(rows):
             raw_url = str(row.get('url') or '').strip().rstrip('/')
             if not raw_url:
                 continue
-            api_url = raw_url if raw_url.endswith('/api') else f"{raw_url}/api"
+            api_url = newznab_endpoint(raw_url)
+            if api_url in seen_endpoints:
+                continue
+            seen_endpoints.add(api_url)
             parsed = urllib.parse.urlsplit(raw_url)
             domain = parsed.netloc.lower().split(':')[0]
             for prefix in ('api.', 'www.', 'nzb.'):
@@ -1556,13 +1563,25 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     domain = domain[len(prefix):]
             slug = domain.split('.')[0] if domain else "indexer"
             port = parsed.port
-            port_suffix = f"-{port}" if port and port not in (80, 443) else ""
             name_suffix = f" ({port})" if port and port not in (80, 443) else ""
             label = "altHUB" if "althub" in domain else ("DrunkenSlug" if "drunkenslug" in domain else ("Anime Tosho" if "animetosho" in domain else slug.capitalize()))
-            instance_id = f"newznab-{slug}{port_suffix}"
-            existing = next((p for p in presets if p.get('instanceId') == instance_id or (
-                p.get('type') == 'newznab' and p.get('options', {}).get('api', {}).get('url', '').rstrip('/') == api_url.rstrip('/')
-            )), None)
+            if row_number == 0 and row.get('id') == '' and os.environ.get('NZB_INDEXER_URL') and os.environ.get('NZB_INDEXER_API_KEY'):
+                instance_id = 'newznab-managed-primary'
+            else:
+                identity = 'row:' + str(row['id']) if row.get('id') else 'endpoint:' + api_url
+                instance_id = 'newznab-managed-' + hashlib.sha256(identity.encode()).hexdigest()[:16]
+            active_managed_newznab_ids.add(instance_id)
+            existing = next((p for p in presets if p.get('type') == 'newznab' and p.get('instanceId') == instance_id), None)
+            for candidate in presets if existing is None else []:
+                if candidate.get('type') != 'newznab':
+                    continue
+                try:
+                    candidate_url = newznab_endpoint(candidate.get('options', {}).get('api', {}).get('url', ''))
+                except ValueError:
+                    continue
+                if candidate_url == api_url:
+                    existing = candidate
+                    break
             if not existing:
                 presets.append({
                     "type": "newznab",
@@ -1581,6 +1600,10 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     }
                 })
             else:
+                prior_id = existing.get('instanceId')
+                if prior_id and prior_id != instance_id:
+                    renamed_preset_ids[prior_id] = instance_id
+                existing['instanceId'] = instance_id
                 existing["enabled"] = True
                 opts = existing.setdefault("options", {})
                 opts["name"] = f"{label}{name_suffix} (Newznab Direct)"
@@ -1724,6 +1747,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             if not usenet_active:
                 if pid:
                     removed_preset_ids.add(pid)
+                continue
+            if not str(pid or '').startswith('newznab-managed-'):
+                validated_presets.append(p)
+                continue
+            if pid not in active_managed_newznab_ids:
+                removed_preset_ids.add(pid)
                 continue
             p["enabled"] = True
             opts["timeout"] = int(opts.get("timeout") or 8000)
@@ -1998,7 +2027,8 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                     continue
                 addons = g.get("addons")
                 if isinstance(addons, list):
-                    filtered_addons = [a for a in addons if not is_removed_addon(a)]
+                    remapped_addons = [renamed_preset_ids.get(a, a) if isinstance(a, str) else a for a in addons]
+                    filtered_addons = [a for a in remapped_addons if not is_removed_addon(a)]
                     g["addons"] = filtered_addons
                     if not filtered_addons:
                         continue

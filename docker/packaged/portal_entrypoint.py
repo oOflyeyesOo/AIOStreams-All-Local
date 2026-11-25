@@ -30,7 +30,7 @@ def seed(source, destination, environment):
     # Manager settings remain authoritative; provider keys are edited in the UI.
     # Reject dotenv syntax in these settings instead of changing its meaning.
     managed_keys = {key for key in environment if key.startswith('PORT_')}
-    for key in managed_keys | set(('ENABLE_ANIME_SOURCES', 'ADDON_PASSWORD', 'AIO_RELEASE_LOCK_B64', 'AIO_IMAGE_TAG', 'AIO_IMAGE_PREFIX', 'PORT_PORTAL', 'INTERNAL_BIND_IP', 'BASE_URL', 'AIOMETADATA_HOST', 'DOCKER_SOCKET')):
+    for key in managed_keys | set(('COMPOSE_PROFILES', 'ENABLE_ANIME_SOURCES', 'ADDON_PASSWORD', 'AIO_RELEASE_LOCK_B64', 'AIO_IMAGE_TAG', 'AIO_IMAGE_PREFIX', 'PORT_PORTAL', 'INTERNAL_BIND_IP', 'BASE_URL', 'AIOMETADATA_HOST', 'DOCKER_SOCKET')):
         if key == 'ADDON_PASSWORD' and values.get('AIO_PORTAL_MANAGED_PASSWORD') == 'true':
             continue
         value = environment.get(key)
@@ -38,6 +38,10 @@ def seed(source, destination, environment):
             if any(char in value for char in ('\n', '\r', '$', '"', "'", '#')):
                 raise ValueError(f'{key} contains unsupported configuration characters')
             values[key] = value
+    # No manager override: retain portal choices across upgrades, with core as
+    # the fresh-install default rather than starting every optional integration.
+    if not values.get('COMPOSE_PROFILES', '').strip():
+        values['COMPOSE_PROFILES'] = 'core'
     content = ''.join(f'{key}={value}\n' for key, value in values.items())
     atomic_write(env_path, content.encode())
 

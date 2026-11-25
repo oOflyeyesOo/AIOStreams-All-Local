@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from tools.usenet_config import indexer_address, newznab_indexers
+from tools.usenet_config import newznab_endpoint, newznab_indexers
 
 
 class NoIndexerRedirects(urllib.request.HTTPRedirectHandler):
@@ -18,16 +18,7 @@ OPENER = urllib.request.build_opener(NoIndexerRedirects())
 
 
 def endpoint(value):
-    parsed = urllib.parse.urlsplit(indexer_address(value))
-    host = parsed.hostname.lower()
-    if ":" in host:
-        host = "[" + host + "]"
-    port = parsed.port
-    authority = host if port is None or port == (443 if parsed.scheme == "https" else 80) else f"{host}:{port}"
-    path = parsed.path.rstrip("/")
-    if not path.endswith("/api"):
-        path += "/api"
-    return urllib.parse.urlunsplit((parsed.scheme.lower(), authority, path, "", ""))
+    return newznab_endpoint(value)
 
 
 def validate_indexer(settings, key=None, url=None, indexer_id=None):

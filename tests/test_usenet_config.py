@@ -49,6 +49,27 @@ class UsenetConfigTests(unittest.TestCase):
             form_updates({'NZB_INDEXER_URL': 'https://index.fixture.invalid',
                           'USENET_EXTRA_INDEXERS': [{'url': 'https://index.fixture.invalid/', 'apiKey': 'fixture-key'}]}, {})
 
+    def test_equivalent_api_urls_are_duplicates_but_path_case_is_preserved(self):
+        for equivalent in ('https://INDEX.fixture.invalid:443/api/', 'https://index.fixture.invalid/api'):
+            with self.assertRaisesRegex(ValueError, 'appears more than once'):
+                form_updates({'NZB_INDEXER_URL': 'https://index.fixture.invalid',
+                              'USENET_EXTRA_INDEXERS': [{'url': equivalent, 'apiKey': 'fixture-key'}]}, {})
+        values = form_updates({'USENET_EXTRA_INDEXERS': [
+            {'url': 'https://index.fixture.invalid/One', 'apiKey': 'one'},
+            {'url': 'https://index.fixture.invalid/one', 'apiKey': 'two'}]}, {})
+        self.assertEqual(len(public_settings(values)['USENET_EXTRA_INDEXERS']), 2)
+
+    def test_extra_nntp_credentials_preserve_whitespace_on_save_and_edit(self):
+        values = self.settings()
+        values.update(form_updates({'USENET_EXTRA_SERVERS': [{
+            'host': 'backup.fixture.invalid', 'username': ' user ', 'password': ' pass $ '
+        }]}, values))
+        rows = public_settings(values)['USENET_EXTRA_SERVERS']
+        values.update(form_updates({'USENET_EXTRA_SERVERS': rows}, values))
+        provider = provider_config(values)['Providers'][1]
+        self.assertEqual(provider['User'], ' user ')
+        self.assertEqual(provider['Pass'], ' pass $ ')
+
     def test_input_boundaries_and_error_hardening(self):
         # Non-dict inputs rejected gracefully
         with self.assertRaisesRegex(ValueError, 'Form updates require dictionaries'):
