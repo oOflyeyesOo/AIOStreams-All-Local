@@ -103,7 +103,7 @@ try:
     assert PASSWORD not in Path('/app/.env').read_text()
     apply()
     config=installed_profile()
-    direct_routes=[p for p in config['presets'] if p.get('type')=='newznab' and 'portal' in p.get('instanceId','')]
+    direct_routes=[p for p in config['presets'] if p.get('type')=='newznab' and ('portal' in p.get('instanceId','') or 'portal' in p.get('options',{}).get('api',{}).get('url',''))]
     assert len(direct_routes)==2 and all(p['enabled'] for p in direct_routes)
     for route in direct_routes:
         assert route['options']['services']==['aiostreams']
@@ -148,7 +148,7 @@ try:
     prov_data=request('http://aiostreams:3000/api/v1/dashboard/usenet/providers',headers=dash_headers)
     assert prov_data.get('data',{}).get('providers')==[],'Native Usenet providers must be cleared when USENET_ENABLED is false'
     assert portal('/api/env')['USENET_PASSWORD_SAVED']
-    assert not any(p.get('type')=='newznab' and 'portal' in p.get('instanceId','') for p in installed_profile()['presets'])
+    assert not any(p.get('type')=='newznab' and ('portal' in p.get('instanceId','') or 'portal' in p.get('options',{}).get('api',{}).get('url','')) for p in installed_profile()['presets'])
     assert len(matches())==1 and not matches()[0]['enable'],'Disabled managed NZB indexer must not poll in the background'
     assert not any(item['enable'] for item in matches(18886)), 'Removed indexer is still enabled'
     print('PASS: disabling stops optional service and NNTP provider while retaining credentials',flush=True)

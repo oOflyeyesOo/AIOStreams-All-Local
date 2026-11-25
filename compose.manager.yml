@@ -185,7 +185,7 @@ services:
     - DATABASE_URI=sqlite:///data/db.sqlite
     - REDIS_URI=redis://shared-redis:6379/6
     - REDIS_URL=redis://shared-redis:6379/6
-    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
+    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-false}
     - ALLOW_PRIVATE_URLS=true
     - ALIASED_CONFIGURATIONS=${ALIASED_CONFIGURATIONS:-}
     - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
@@ -196,7 +196,7 @@ services:
     - BUILTIN_DEFAULT_ZILEAN_TIMEOUT=${BUILTIN_DEFAULT_ZILEAN_TIMEOUT:-5000}
     - REMUXDB_ENABLED=${ENABLE_REMUXDB:-true}
     - REMUXDB_BASE_URL=${REMUXDB_BASE_URL:-https://remuxdb.1632022.xyz}
-    - MEDIA_INFO_PROBE=${MEDIA_INFO_PROBE:-true}
+    - MEDIA_INFO_PROBE=${MEDIA_INFO_PROBE:-false}
     - MEDIA_INFO_PROBE_ON=stremio,jellyfin,library
     - MEDIA_INFO_BACKFILL=stremthru,remuxdb
     - BUILTIN_PROWLARR_URL=http://prowlarr:9696
@@ -364,7 +364,7 @@ services:
     environment:
     - PROWLARR_URL=${PROWLARR_URL:-http://prowlarr:9696}
     - PROWLARR_API_KEY=${PROWLARR_API_KEY:-prowlarr_internal_secret_key_99}
-    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-true}
+    - AIO_PRECACHE_NEXT_EPISODE=${AIO_PRECACHE_NEXT_EPISODE:-false}
     - FLARESOLVERR_URL=${FLARESOLVERR_URL:-http://flaresolverr:8191}
     - ENABLE_ANIME_SOURCES=${ENABLE_ANIME_SOURCES:-false}
     - AIOSTREAMS_URL=${AIOSTREAMS_URL:-http://aiostreams:3000}
@@ -601,7 +601,7 @@ services:
     - LUMIERE_SUGGEST_TIMEOUT_MS=${LUMIERE_SUGGEST_TIMEOUT_MS:-1500}
     - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
     - JIKAN_API_URL=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
-    - CACHE_WARMUP_ON_STARTUP=true
+    - CACHE_WARMUP_ON_STARTUP=${CACHE_WARMUP_ON_STARTUP:-false}
     - NODE_ENV=production
     - NODE_OPTIONS=--max-old-space-size=384
     healthcheck:
@@ -640,8 +640,8 @@ services:
     mem_limit: ${LUMIERE_MEM_LIMIT:-512m}
     environment:
     - PORT=8000
-    - ETL_POLL_INTERVAL=1h
-    - ETL_REBUILD_WINDOW=
+    - ETL_POLL_INTERVAL=${ETL_POLL_INTERVAL:-12h}
+    - ETL_REBUILD_WINDOW=${ETL_REBUILD_WINDOW:-03:00-05:00}
     - TZ=UTC
     - CACHE_MAX_BYTES=256MB
     - SUGGEST_ENABLED=false
@@ -811,8 +811,8 @@ services:
         max-file: '3'
         compress: 'true'
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
-    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes --save "" --appendonly
-      no
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --lazyfree-lazy-eviction yes --lazyfree-lazy-expire
+      yes --lazyfree-lazy-server-del yes --save "" --appendonly no
     volumes:
     - redis-data:/data
     healthcheck:
@@ -820,7 +820,7 @@ services:
       - CMD
       - redis-cli
       - ping
-      interval: 5s
+      interval: 15s
       timeout: 3s
       retries: 5
     networks:
@@ -851,9 +851,12 @@ services:
       \ db in zilean aiometadata; do\n    psql -h shared-postgres -U postgres -d postgres -c \"CREATE DATABASE $$db;\" 2>/dev/null\
       \ || true\n  done\n  psql -h shared-postgres -U postgres -d postgres -c \"DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM\
       \ pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \\$\\\
-      $;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"ALTER SYSTEM SET autovacuum_vacuum_scale_factor\
-      \ = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1000'; ALTER SYSTEM SET maintenance_work_mem = '128MB';\
-      \ SELECT pg_reload_conf();\" 2>/dev/null || true\n  echo \"[init-postgres] Done!\"\n  exit 0\nfi\n"
+      $;\" 2>/dev/null || true\n  psql -h shared-postgres -U postgres -d postgres -c \"ALTER SYSTEM SET synchronous_commit\
+      \ = 'off'; ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit =\
+      \ '200'; ALTER SYSTEM SET checkpoint_completion_target = '0.9'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; ALTER\
+      \ SYSTEM SET work_mem = '32MB'; ALTER SYSTEM SET shared_buffers = '256MB'; ALTER SYSTEM SET effective_cache_size = '512MB';\
+      \ ALTER SYSTEM SET max_connections = '50'; SELECT pg_reload_conf();\" 2>/dev/null || true\n  echo \"[init-postgres]\
+      \ Done!\"\n  exit 0\nfi\n"
     networks:
       stremio-net:
         aliases:
@@ -867,8 +870,14 @@ services:
         max-size: 10m
         max-file: '3'
         compress: 'true'
+    stop_grace_period: 60s
     mem_limit: ${POSTGRES_MEM_LIMIT:-1024m}
     shm_size: 512mb
+    command: 'postgres -c synchronous_commit=off -c shared_buffers=256MB -c max_connections=50 -c checkpoint_completion_target=0.9
+      -c checkpoint_timeout=15min -c max_wal_size=2GB -c min_wal_size=256MB -c wal_compression=pglz -c autovacuum_vacuum_scale_factor=0.05
+      -c autovacuum_vacuum_cost_limit=200 -c maintenance_work_mem=128MB -c work_mem=32MB -c effective_cache_size=512MB
+
+      '
     environment:
     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_supersecret_db_pass_2026}
     - POSTGRES_HOST_AUTH_METHOD=trust
@@ -878,9 +887,9 @@ services:
       test:
       - CMD-SHELL
       - pg_isready -U postgres -d postgres
-      interval: 2s
+      interval: 10s
       timeout: 3s
-      retries: 30
+      retries: 10
       start_period: 5s
     networks:
       stremio-net:

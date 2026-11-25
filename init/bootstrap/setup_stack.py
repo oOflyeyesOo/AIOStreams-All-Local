@@ -57,7 +57,8 @@ def load_env_file():
                 pass
             break
 
-load_env_file()
+if __name__ == "__main__":
+    load_env_file()
 
 
 def print(*values, **kwargs):
@@ -396,11 +397,7 @@ def resolve_jikan_api_base(configured_url="", probe_services=True):
                 return candidate
     return explicit or DEFAULT_JIKAN_URL
 
-JIKAN_API_BASE = resolve_jikan_api_base(os.environ.get("JIKAN_API_BASE"))
-if JIKAN_API_BASE and JIKAN_API_BASE != os.environ.get("JIKAN_API_BASE"):
-    os.environ["JIKAN_API_BASE"] = JIKAN_API_BASE
-    if os.environ.get("AIO_SKIP_ENV_FILE") != "true" and JIKAN_API_BASE != DEFAULT_JIKAN_URL:
-        update_env_file("JIKAN_API_BASE", JIKAN_API_BASE)
+JIKAN_API_BASE = os.environ.get("JIKAN_API_BASE") or DEFAULT_JIKAN_URL
 
 # ==============================================================================
 # 1. PROWLARR PROVISIONING
@@ -1417,6 +1414,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 "libraryAddon": False,
                 "resultPassthrough": False,
                 "forceToTop": False,
+                "mediaTypes": ["anime"],
                 "timeout": 4000
             }
         }
@@ -1801,7 +1799,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             )
             anime_enabled = (
                 anime_flag
-                or (not is_usenet_only and bool(p.get("enabled", False)))
+                or (not is_usenet_only and bool(p.get("enabled", False)) and os.environ.get('ENABLE_ANIME_SOURCES', '').lower() != 'false')
             )
             p["enabled"] = bool(anime_enabled and selected)
             opts['services']=selected
@@ -1894,6 +1892,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
                 opts["manifestUrl"] = murl
                 opts["resources"] = ["stream"]
                 opts["resultPassthrough"] = False
+                opts["mediaTypes"] = ["anime"]
                 enable_bento = os.environ.get("ENABLE_BENTO", "true").lower() != "false"
                 has_debrid = any(s.get('enabled') and s.get('id') not in ('aiostreams', 'easynews') for s in services)
                 if not enable_bento:
@@ -1935,7 +1934,17 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     # Configure BuiltinProxy so internal Docker scraper streams
     # resolve and stream properly through AIOStreams over the single public port (3001)
     existing_proxy = base_config.get("proxy") if isinstance(base_config.get("proxy"), dict) else {}
-    proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
+    if existing_proxy.get("credentials") in ("admin:admin", "admin:", "", None):
+        proxy_creds = f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin"
+    else:
+        proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
+
+    target_proxy_url = BASE_URL or "http://aiostreams:3000"
+    if existing_proxy.get("url") in ("http://localhost:3001", "http://127.0.0.1:3001", "", None) and BASE_URL:
+        proxy_url = BASE_URL
+    else:
+        proxy_url = existing_proxy.get("url") or target_proxy_url
+
     proxy_host = urllib.parse.urlsplit(BASE_URL or "").hostname
     proxy_is_public = bool(
         proxy_host
@@ -1946,7 +1955,7 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
     config["proxy"] = {
         "id": existing_proxy.get("id") or "builtin",
         "enabled": proxy_is_public,
-        "url": existing_proxy.get("url") or BASE_URL or "http://aiostreams:3000",
+        "url": proxy_url,
         "credentials": proxy_creds,
         "proxiedServices": ["realdebrid", "premiumize", "alldebrid", "torbox", "debridlink", "easynews", "aiostreams", "none"]
     }

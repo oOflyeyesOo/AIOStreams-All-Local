@@ -46,22 +46,25 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
         repo_root = Path(__file__).resolve().parent.parent
 
     repo_root = Path(repo_root).resolve()
+    data_dir = repo_root / "data"
+    data_root = data_dir.resolve() if data_dir.exists() else data_dir
+    allowed_roots = {repo_root, data_root}
     details = []
     total_bytes = 0
     total_files = 0
 
     # Ephemeral cache paths to purge
     purge_targets = [
-        ("StremThru Torrent Hashlists", repo_root / "data" / "stremthru" / "hashlists"),
-        ("StremThru IMDb Dumps", repo_root / "data" / "stremthru" / "imdb"),
-        ("StremThru Internal Cache", repo_root / "data" / "stremthru" / "cache"),
+        ("StremThru Torrent Hashlists", data_root / "stremthru" / "hashlists"),
+        ("StremThru IMDb Dumps", data_root / "stremthru" / "imdb"),
+        ("StremThru Internal Cache", data_root / "stremthru" / "cache"),
     ]
 
     errors = []
     if include_poster_cache:
         # The volume also stores databases. Purge only image files, never the volume.
-        poster_root = repo_root / "data" / "postersplus"
-        if poster_root.exists() and repo_root in poster_root.resolve().parents:
+        poster_root = data_root / "postersplus"
+        if poster_root.exists() and any(r == poster_root.resolve() or r in poster_root.resolve().parents for r in allowed_roots):
             images = [p for p in poster_root.rglob("*") if p.is_file() and not p.is_symlink()
                       and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"}]
             for image in images:
@@ -69,13 +72,22 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
         elif poster_root.exists():
             errors.append("Posters+ cache target escapes workspace")
 
-    # Include bytecode only within the requested workspace.
-    purge_targets.extend(("Python Bytecode Cache", p) for p in repo_root.rglob("__pycache__")
-                         if ".git" not in p.parts)
+    # Include bytecode cache across workspace, excluding data and git directories to avoid walking database volumes.
+    try:
+        for child in repo_root.iterdir():
+            if child.is_dir() and child.name not in ("data", ".git"):
+                if child.name == "__pycache__":
+                    purge_targets.append(("Python Bytecode Cache", child))
+                else:
+                    purge_targets.extend(("Python Bytecode Cache", p) for p in child.rglob("__pycache__"))
+    except OSError:
+        pass
+
     for label, target_path in purge_targets:
         if not target_path.exists():
             continue
-        if repo_root not in target_path.resolve().parents or target_path.is_symlink():
+        resolved_target = target_path.resolve()
+        if not any(r == resolved_target or r in resolved_target.parents for r in allowed_roots) or target_path.is_symlink():
             errors.append(label + ": target escapes workspace or is a symbolic link")
             continue
         size = target_path.stat().st_size if target_path.is_file() else get_dir_size(target_path)

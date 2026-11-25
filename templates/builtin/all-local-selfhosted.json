@@ -384,7 +384,7 @@
       "allowCrossType": true,
       "maxAttempts": 3,
       "includeExternalFailover": true,
-      "precacheFailover": true,
+      "precacheFailover": false,
       "parallel": 2
     }
   },

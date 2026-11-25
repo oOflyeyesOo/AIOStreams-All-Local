@@ -202,3 +202,31 @@ all runtime, Compose, bootstrap, portal, UI, template, and test files.
 ### Priority P2 — Container Hardening & Polish
 
 - Add `no-new-privileges:true` and capability drops across services without breaking runtime permissions; pass `TUNNEL_TOKEN` env var instead of `--token` CLI arg on `cloudflared`; review CSP & inline JS handlers in `index.html`; align `.githooks/pre-push`, `scripts/pre_push_check.py`, `Makefile`, and CI workflows.
+
+### Implementation & Acceptance Summary — November 25, 2026
+
+Branch: `audit/24-7-hardening-and-load`
+
+1. **CI Run #155 Diagnosis & Fix**:
+   - Diagnosed failure in `tests/check_optional_live.py:107` and `151` where managed direct Newznab routes standardizing to `newznab-managed-*` caused assertion failures on `'portal' in p.get('instanceId')`. Fixed URL-based matching in `check_optional_live.py` and added regression tests in `tests/test_packaged.py`. All 8 packaged tests pass.
+2. **Security & State Hardening**:
+   - Hardened `docker/all-in-one/portal_server.py`: added scalar validation in `save_env_updates()`, SSRF protection with private IP and loopback blocks in `is_safe_webhook_url()`, and protected mutating proxy methods with `request_origin_is_local()`.
+   - Prevented `.env` corruption in `docker-compose.aio.yml` by using default-fallback variable expansions (`${VAR:-}`) for `BASE_URL`, `AIOMETADATA_HOST`, `JELLYFIN_ENABLED`, `JIKAN_API_BASE`. Added container healthcheck and `stop_grace_period: 90s`.
+   - Fixed `init/bootstrap/setup_stack.py`: eliminated module import-time network probing and `.env` writes, configured BuiltinProxy credentials properly for Usenet mode, scoped Bento anime to anime media types, and preserved template anime auto-enablement.
+   - Cleared hardcoded credentials from Usenet templates and disabled aggressive precaching (`precacheFailover: false`).
+3. **24/7 Low-Load & Host Stability Optimizations**:
+   - Configured `shared-postgres` command flags for WAL compression (`wal_compression=pglz`), checkpoint smoothing (`checkpoint_completion_target=0.9`, `checkpoint_timeout=15min`, `min_wal_size=256MB`, `max_wal_size=2GB`), `synchronous_commit=off`, and tuned autovacuum cost limits.
+   - Configured `shared-redis` with `--lazyfree-lazy-expire yes --lazyfree-lazy-server-del yes` and relaxed healthchecks.
+   - Configured `lumiere-db` with 12h ETL polling interval and night rebuilding window (`03:00-05:00`).
+   - Disabled startup cache warmup (`CACHE_WARMUP_ON_STARTUP=false`) and disabled episode precaching (`AIO_PRECACHE_NEXT_EPISODE=false`, `MEDIA_INFO_PROBE=false`).
+   - Relaxed dashboard frontend polling: slowed readiness and setup polling to 30s once completed, paused SSE health stream when document is hidden, and escaped dynamic inspect fields in `refreshCloudflareStatus`.
+   - Optimized `tools/watchdog.py`: single `?query=ping` probe for Zilean, profile-aware service filtering, and probe result reuse.
+   - Fixed `tools/clean_cache.py`: symlink handling for `/app/data -> /data` and scoped `__pycache__` discovery.
+   - Fixed `tools/doctor.py`: repaired database presence check in `run_repair`.
+   - Enhanced `tools/resources.py` and `tools/backup.py`: resolved Compose project dynamically and supported TB/TiB units.
+4. **Acceptance & Validation**:
+   - **305 Python unit tests passed (0 failures, 11 skipped)**.
+   - **43 frontend logic and browser tests passed (0 failures)**.
+   - `scripts/audit_portal.py` passed with 0 findings.
+   - `scripts/pre_push_check.py` passed with all release gates green.
+   - Generated manager Compose file (`compose.manager.yml`) synchronized and validated.

@@ -26,8 +26,30 @@ AIO_CONTAINERS = {
     "flaresolverr", "stremthru", "cloudflared",
     "aio-tunnel", "anime-kitsu", "aiometadata", "postersplus", "stremio-subsense",
     "shared-redis", "shared-postgres", "lumiere-db",
+    "jikan-api", "jikan-mongo",
     "aio-portal", "stack-bootstrap", "init-configs", "init-postgres", "aio-stack"
 }
+
+
+def resolve_compose_project() -> str:
+    """Resolve the active Compose project name from env or docker container label."""
+    proj = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+    if proj:
+        return proj.strip()
+    hostname = os.environ.get("HOSTNAME")
+    if hostname:
+        try:
+            inspect_res = subprocess.run(
+                ["docker", "inspect", hostname, "--format", '{{index .Config.Labels "com.docker.compose.project"}}'],
+                capture_output=True, text=True, timeout=5
+            )
+            if inspect_res.returncode == 0:
+                found = inspect_res.stdout.strip()
+                if found and found != "<no value>":
+                    return found
+        except Exception:
+            pass
+    return ""
 
 
 def parse_bytes(val_str: str) -> float:
@@ -39,7 +61,9 @@ def parse_bytes(val_str: str) -> float:
     num = float(match.group(1))
     unit = match.group(2).lower()
 
-    if "gib" in unit or "gb" in unit:
+    if "tib" in unit or "tb" in unit:
+        return num * 1024.0 * 1024.0
+    elif "gib" in unit or "gb" in unit:
         return num * 1024.0
     elif "mib" in unit or "mb" in unit:
         return num
@@ -56,7 +80,7 @@ def get_stack_resources(filter_aio: bool = True) -> dict:
         "docker", "stats", "--no-stream",
         "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.PIDs}}"
     ]
-    project = os.environ.get("AIO_PROJECT_NAME") if filter_aio else None
+    project = resolve_compose_project() if filter_aio else None
     try:
         if project:
             listing = subprocess.run(["docker", "ps", "-q", "--filter",

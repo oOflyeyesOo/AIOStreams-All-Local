@@ -1373,7 +1373,7 @@ async function pollSetup() {
     }
     lastJobStatus = job.status;
     renderPlaybackReadiness();
-    pollTimer = setTimeout(pollSetup, running ? 1600 : 5000);
+    pollTimer = setTimeout(pollSetup, running ? 1600 : (job.status === 'complete' ? 30000 : 5000));
   } catch(error) {
     if (lastJobStatus === 'running' && ++reconnectAttempts < 90) {
       setProgress('Services are restarting','Reconnecting to the setup controller…',true);
@@ -2079,26 +2079,26 @@ async function refreshCloudflareStatus() {
         hostBadge.title = `Detected running host connector: ${primary}`;
       }
       if (hintBox) {
-        hintBox.innerHTML = `💡 Detected running Cloudflare connector <strong>${primary}</strong> on this Docker host. Switch to <strong>Remote Access</strong> to route or auto-push DNS.`;
+        hintBox.innerHTML = `💡 Detected running Cloudflare connector <strong>${escapeHtml(primary)}</strong> on this Docker host. Switch to <strong>Remote Access</strong> to route or auto-push DNS.`;
         hintBox.style.display = 'block';
       }
 
       html += '<div style="color:var(--accent-cyan);font-weight:700;margin-bottom:6px;">☁️ Detected External Cloudflare Connector on Host:</div>';
       res.external_connectors.forEach(c => {
         html += `<div class="cf-connector-item">
-          <span><strong>${c.name}</strong> <span style="color:var(--text-muted);font-size:11px;">(${c.image})</span></span>
-          <span style="color:#34d399;font-weight:600;">${c.status || c.state}</span>
+          <span><strong>${escapeHtml(c.name)}</strong> <span style="color:var(--text-muted);font-size:11px;">(${escapeHtml(c.image)})</span></span>
+          <span style="color:#34d399;font-weight:600;">${escapeHtml(c.status || c.state)}</span>
         </div>`;
       });
       html += `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.4;">
-        💡 <strong>Host Connector Advice:</strong> Since an existing Cloudflare Tunnel is running on this Docker host, you can route directly through it in your Cloudflare Zero Trust dashboard (point Public Hostname to <code>http://host.docker.internal:3001</code> or <code>http://${res.current_host || '127.0.0.1'}:3001</code>), OR run the isolated local <code>aio-tunnel</code> container below.
+        💡 <strong>Host Connector Advice:</strong> Since an existing Cloudflare Tunnel is running on this Docker host, you can route directly through it in your Cloudflare Zero Trust dashboard (point Public Hostname to <code>http://host.docker.internal:3001</code> or <code>http://${escapeHtml(res.current_host || '127.0.0.1')}:3001</code>), OR run the isolated local <code>aio-tunnel</code> container below.
       </div>`;
     } else {
       if (hostBadge) hostBadge.style.display = 'none';
       if (hintBox) hintBox.style.display = 'none';
       if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
         html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is running. Remote connectivity is not verified.</div>
-                 <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${res.local_tunnel.status}</div>`;
+                 <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${escapeHtml(res.local_tunnel.status)}</div>`;
       } else if (res.token_configured) {
         html += `<div style="color:#fbbf24;font-weight:600;">⚠️ Tunnel token is saved, but local container aio-tunnel is stopped. Click 'Start Local Tunnel ▶' below to route traffic.</div>`;
       } else {
@@ -2109,7 +2109,7 @@ async function refreshCloudflareStatus() {
     body.innerHTML = html;
     if (banner) banner.style.display = 'block';
   } catch (err) {
-    body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${err.message}</span>`;
+    body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${escapeHtml(err.message)}</span>`;
   }
 }
 if (typeof window !== 'undefined') window.refreshCloudflareStatus = refreshCloudflareStatus;
@@ -2568,7 +2568,8 @@ async function pollPlaybackReadiness() {
     if (!document.hidden) await refreshPlaybackReadiness();
   } finally {
     isPollReadinessInFlight = false;
-    readinessTimer = setTimeout(pollPlaybackReadiness, 5000);
+    const interval = (playbackReadiness && playbackReadiness.ready) ? 30000 : 5000;
+    readinessTimer = setTimeout(pollPlaybackReadiness, interval);
   }
 }
 
@@ -3423,6 +3424,10 @@ function initHealthTelemetry() {
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
+        if (healthEventSource) {
+          try { healthEventSource.close(); } catch (_) {}
+          healthEventSource = null;
+        }
         if (healthInterval) {
           clearInterval(healthInterval);
           healthInterval = null;
@@ -3436,6 +3441,7 @@ function initHealthTelemetry() {
           readinessTimer = null;
         }
       } else {
+        startHealthStream();
         pollSetup();
         pollPlaybackReadiness();
         if (advanced?.open) refreshHealthTelemetry();
@@ -3524,6 +3530,7 @@ function applyHealthStreamPayload(data) {
 
 function startHealthStream() {
   if (typeof window === 'undefined' || !window.EventSource) return;
+  if (typeof document !== 'undefined' && document.hidden) return;
   if (healthEventSource) {
     try { healthEventSource.close(); } catch (_) {}
     healthEventSource = null;

@@ -299,7 +299,7 @@ def run_repair(diag: dict) -> None:
     # 1. Database repair
     pg = diag.get("postgres", {})
     if pg.get("status") == "ok":
-        missing_dbs = [db for db, ok in pg.get("databases", {}).items() if not ok]
+        missing_dbs = [db for db in pg.get("required_dbs", ["zilean", "aiometadata"]) if db not in pg.get("present_dbs", [])]
         if missing_dbs:
             print(f"[*] Missing PostgreSQL databases detected: {missing_dbs}. Executing init-dbs...")
             init_sql = Path(__file__).resolve().parent.parent / "init/postgres/01-init-dbs.sql"

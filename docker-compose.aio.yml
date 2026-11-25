@@ -29,10 +29,10 @@ services:
       - SUBSENSE_WARP_ENABLED=${SUBSENSE_WARP_ENABLED:-false}
       # The outer port mappings above control host access to the nested services.
       - INTERNAL_BIND_IP=0.0.0.0
-      - BASE_URL=${BASE_URL:-https://aio.yourdomain.com}
-      - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
-      - AIOMETADATA_HOST=${AIOMETADATA_HOST:-https://aiometa.yourdomain.com}
-      - JIKAN_API_BASE=${JIKAN_API_BASE:-https://api.tenrai.org/v4}
+      - BASE_URL=${BASE_URL:-}
+      - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-}
+      - AIOMETADATA_HOST=${AIOMETADATA_HOST:-}
+      - JIKAN_API_BASE=${JIKAN_API_BASE:-}
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TVDB_API_KEY=${TVDB_API_KEY:-}
       - FANART_API_KEY=${FANART_API_KEY:-}
@@ -58,6 +58,13 @@ services:
       - ADDON_PASSWORD=${ADDON_PASSWORD:-}
     volumes:
       - aio-data:/data
+    stop_grace_period: 90s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 # Automatically creates persistent volume if it does not exist
 volumes:
