@@ -1,7 +1,7 @@
 # AIO Local — status and roadmap
 
-See the [November 22 polish roadmap](docs/DEVELOPMENT-ROADMAP.md) for the current
-review, verified fixes, and remaining acceptance work. Status below is historical.
+See the [November 25 audit & 24/7 stability roadmap](docs/DEVELOPMENT-ROADMAP.md#deep-dive-247-stability-security--missing-links-roadmap--november-25-2026) for the current
+review, verified findings, and active implementation plan. Status below is historical.
 
 Updated 2026-11-17. Goal: deploy through Docker Compose or a management app,
 enter keys on one page, receive manifests for compatible players.

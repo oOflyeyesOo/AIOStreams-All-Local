@@ -68,7 +68,7 @@ def get_project_root() -> Path:
 
 def postgres_container():
     """Resolve only this Compose project's database; never a global container name."""
-    project = os.environ.get("AIO_PROJECT_NAME")
+    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
     if project:
         command = ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}",
                    "--filter", "label=com.docker.compose.service=shared-postgres"]

@@ -1006,6 +1006,11 @@ def proxy_config(kind, base_url):
 def save_env_updates(updates):
     """Serialize concurrent portal writes and replace the file only when complete."""
     with ENV_LOCK:
+        for k, v in updates.items():
+            if not re.fullmatch(r"[A-Za-z0-9_]+", str(k)):
+                raise ValueError("Invalid environment variable name")
+            if v is not None and (not isinstance(v, (str, int, float, bool)) or any(c in str(v) for c in "\r\n\x00")):
+                raise ValueError("Environment values must be single-line scalars without newlines or null bytes")
         if "COMPOSE_PROFILES" in updates:
             raw = str(updates["COMPOSE_PROFILES"]).split("#", 1)[0]
             normalized = []
@@ -1251,9 +1256,41 @@ def get_aniskip_times(mal_id, episode=1, duration=0):
         ANISKIP_CACHE[cache_key] = (now, res)
         return res
 
+def is_safe_webhook_url(url_str):
+    if not url_str or not isinstance(url_str, str):
+        return False, "Invalid webhook URL"
+    parsed = urllib.parse.urlsplit(url_str)
+    if parsed.scheme != "https":
+        return False, "Webhook URL must use https"
+    host = parsed.hostname
+    if not host:
+        return False, "Webhook URL missing hostname"
+    host_lower = host.lower()
+    if host_lower in ("localhost", "127.0.0.1", "::1", "docker", "controller", "portal") or host_lower.endswith((".local", ".internal", ".lan")):
+        return False, "Internal and private hosts are not allowed"
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return False, "Private IP addresses are not allowed"
+    except ValueError:
+        pass
+    return True, ""
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        ok, _ = is_safe_webhook_url(newurl)
+        if not ok:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def dispatch_webhook_notification(webhook_url, title, message, url=None):
     if not webhook_url:
         return False, "No webhook URL provided"
+    safe, err = is_safe_webhook_url(webhook_url)
+    if not safe:
+        return False, err
     try:
         payload = {
             "content": f"**[AIO Simulcast Alert]** {title}\n{message}" + (f"\nWatch: {url}" if url else ""),
@@ -1267,7 +1304,8 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json", "User-Agent": "AIO-Stack-Notifier/1.0"})
-        with urllib.request.urlopen(req, timeout=6) as resp:
+        opener = urllib.request.build_opener(SafeRedirectHandler())
+        with opener.open(req, timeout=6) as resp:
             return True, f"Delivered (HTTP {resp.status})"
     except Exception as e:
         return False, str(e)
@@ -1980,6 +2018,8 @@ button:hover {{ background: #0369a1; }}
             return
 
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            if not self.authorize():
+                return
             self.handle_proxy_route(path, url_parts.query)
             return
 
@@ -2180,10 +2220,6 @@ button:hover {{ background: #0369a1; }}
                             item["uiUrl"] = ui_url
                         proxy_path = SERVICE_UI_PATHS.get(service)
                         if proxy_path is not None:
-                            if service == "postersplus":
-                                p_key = env.get("POSTERSPLUS_ACCESS_KEY") or env.get("ADDON_PASSWORD", "admin")
-                                if p_key:
-                                    proxy_path = f"/admin?access_key={urllib.parse.quote(p_key)}"
                             item["proxyUrl"] = f"/service-proxy/{service}{proxy_path}"
                 self.json_response({"integrations": integrations})
             except Exception:
@@ -2707,6 +2743,8 @@ button:hover {{ background: #0369a1; }}
         url_parts = urllib.parse.urlsplit(self.path)
         path = url_parts.path
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            if not self.authorize():
+                return
             self.handle_proxy_route(path, url_parts.query)
             return
         if self.check_proxy_referer_fallback(path, url_parts.query):
@@ -2717,6 +2755,11 @@ button:hover {{ background: #0369a1; }}
         url_parts = urllib.parse.urlsplit(self.path)
         path = url_parts.path
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            if not self.authorize():
+                return
+            if not self.request_origin_is_local():
+                self.send_error(403, "Cross-origin requests are not allowed")
+                return
             self.handle_proxy_route(path, url_parts.query)
             return
         if self.check_proxy_referer_fallback(path, url_parts.query):
@@ -2727,6 +2770,11 @@ button:hover {{ background: #0369a1; }}
         url_parts = urllib.parse.urlsplit(self.path)
         path = url_parts.path
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            if not self.authorize():
+                return
+            if not self.request_origin_is_local():
+                self.send_error(403, "Cross-origin requests are not allowed")
+                return
             self.handle_proxy_route(path, url_parts.query)
             return
         if self.check_proxy_referer_fallback(path, url_parts.query):
@@ -2737,6 +2785,11 @@ button:hover {{ background: #0369a1; }}
         url_parts = urllib.parse.urlsplit(self.path)
         path = url_parts.path
         if path.startswith("/service-proxy") or path == "/jellyfin" or path.startswith("/jellyfin/"):
+            if not self.authorize():
+                return
+            if not self.request_origin_is_local():
+                self.send_error(403, "Cross-origin requests are not allowed")
+                return
             self.handle_proxy_route(path, url_parts.query)
             return
         if self.check_proxy_referer_fallback(path, url_parts.query):

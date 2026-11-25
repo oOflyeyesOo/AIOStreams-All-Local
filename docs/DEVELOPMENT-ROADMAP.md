@@ -151,3 +151,82 @@ Follow-up acceptance: **302 Linux Python tests and 43 frontend logic tests passe
 Compose validation, generated manager freshness and service inventory passed.
 Updated portal and bootstrap images built locally. Live rebuilds, account-backed
 streaming and browser/server acceptance remain separate verification gates.
+
+---
+
+## Deep-dive 24/7 stability, security & missing-links roadmap — November 25, 2026
+
+Baseline: `ab37347`, branch `audit/24-7-hardening-and-load`. Three specialized
+auditors (`audit-portal-sec`, `audit-pipeline-perf`, `audit-infra-tests`) inspected
+all runtime, Compose, bootstrap, portal, UI, template, and test files.
+
+### Baseline checks verified before edits
+
+- `python -m unittest discover -s tests -p "test_*.py"`: **304 passed, 11 skipped** (Linux/symlink tests on Windows).
+- `node --test tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs`: **43/43 passed**.
+- `python -m tests.check_inventory`, `python scripts/generate_manager_compose.py --check`, `pwsh ./tests/check_update_scripts.ps1`, and all 5 Compose config checks passed.
+- `python scripts/audit_portal.py` failed on dynamic `/app.webmanifest` (`/assets/favicon.ico` missing).
+
+### Priority P0 — Security, Auth, Data Integrity & Broken Core
+
+1. **Portal auth, CSRF/origin & credential-leak fixes (`portal_server.py`, `assets/app.js`)**:
+   - Gate `/service-proxy/*`, `/jellyfin/*`, `/watch/*`, `check_proxy_referer_fallback()`, and `do_HEAD` behind `self.authorize()` and enforce `request_origin_is_local()` on mutating proxy methods (without trusting spoofable `X-Forwarded-Host`).
+   - Respect `.env` overrides in `authorize()`; gate `/api/config-bundle-raw` behind auth/safe filtering so exported bundles re-import cleanly; keep non-loopback unauthenticated warnings prominent.
+   - Inject `POSTERSPLUS_ACCESS_KEY` server-side inside `proxy_to_service()` instead of exposing it in `/api/integrations` URLs or `302` redirects; proxy `/watch/` directly instead of `302`-redirecting to `/{uuid}/{encrypted_password}/web/` and include `WEB_ROOT/data/aiostreams/aiostreams_install.json`.
+   - Enforce `.env` scalar safety in `save_env_updates()` (`push-dns`, `tunnel`), strip internal Basic Auth on proxied requests, block SSRF on `/api/webhook-test` (`https://` public hosts, no redirects), escape `refreshCloudflareStatus()` HTML, add thread locks & SQLite connection cleanup, and preserve `DISCORD_WEBHOOK_URL` on reload/save.
+2. **State preservation & DinD / AIO / Usenet data safety**:
+   - Clear placeholder defaults in `docker-compose.aio.yml` (`BASE_URL`, `AIOMETADATA_HOST`, `JELLYFIN_ENABLED`, `JIKAN_API_BASE`, `COMPOSE_PROFILES`, `SUBSENSE_WARP_ENABLED`) so container restarts never overwrite `/data/.env`; add `stop_grace_period: 90s` + `healthcheck`, and support `PORT_PORTAL`/`PORTAL_PORT`.
+   - Seed `.env.example` in `portal_entrypoint.py` without overwriting saved `/app/config/.env` settings on restart; prevent `prepare_env.py` crashes on `$'\"` in existing/quoted lines.
+   - Bind Usenet-only `BuiltinProxy` to live `BASE_URL` and `ADDON_PASSWORD` in `setup_stack.py` and clear hardcoded localhost/admin credentials in both `usenet-only.json` templates.
+   - Move `setup_stack.py` import-time `.env` writes and `jikan-api` network probes out of module scope; avoid duplicating users or wiping user AIOStreams edits on repeat runs.
+3. **Database integrity, Compose project resolution & CLI repairs**:
+   - Apply Postgres `postmaster` settings (`shared_buffers=256MB`, `max_connections=50`, `wal_compression`, `max_wal_size`, `checkpoint_timeout`) via `shared-postgres` `command:` flags; align `init-databases.sh` + inline fallback; plan safe password/auth migration preserving existing volumes (`ALTER USER postgres` via local socket before tightening TCP `pg_hba.conf`, keeping Unix-socket CLI tools working).
+   - Replace `init-configs` `chmod -R 777` with scoped non-world-writable permissions.
+   - Resolve Compose project from `docker inspect $HOSTNAME` in `tools/backup.py`, `tools/cloudflare_helper.py`, `portal_server.py`, and `tools/resources.py`; make backup restore terminate active Postgres connections (`WITH (FORCE)`), include `data/player_preferences.json`, and execute `BACKUP_SCHEDULE`.
+   - Fix `tools/doctor.py --repair` (`present_dbs` mismatch), `Makefile` dead `search-broker` / profile targets, and `setup.sh` / `setup.ps1` (`core` default, UTF-8 without BOM in PowerShell, keep `01-init-dbs.sql` intact, remove `:3011` references).
+
+### Priority P1 — 24/7 Server Load Reduction, Search Speed, DinD/ZFS Stability & Missing Links
+
+1. **24/7 DinD, ZFS & DB burst reduction (without hurting search latency)**:
+   - Update `docker/all-in-one/entrypoint.sh` to try `overlay2` -> `fuse-overlayfs` -> `vfs` (avoiding `vfs` ZFS write amplification), skip unconditional `docker compose build` on every boot when images exist, keep startup portal up until real portal binds, fix cleanup trap (`-t 60`, `wait`, mojibake).
+   - Eliminate frontend 5s infinite polling (`pollPlaybackReadiness`, `pollSetup`), start health SSE only when telemetry panel is visible, fix `/api/health-stream` event name/schema mismatch, fix `tools/watchdog.py` (`PROBE_HISTORY` telemetry caching, profile-aware services from `service_inventory.py`, single `zilean/dmm/filtered?query=ping`, `/health/live`, parallel checks).
+   - Reduce Docker healthcheck churn (`15s` with `start_interval: 2s` for Postgres/Redis/controller, `30s` for Zilean), add missing healthchecks (`subsense`, `postersplus`) & `stop_grace_period` / memory/CPU guards; configure `lumiere-db` (`ETL_POLL_INTERVAL=12h`, `ETL_REBUILD_WINDOW=03:00-05:00`), `TEMPLATE_REFRESH_INTERVAL` / `WHITELISTED_SYNC_REFRESH_INTERVAL` (`43200`), align `PIPELINE_CACHE_TTL=1800` & `MEDIA_INFO_PROBE=false`, tune `zilean` (`DOTNET_gcServer=0`, `ZILEAN_MEM_LIMIT=2048m`), and tune Redis lazyfree flags.
+2. **Search fan-out & cache cleanup**:
+   - Gate `anime_targets` and native anime presets strictly on `ENABLE_ANIME_SOURCES=true`, scope `bento-anime` to `mediaTypes: ["anime"]`, stop force-re-enabling user-disabled Prowlarr indexers, tag FlareSolverr to Cloudflare-gated trackers, honor `SCRAPER_TIMEOUT_MS`, and set `precacheFailover: false` / `precacheSelector: "[]"` in shipped builtin/setup templates.
+   - Retire dead `/api/search-status` UI/route (`search-broker` already retired) or clean `tools/search_broker.py` concurrency bugs; fix `tools/clean_cache.py` symlink handling inside `aio-stack` (`/app/data -> /data`) and restrict `__pycache__` walk to code directories.
+3. **Broken links, UI-backend parity, QoL & test coverage**:
+   - Fix AniSkip response parsing (`res.results` / `res.malId`), remove fake telemetry HUD (`G` shortcut), fix `#copy-jellyfin-password` fallback, fix live Player Preferences sync (`PUT /api/v1/user` with UUID auth + full language name + `jpn`), unify Posters+ & error surfacing in `tools/metadata_config.py`, pass SubSense language/OpenSubtitles config in `setup_stack.py`.
+   - Surface QoL controls in UI (profile selector, `AIO_PRECACHE_NEXT_EPISODE`, `OPENSUBTITLES_API_KEY`, `EASYNEWS_*`, Cloudflare `Stop`/`Restart` + tunnel project scoping + `zone_id` account lookup, Trakt/Simkl/AniList pair/OAuth status, backup archive list, safe restart button, extra containers in log selector), and fix `/app.webmanifest` icon + `tools/stack-builder/index.html`.
+   - Fix `tests/check_stack.py` (`lumiere-db`, optional `subsense`, pure `anime` profile), clean stale Bitmagnet/Comet/`:3011` references in tests/docs/`templates/`, and add unit coverage for `doctor.py`, `generate_manager_compose.py`, and `check_stack.py`.
+
+### Priority P2 — Container Hardening & Polish
+
+- Add `no-new-privileges:true` and capability drops across services without breaking runtime permissions; pass `TUNNEL_TOKEN` env var instead of `--token` CLI arg on `cloudflared`; review CSP & inline JS handlers in `index.html`; align `.githooks/pre-push`, `scripts/pre_push_check.py`, `Makefile`, and CI workflows.
+
+### Implementation & Acceptance Summary — November 25, 2026
+
+Branch: `audit/24-7-hardening-and-load`
+
+1. **CI Run #155 Diagnosis & Fix**:
+   - Diagnosed failure in `tests/check_optional_live.py:107` and `151` where managed direct Newznab routes standardizing to `newznab-managed-*` caused assertion failures on `'portal' in p.get('instanceId')`. Fixed URL-based matching in `check_optional_live.py` and added regression tests in `tests/test_packaged.py`. All 8 packaged tests pass.
+2. **Security & State Hardening**:
+   - Hardened `docker/all-in-one/portal_server.py`: added scalar validation in `save_env_updates()`, SSRF protection with private IP and loopback blocks in `is_safe_webhook_url()`, and protected mutating proxy methods with `request_origin_is_local()`.
+   - Prevented `.env` corruption in `docker-compose.aio.yml` by using default-fallback variable expansions (`${VAR:-}`) for `BASE_URL`, `AIOMETADATA_HOST`, `JELLYFIN_ENABLED`, `JIKAN_API_BASE`. Added container healthcheck and `stop_grace_period: 90s`.
+   - Fixed `init/bootstrap/setup_stack.py`: eliminated module import-time network probing and `.env` writes, configured BuiltinProxy credentials properly for Usenet mode, scoped Bento anime to anime media types, and preserved template anime auto-enablement.
+   - Cleared hardcoded credentials from Usenet templates and disabled aggressive precaching (`precacheFailover: false`).
+3. **24/7 Low-Load & Host Stability Optimizations**:
+   - Configured `shared-postgres` command flags for WAL compression (`wal_compression=pglz`), checkpoint smoothing (`checkpoint_completion_target=0.9`, `checkpoint_timeout=15min`, `min_wal_size=256MB`, `max_wal_size=2GB`), `synchronous_commit=off`, and tuned autovacuum cost limits.
+   - Configured `shared-redis` with `--lazyfree-lazy-expire yes --lazyfree-lazy-server-del yes` and relaxed healthchecks.
+   - Configured `lumiere-db` with 12h ETL polling interval and night rebuilding window (`03:00-05:00`).
+   - Disabled startup cache warmup (`CACHE_WARMUP_ON_STARTUP=false`) and disabled episode precaching (`AIO_PRECACHE_NEXT_EPISODE=false`, `MEDIA_INFO_PROBE=false`).
+   - Relaxed dashboard frontend polling: slowed readiness and setup polling to 30s once completed, paused SSE health stream when document is hidden, and escaped dynamic inspect fields in `refreshCloudflareStatus`.
+   - Optimized `tools/watchdog.py`: single `?query=ping` probe for Zilean, profile-aware service filtering, and probe result reuse.
+   - Fixed `tools/clean_cache.py`: symlink handling for `/app/data -> /data` and scoped `__pycache__` discovery.
+   - Fixed `tools/doctor.py`: repaired database presence check in `run_repair`.
+   - Enhanced `tools/resources.py` and `tools/backup.py`: resolved Compose project dynamically and supported TB/TiB units.
+4. **Acceptance & Validation**:
+   - **305 Python unit tests passed (0 failures, 11 skipped)**.
+   - **43 frontend logic and browser tests passed (0 failures)**.
+   - `scripts/audit_portal.py` passed with 0 findings.
+   - `scripts/pre_push_check.py` passed with all release gates green.
+   - Generated manager Compose file (`compose.manager.yml`) synchronized and validated.

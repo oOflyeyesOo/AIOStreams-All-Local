@@ -36,36 +36,68 @@ if hasattr(sys.stderr, "reconfigure"):
         pass
 
 
+try:
+    from init.service_inventory import is_service_active, parse_compose_profiles
+except ImportError:
+    repo_root = Path(__file__).resolve().parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    try:
+        from init.service_inventory import is_service_active, parse_compose_profiles
+    except ImportError:
+        is_service_active = None
+        parse_compose_profiles = None
+
+
 def is_running_in_docker() -> bool:
     """Detect whether this process is running inside a Docker container."""
     return Path("/.dockerenv").is_file() or os.environ.get("IN_DOCKER") == "1"
 
 
 def get_service_endpoints() -> list:
-    """Return endpoint probe configurations for all stack services."""
+    """Return endpoint probe configurations for all stack services enabled in profiles."""
     in_docker = is_running_in_docker()
+
+    raw_profiles = os.environ.get("COMPOSE_PROFILES")
+    if not raw_profiles:
+        env_file = Path("/data/.env") if in_docker else (Path.cwd() / ".env")
+        if not env_file.is_file():
+            env_file = Path(__file__).resolve().parent.parent / ".env"
+        if env_file.is_file():
+            try:
+                for line in env_file.read_text(encoding="utf-8").splitlines():
+                    if line.strip().startswith("COMPOSE_PROFILES="):
+                        raw_profiles = line.split("=", 1)[1].strip().strip('"\'')
+                        break
+            except Exception:
+                pass
+    profiles = parse_compose_profiles(raw_profiles) if parse_compose_profiles else None
     
     # Internal docker DNS host:port vs Host loopback 127.0.0.1:port
     if in_docker:
-        return [
+        candidates = [
             {"service": "aiostreams", "container": "aiostreams", "url": "http://aiostreams:3000/manifest.json", "expected_code": 200, "critical": True},
             {"service": "aiometadata", "container": "aiometadata", "url": "http://aiometadata:4005/manifest.json", "expected_code": [200, 404], "critical": True},
             {"service": "subsense", "container": "stremio-subsense", "url": "http://subsense:3100/", "expected_code": 200, "critical": False},
             {"service": "anime-kitsu", "container": "anime-kitsu", "url": "http://anime-kitsu:7000/", "expected_code": 200, "critical": False},
             {"service": "stremthru", "container": "stremthru", "url": "http://stremthru:8080/v0/health", "expected_code": 200, "critical": False},
-            {"service": "zilean", "container": "zilean", "url": "http://zilean:8181/dmm/filtered", "expected_code": 200, "critical": False},
+            {"service": "zilean", "container": "zilean", "url": "http://zilean:8181/dmm/filtered?query=ping", "expected_code": 200, "critical": False},
             {"service": "prowlarr", "container": "prowlarr", "url": "http://prowlarr:9696/ping", "expected_code": 200, "critical": False},
         ]
     else:
-        return [
+        candidates = [
             {"service": "aiostreams", "container": "aiostreams", "url": "http://127.0.0.1:3001/manifest.json", "expected_code": 200, "critical": True},
             {"service": "aiometadata", "container": "aiometadata", "url": "http://127.0.0.1:4005/manifest.json", "expected_code": [200, 404], "critical": True},
             {"service": "subsense", "container": "stremio-subsense", "url": "http://127.0.0.1:3100/", "expected_code": 200, "critical": False},
             {"service": "anime-kitsu", "container": "anime-kitsu", "url": "http://127.0.0.1:7005/", "expected_code": 200, "critical": False},
             {"service": "stremthru", "container": "stremthru", "url": "http://127.0.0.1:8080/v0/health", "expected_code": 200, "critical": False},
-            {"service": "zilean", "container": "zilean", "url": "http://127.0.0.1:8181/dmm/filtered", "expected_code": 200, "critical": False},
+            {"service": "zilean", "container": "zilean", "url": "http://127.0.0.1:8181/dmm/filtered?query=ping", "expected_code": 200, "critical": False},
             {"service": "prowlarr", "container": "prowlarr", "url": "http://127.0.0.1:9696/ping", "expected_code": 200, "critical": False},
         ]
+
+    if is_service_active and profiles:
+        return [c for c in candidates if is_service_active(c["service"], profiles)]
+    return candidates
 
 
 # State tracking across checks
@@ -376,7 +408,15 @@ def probe_all_services(auto_restart: bool = False, max_failures: int = 3, cooldo
 
     mem_alerts = check_memory_pressure(threshold_percent=mem_threshold, auto_restart=auto_restart) if check_memory else []
     prowlarr_idx = check_prowlarr_indexers()
-    zilean_stats = get_zilean_stats()
+    zilean_probe = next((p for p in results if p.get("service") == "zilean"), None)
+    if zilean_probe is not None:
+        zilean_stats = {
+            "healthy": zilean_probe.get("healthy", False),
+            "status": "online" if zilean_probe.get("healthy") else (f"HTTP {zilean_probe.get('status_code', 0)}" if zilean_probe.get("status_code") else "offline"),
+            "message": "Zilean DMM cache responding" if zilean_probe.get("healthy") else (zilean_probe.get("error") or "Non-200 response")
+        }
+    else:
+        zilean_stats = get_zilean_stats()
 
     timestamp = datetime.now(timezone.utc).isoformat()
     summary = {

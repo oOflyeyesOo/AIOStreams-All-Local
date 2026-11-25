@@ -106,8 +106,8 @@
     "proxy": {
       "id": "builtin",
       "enabled": true,
-      "url": "http://localhost:3001",
-      "credentials": "admin:admin",
+      "url": "",
+      "credentials": "",
       "proxiedServices": [
         "aiostreams",
         "easynews",
@@ -291,7 +291,7 @@
       "allowCrossType": false,
       "maxAttempts": 3,
       "includeExternalFailover": true,
-      "precacheFailover": true,
+      "precacheFailover": false,
       "parallel": 1
     }
   }

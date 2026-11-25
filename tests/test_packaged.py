@@ -101,3 +101,31 @@ class PackagedPortalTests(unittest.TestCase):
         self.assertNotIn('anime-kitsu', check_stack.active_checks({'core'}))
         self.assertIn('anime-kitsu', check_stack.active_checks({'core', 'anime'}))
         self.assertIn('anime-kitsu', check_stack.active_checks({'all'}))
+
+    def test_check_optional_live_matches_direct_newznab_routes(self):
+        presets = [
+            {
+                'type': 'newznab',
+                'instanceId': 'newznab-managed-primary',
+                'enabled': True,
+                'options': {'api': {'url': 'http://portal:18884/api'}, 'services': ['aiostreams']}
+            },
+            {
+                'type': 'newznab',
+                'instanceId': 'newznab-managed-abcdef1234567890',
+                'enabled': True,
+                'options': {'api': {'url': 'http://portal:18886/api'}, 'services': ['aiostreams']}
+            },
+            {
+                'type': 'newznab',
+                'instanceId': 'newznab-managed-other',
+                'enabled': True,
+                'options': {'api': {'url': 'https://nzbgeek.info/api'}, 'services': ['aiostreams']}
+            }
+        ]
+        matched = [
+            p for p in presets
+            if p.get('type') == 'newznab' and ('portal' in p.get('instanceId', '') or 'portal' in p.get('options', {}).get('api', {}).get('url', ''))
+        ]
+        self.assertEqual(len(matched), 2)
+        self.assertTrue(all(p['enabled'] for p in matched))

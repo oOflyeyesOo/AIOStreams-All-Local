@@ -124,8 +124,8 @@ def server_config(values, kind=1):
         connections = int(values.get('USENET_CONNECTIONS') or 10)
     except (ValueError, TypeError):
         raise ValueError('Usenet port and connection count must be numbers') from None
-    if not 1 <= port <= 65535 or not 1 <= connections <= 1000:
-        raise ValueError('Invalid Usenet port or connection count')
+    if not 1 <= port <= 65535 or not 1 <= connections <= 50:
+        raise ValueError('Invalid Usenet port or connection count (connections must be 1..50)')
     if values.get('USENET_SSL', 'true') not in ('true', 'false'):
         raise ValueError('Usenet TLS must be true or false')
     return {'Type': kind, 'Host': host.strip('[]'), 'Port': port, 'UseSsl': values.get('USENET_SSL', 'true') == 'true', 'User': user, 'Pass': password, 'MaxConnections': connections}
