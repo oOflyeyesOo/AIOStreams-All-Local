@@ -26,8 +26,9 @@ def generate(source):
     for name, service in source['services'].items():
         service.pop('container_name', None)
         service.pop('build', None)
-        # The manager installation includes all integrations without profile setup.
-        if name not in ('stack-check', 'cloudflared'):
+        # Core starts without setup in manager apps; optional integrations retain
+        # the source profiles so they are not silently enabled on every install.
+        if 'core' in service.get('profiles', []):
             service.pop('profiles', None)
         if name in PACKAGED:
             service['image'] = '${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-' + PACKAGED[name] + ':${AIO_IMAGE_TAG:-latest}'
@@ -67,6 +68,7 @@ def generate(source):
             directory = volume.removesuffix('-data')
             portal['volumes'].append(f'{volume}:/app/data/{directory}')
     portal['environment'] += [
+        'COMPOSE_PROFILES=${COMPOSE_PROFILES:-}',
         'AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}',
         'AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}',
         'PORT_PORTAL=${PORT_PORTAL:-8088}',

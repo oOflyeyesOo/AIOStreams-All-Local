@@ -233,7 +233,7 @@ def probe_integration(item):
         else:
             profiles.add(p)
     if not profiles:
-        profiles = {"core", "all"}
+        profiles = {"core"}
     service_profiles = {
         "aiometadata": {"core", "scrapers", "all"},
         "postersplus": {"core", "scrapers", "all"},
@@ -425,94 +425,8 @@ def validate_provider(provider, key=None, url=None, indexer_id=None):
         return {"status": "valid" if ok else "rejected", "detail": f"Usenet NNTP server ({host}:{port}): {msg}"}
 
     if provider == "nzb":
-        env_vars = read_saved_env()
-        raw_url = (url or "").strip() if isinstance(url, str) else ""
-        if raw_url:
-            base_url = raw_url.rstrip("/")
-        else:
-            base_url = (env_vars.get("NZB_INDEXER_URL") or "https://api.althub.co.za").strip().rstrip("/")
-
-        clean_key = (key or "").strip() if isinstance(key, str) else ""
-        if not clean_key or clean_key.lower() == "saved":
-            matched_key = None
-            try:
-                indexers = newznab_indexers(env_vars)
-            except Exception:
-                indexers = []
-            if not indexers and "USENET_EXTRA_INDEXERS" in env_vars:
-                raw_extra = env_vars.get("USENET_EXTRA_INDEXERS")
-                if isinstance(raw_extra, list):
-                    indexers = raw_extra
-                elif isinstance(raw_extra, str) and raw_extra.strip():
-                    try:
-                        parsed = json.loads(raw_extra)
-                        if isinstance(parsed, list):
-                            indexers = parsed
-                    except Exception:
-                        pass
-
-            target_netloc = urllib.parse.urlsplit(base_url).netloc.lower()
-            if not target_netloc and "://" not in base_url and base_url:
-                target_netloc = urllib.parse.urlsplit(f"http://{base_url}").netloc.lower()
-            target_domain = target_netloc.split(":")[0]
-
-            if indexer_id:
-                for idx in indexers:
-                    if isinstance(idx, dict) and str(idx.get("id") or "").strip() == str(indexer_id).strip():
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-
-            if not matched_key and (target_netloc or target_domain):
-                for idx in indexers:
-                    if not isinstance(idx, dict):
-                        continue
-                    idx_url = (idx.get("url") or "").strip()
-                    idx_netloc = urllib.parse.urlsplit(idx_url).netloc.lower()
-                    if not idx_netloc and "://" not in idx_url and idx_url:
-                        idx_netloc = urllib.parse.urlsplit(f"http://{idx_url}").netloc.lower()
-                    idx_domain = idx_netloc.split(":")[0]
-                    if target_netloc and idx_netloc and target_netloc == idx_netloc:
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-                    if target_domain and idx_domain and (target_domain == idx_domain or target_domain.endswith("." + idx_domain) or idx_domain.endswith("." + target_domain)):
-                        matched_key = idx.get("apiKey") or idx.get("api_key") or idx.get("key")
-                        if matched_key:
-                            break
-
-            if matched_key:
-                clean_key = str(matched_key).strip()
-            else:
-                fallback_key = env_vars.get("NZB_INDEXER_API_KEY") or os.environ.get("NZB_INDEXER_API_KEY") or ""
-                clean_key = str(fallback_key).strip()
-
-        if not clean_key:
-            return {"status": "invalid", "detail": "No NZB API key configured."}
-
-        clean_base = base_url if base_url.endswith("/api") else f"{base_url}/api"
-        test_url = f"{clean_base}?t=caps&apikey={urllib.parse.quote(clean_key, safe='')}"
-        headers = {"User-Agent": "AIO-Local/1.0", "Accept": "*/*"}
-        request = urllib.request.Request(test_url, headers=headers)
-        try:
-            with urllib.request.urlopen(request, timeout=8) as response:
-                body = response.read().decode("utf-8", errors="ignore")
-            if "<error " in body:
-                desc = "Invalid or rejected API key."
-                m = re.search(r'description="([^"]+)"', body)
-                if m:
-                    desc = m.group(1)
-                return {"status": "rejected", "detail": f"Indexer rejected API key: {desc}"}
-            if "<caps>" in body or "<categories>" in body or response.status == 200:
-                host_label = urllib.parse.urlsplit(base_url).netloc or base_url
-                return {"status": "valid", "detail": f"NZB indexer ({host_label}) verified successfully."}
-            return {"status": "rejected", "detail": "Indexer did not return standard Newznab capabilities."}
-        except urllib.error.HTTPError as error:
-            if error.code in (401, 403):
-                return {"status": "rejected", "detail": f"NZB API key rejected (HTTP {error.code}). Check your indexer profile API key."}
-            return {"status": "rejected", "detail": f"Indexer returned HTTP {error.code}."}
-        except (OSError, ValueError):
-            return {"status": "unavailable", "detail": f"Could not connect to NZB indexer at {base_url}."}
+        from tools.indexer_validation import validate_indexer
+        return validate_indexer(read_saved_env(), key, url, indexer_id)
 
     if provider not in PROVIDER_VALIDATORS:
         return {"status": "invalid", "detail": "Choose a supported provider."}
@@ -597,7 +511,6 @@ def test_nntp_login(host, port, user, password, use_ssl=True, timeout=3):
                 raw_sock.close()
             except Exception:
                 pass
-        return False, str(e)
 
 
 def playback_readiness():
@@ -904,13 +817,13 @@ def config_export():
     env_vars = read_saved_env()
     values = {
         "BASE_URL": env_vars.get("BASE_URL", ""),
-        "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES", "all"),
+        "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES") or "core",
         "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
     }
     return {
         "format": "aio-local-config-v1",
         "baseUrl": env_vars.get("BASE_URL", ""),
-        "profile": env_vars.get("COMPOSE_PROFILES", "all"),
+        "profile": env_vars.get("COMPOSE_PROFILES") or "core",
         "values": values,
         "configuredKeys": sorted(key for key, value in env_vars.items() if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)),
         "secrets": {key: bool(value) for key, value in env_vars.items() if re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key)},
@@ -977,7 +890,7 @@ def optimized_profile_export():
 
     return {
         "format": "aio-local-optimized-profile-v1",
-        "profile": "all",
+        "profile": saved_env.get("COMPOSE_PROFILES") or "core",
         "providerKeys": sorted(
             key for key in ("REALDEBRID_API_KEY", "TORBOX_API_KEY", "ALLDEBRID_API_KEY",
                             "PREMIUMIZE_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY",
@@ -2752,15 +2665,32 @@ button:hover {{ background: #0369a1; }}
             if not self.authorize():
                 return
             try:
+                project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+                if not project and os.environ.get("HOSTNAME"):
+                    own = subprocess.run(
+                        ["docker", "inspect", "--format", '{{index .Config.Labels "com.docker.compose.project"}}', os.environ["HOSTNAME"]],
+                        capture_output=True, text=True, timeout=8)
+                    if own.returncode == 0:
+                        project = own.stdout.strip()
+                if not project or project == "<no value>":
+                    self.json_response({"success": False, "error": "Cannot identify this Compose project. Recreate the portal through your stack manager and retry."}, 503)
+                    return
+                selected = subprocess.run(
+                    ["docker", "ps", "--filter", f"label=com.docker.compose.project={project}",
+                     "--filter", "label=com.docker.compose.service=lumiere-db", "--format", "{{.ID}}"],
+                    capture_output=True, text=True, timeout=8)
+                targets = selected.stdout.strip().splitlines()
+                if selected.returncode != 0 or len(targets) != 1:
+                    self.json_response({"success": False, "error": "Could not find one running Lumiere service in this stack. Check service status before rebuilding."}, 503)
+                    return
                 res = subprocess.run(
-                    ["docker", "exec", "lumiere-db", "/app/api", "rebuild"],
+                    ["docker", "exec", targets[0], "/app/api", "rebuild"],
                     capture_output=True, text=True, timeout=15
                 )
-                output = (res.stdout or res.stderr or "Rebuild command executed").strip()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": res.returncode == 0, "output": output}).encode("utf-8"))
+                if res.returncode != 0:
+                    self.json_response({"success": False, "error": "Lumiere rejected the rebuild request. Check its service logs."}, 502)
+                    return
+                self.json_response({"success": True, "output": "Rebuild request accepted. Completion has not been verified."})
             except Exception:
                 self.json_response({"success": False, "error": "Internal server error occurred while rebuilding Lumiere database."}, 500)
             return
@@ -3525,8 +3455,10 @@ button:hover {{ background: #0369a1; }}
                     req = urllib.request.Request(ep, headers={"User-Agent": "AIO-Portal"})
                     with urllib.request.urlopen(req, timeout=2) as resp:
                         if resp.status == 200:
-                            data = json.loads(resp.read().decode("utf-8"))
-                            break
+                            candidate = json.loads(resp.read().decode("utf-8"))
+                            if isinstance(candidate, dict):
+                                data = candidate
+                                break
                 except Exception:
                     continue
 
@@ -3537,25 +3469,30 @@ button:hover {{ background: #0369a1; }}
                 if manifest_files:
                     manifest_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
                     try:
-                        manifest_info = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+                        candidate = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+                        if isinstance(candidate, dict):
+                            manifest_info = candidate
                     except Exception:
                         pass
 
-            if not data and not manifest_info:
+            if data is None and not manifest_info:
                 self.json_response({"success": False, "error": "LumiereDB is unreachable or not initialized yet."}, 503)
                 return
 
+            online = data is not None
+            index = (data or {}).get("index")
+            index = index if isinstance(index, dict) else {}
             result = {
                 "success": True,
-                "online": bool(data),
-                "phase": data.get("phase", "idle") if data else "offline",
-                "ready": data.get("index", {}).get("ready", False) if data else bool(manifest_info),
-                "generationId": data.get("index", {}).get("generationId", "") if data else manifest_info.get("indexVersion", ""),
+                "online": online,
+                "phase": data.get("phase") if online else "offline",
+                "ready": online and index.get("ready") is True,
+                "generationId": index.get("generationId", "") if online else manifest_info.get("indexVersion", ""),
                 "datasetDate": manifest_info.get("datasetDate", ""),
-                "docs": manifest_info.get("docs", 0),
-                "episodes": manifest_info.get("episodes", 0),
-                "people": manifest_info.get("people", 0),
-                "names": manifest_info.get("names", 0),
+                "docs": manifest_info.get("docs"),
+                "episodes": manifest_info.get("episodes"),
+                "people": manifest_info.get("people"),
+                "names": manifest_info.get("names"),
                 "builtAt": manifest_info.get("builtAt", ""),
                 "lastPollAt": data.get("lastPollAt") if data else None,
                 "nextPollAt": data.get("nextPollAt") if data else None,
@@ -3707,9 +3644,10 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel
+            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel, normalize_tunnel_token
             payload = self.read_json_body()
-            api_token = (payload.get("api_token") or "").strip()
+            env_vars = read_saved_env()
+            api_token = (payload.get("api_token") or env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
             if not api_token:
                 self.json_response({"success": False, "error": "Cloudflare API Token is required. Generate one in Cloudflare Dashboard -> My Profile -> API Tokens."}, 400)
                 return
@@ -3770,7 +3708,7 @@ button:hover {{ background: #0369a1; }}
 
             # If the user provided a full run token, persist it
             if req_tunnel_token and meta.get("is_run_token"):
-                env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = req_tunnel_token
+                env_updates["CLOUDFLARE_TUNNEL_TOKEN"] = normalize_tunnel_token(req_tunnel_token)
             elif account_id and tunnel_id and api_token and not meta.get("is_run_token"):
                 try:
                     tok_res = fetch_cloudflare_tunnel_token(api_token, account_id, tunnel_id)
@@ -3798,6 +3736,8 @@ button:hover {{ background: #0369a1; }}
                 resolved_tun = res.get("tunnel_id") or tunnel_id
                 curr_env = read_saved_env()
                 curr_token = curr_env.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
+                if curr_token and resolved_tun and parse_tunnel_token(curr_token).get("tunnel_id") != resolved_tun:
+                    curr_token = ""
                 if not curr_token and resolved_acc and resolved_tun and api_token:
                     try:
                         fetch_res = fetch_cloudflare_tunnel_token(api_token, resolved_acc, resolved_tun)
@@ -3811,7 +3751,7 @@ button:hover {{ background: #0369a1; }}
                     t_start = manage_local_tunnel("start", cwd=WEB_ROOT, token=curr_token)
                     if t_start.get("success"):
                         res["tunnel_started"] = True
-                        res["message"] += " Local tunnel connector aio-tunnel started and connected successfully! 🚀"
+                        res["message"] += " Local tunnel container started. Remote connectivity has not been verified."
                     else:
                         res["tunnel_started"] = False
                         res["tunnel_error"] = t_start.get("error")
@@ -3831,14 +3771,16 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import manage_local_tunnel, fetch_cloudflare_tunnel_token
+            from tools.cloudflare_helper import manage_local_tunnel, fetch_cloudflare_tunnel_token, normalize_tunnel_token
             payload = self.read_json_body()
-            action = payload.get("action", "status")
+            action = str(payload.get("action", "status")).strip().lower()
+            curr_token = None
 
             if action in ("start", "restart"):
-                token_arg = (payload.get("token") or "").strip()
+                token_arg = normalize_tunnel_token(payload.get("token") or "")
                 if token_arg:
                     save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": token_arg})
+                    curr_token = token_arg
                 else:
                     env_vars = read_saved_env()
                     curr_token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
@@ -3850,8 +3792,9 @@ button:hover {{ background: #0369a1; }}
                             fres = fetch_cloudflare_tunnel_token(api_tok, acc_id, tun_id)
                             if fres.get("success") and fres.get("token"):
                                 save_env_updates({"CLOUDFLARE_TUNNEL_TOKEN": fres["token"]})
+                                curr_token = fres["token"]
 
-            res = manage_local_tunnel(action, cwd=WEB_ROOT)
+            res = manage_local_tunnel(action, cwd=WEB_ROOT, token=curr_token)
             self.json_response(res, 200 if res.get("success") else 400)
         except ValueError as e:
             self.json_response({"success": False, "error": str(e)}, 400)

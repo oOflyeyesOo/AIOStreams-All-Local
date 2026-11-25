@@ -129,6 +129,13 @@ See [docs/CLOUDFLARE-AND-WEB-PLAYER.md](docs/CLOUDFLARE-AND-WEB-PLAYER.md) for s
 | Profile | Command | RAM | What runs |
 | :--- | :--- | :--- | :--- |
 | **`core`** (default) | `docker compose --profile core up -d` | ~1.6 GB | AIOStreams, AIOMetadata, LumiereDB, Posters+, SubSense, Prowlarr, Zilean, Bitmagnet, StremThru, FlareSolverr, Postgres, Redis, Portal |
+
+Bitmagnet searches existing indexed data; autonomous DHT crawling is disabled in
+both Compose definitions. Its queue worker can still process pending jobs and
+write to shared PostgreSQL. A fresh empty database has no historical torrents to
+search. Updating files alone does not change an existing container's command;
+recreate Bitmagnet to apply this setting. Stop Bitmagnet to pause its ingestion
+and queue processing without deleting its database.
 | **`anime`** | `docker compose --profile anime up -d` | ~2.4 GB | `core` + Anime Kitsu, Jikan API, Jikan MongoDB |
 | **`tunnel`** | `docker compose --profile tunnel up -d` | ~50 MB | Cloudflared secure remote ingress tunnel (can be enabled separately) |
 | **`all`** | `docker compose --profile all up -d` | ~2.5 GB | Full stack including core and anime services |

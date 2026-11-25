@@ -581,6 +581,124 @@ class BootstrapTests(unittest.TestCase):
         with patch.dict(bootstrap.os.environ, {'USENET_ENABLED': 'false'}):
             self.assertFalse(bootstrap.sync_aiostreams_native_usenet())
 
+    def test_native_usenet_extra_credentials_are_not_trimmed(self):
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'primary', 'USENET_PASS': 'primary-pass',
+            'USENET_USER_B64': '', 'USENET_PASS_B64': '', 'USENET_EXTRA_SERVERS_B64': '',
+            'USENET_EXTRA_SERVERS': json.dumps([{'host': 'backup.fixture.invalid',
+                'username': ' secondary ', 'password': ' secret ', 'backupOnly': True}])
+        }, clear=True), patch.object(bootstrap, 'get_aiostreams_auth_headers', return_value={}), \
+             patch.object(bootstrap, 'make_request', return_value={'success': True}) as request:
+            self.assertTrue(bootstrap.sync_aiostreams_native_usenet())
+            secondary = request.call_args.kwargs['data']['providers'][1]
+            self.assertEqual(secondary['username'], ' secondary ')
+            self.assertEqual(secondary['password'], ' secret ')
+            self.assertTrue(secondary['isBackup'])
+
+    def test_newznab_paths_do_not_overwrite_each_other_and_reapply_is_idempotent(self):
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'user', 'USENET_PASS': 'pass',
+            'NZB_INDEXER_URL': 'https://index.fixture.invalid/first', 'NZB_INDEXER_API_KEY': 'first-key',
+            'USENET_EXTRA_INDEXERS': json.dumps([
+                {'url': 'https://index.fixture.invalid/second', 'apiKey': 'second-key'},
+                {'url': 'https://INDEX.fixture.invalid:443/first/api/', 'apiKey': 'first-key'}])
+        }, clear=True):
+            first = bootstrap.build_default_config(base_config={}, probe_services=False)
+            second = bootstrap.build_default_config(base_config=first, probe_services=False)
+        self.assertEqual({p['instanceId'] for p in first['presets'] if p['type'] == 'newznab'},
+                         {p['instanceId'] for p in second['presets'] if p['type'] == 'newznab'})
+        for config in (first, second):
+            presets = [p for p in config['presets'] if p['type'] == 'newznab']
+            self.assertEqual(len(presets), 2)
+            self.assertEqual(len({p['instanceId'] for p in presets}), 2)
+            self.assertEqual({p['options']['api']['url']: p['options']['api']['apiKey'] for p in presets}, {
+                'https://index.fixture.invalid/first/api': 'first-key',
+                'https://index.fixture.invalid/second/api': 'second-key'})
+
+    def test_managed_newznab_endpoint_edits_replace_old_paths_and_preserve_custom(self):
+        custom = {'type': 'newznab', 'instanceId': 'my-custom-indexer', 'enabled': False,
+                  'options': {'name': 'My custom indexer', 'api': {'url': 'https://custom.fixture.invalid/api', 'apiKey': 'custom-fixture'},
+                              'timeout': 16000, 'services': ['custom-service'], 'resources': ['stream']}}
+        custom_expected = json.loads(json.dumps(custom))
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'user', 'USENET_PASS': 'pass',
+            'NZB_INDEXER_URL': 'https://index.fixture.invalid/first', 'NZB_INDEXER_API_KEY': 'primary-fixture',
+            'USENET_EXTRA_INDEXERS': json.dumps([{'id': 'stable-extra-row', 'url': 'https://index.fixture.invalid/second', 'apiKey': 'extra-fixture'}])
+        }, clear=True):
+            first = bootstrap.build_default_config(base_config={'presets': [custom]}, probe_services=False)
+            initial_ids = {p['instanceId'] for p in first['presets'] if p['type'] == 'newznab'}
+            os.environ['NZB_INDEXER_URL'] = 'https://index.fixture.invalid/primary-changed'
+            os.environ['USENET_EXTRA_INDEXERS'] = json.dumps([{'id': 'stable-extra-row', 'url': 'https://index.fixture.invalid/extra-changed', 'apiKey': 'extra-fixture'}])
+            second = bootstrap.build_default_config(base_config=first, probe_services=False)
+        presets = [p for p in second['presets'] if p['type'] == 'newznab']
+        self.assertEqual({p['instanceId'] for p in presets}, initial_ids)
+        self.assertEqual(len(presets), 3)
+        self.assertEqual(next(p for p in presets if p['instanceId'] == 'my-custom-indexer'), custom_expected)
+        self.assertEqual({p['options']['api']['url'] for p in presets}, {
+            'https://index.fixture.invalid/primary-changed/api',
+            'https://index.fixture.invalid/extra-changed/api',
+            'https://custom.fixture.invalid/api'})
+
+    def test_removed_managed_indexer_does_not_duplicate_changed_primary_endpoint(self):
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'user', 'USENET_PASS': 'pass',
+            'NZB_INDEXER_URL': 'https://a.fixture.invalid', 'NZB_INDEXER_API_KEY': 'primary-fixture',
+            'USENET_EXTRA_INDEXERS': json.dumps([{'id': 'extra-b', 'url': 'https://b.fixture.invalid', 'apiKey': 'extra-fixture'}])
+        }, clear=True):
+            first = bootstrap.build_default_config(base_config={}, probe_services=False)
+            old_extra = next(p['instanceId'] for p in first['presets']
+                             if p['type'] == 'newznab' and p['instanceId'] != 'newznab-managed-primary')
+            first['groups'] = {'enabled': True, 'groupings': [
+                {'name': 'Usenet', 'addons': ['newznab-managed-primary', old_extra]}]}
+            os.environ['NZB_INDEXER_URL'] = 'https://b.fixture.invalid'
+            os.environ['USENET_EXTRA_INDEXERS'] = '[]'
+            second = bootstrap.build_default_config(base_config=first, probe_services=False)
+        presets = [p for p in second['presets'] if p['type'] == 'newznab']
+        self.assertEqual(len(presets), 1)
+        self.assertEqual(presets[0]['instanceId'], 'newznab-managed-primary')
+        self.assertEqual(presets[0]['options']['api']['url'], 'https://b.fixture.invalid/api')
+        self.assertEqual(second['groups']['groupings'][0]['addons'], ['newznab-managed-primary'])
+
+    def test_removing_all_saved_indexers_preserves_custom_and_legacy_presets(self):
+        custom = {'type': 'newznab', 'instanceId': 'my-custom-indexer', 'enabled': False,
+                  'options': {'api': {'url': 'https://custom.fixture.invalid/api', 'apiKey': 'custom-fixture'},
+                              'timeout': 16000, 'services': ['custom-service']}}
+        legacy = {'type': 'newznab', 'instanceId': 'newznab-legacy', 'enabled': True,
+                  'options': {'api': {'url': 'https://legacy.fixture.invalid/api', 'apiKey': 'legacy-fixture'}}}
+        expected = json.loads(json.dumps([custom, legacy]))
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'user', 'USENET_PASS': 'pass',
+            'NZB_INDEXER_URL': 'https://a.fixture.invalid', 'NZB_INDEXER_API_KEY': 'primary-fixture',
+            'USENET_EXTRA_INDEXERS': json.dumps([{'id': 'extra-b', 'url': 'https://b.fixture.invalid', 'apiKey': 'extra-fixture'}])
+        }, clear=True):
+            first = bootstrap.build_default_config(base_config={'presets': [custom, legacy]}, probe_services=False)
+            os.environ['NZB_INDEXER_URL'] = ''
+            os.environ['NZB_INDEXER_API_KEY'] = ''
+            os.environ['USENET_EXTRA_INDEXERS'] = '[]'
+            second = bootstrap.build_default_config(base_config=first, probe_services=False)
+        self.assertEqual([p for p in second['presets'] if p['type'] == 'newznab'], expected)
+
+    def test_legacy_newznab_endpoint_is_adopted_without_losing_group_reference(self):
+        legacy = {'type': 'newznab', 'instanceId': 'newznab-index', 'enabled': True,
+                  'options': {'api': {'url': 'https://INDEX.fixture.invalid:443/api/', 'apiKey': 'old-fixture'}}}
+        with patch.dict(os.environ, {
+            'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+            'USENET_USER': 'user', 'USENET_PASS': 'pass',
+            'NZB_INDEXER_URL': 'https://index.fixture.invalid', 'NZB_INDEXER_API_KEY': 'new-fixture'
+        }, clear=True):
+            result = bootstrap.build_default_config(base_config={'presets': [legacy],
+                'groups': {'enabled': True, 'groupings': [{'name': 'Usenet', 'addons': ['newznab-index']}]}}, probe_services=False)
+        presets = [p for p in result['presets'] if p['type'] == 'newznab']
+        self.assertEqual(len(presets), 1)
+        self.assertEqual(presets[0]['instanceId'], 'newznab-managed-primary')
+        self.assertEqual(presets[0]['options']['api']['apiKey'], 'new-fixture')
+        self.assertEqual(result['groups']['groupings'][0]['addons'], ['newznab-managed-primary'])
+
     def test_jikan_api_base_resolution(self):
         # Default should return Tenrai
         self.assertEqual(bootstrap.resolve_jikan_api_base("", probe_services=False), "https://api.tenrai.org/v4")

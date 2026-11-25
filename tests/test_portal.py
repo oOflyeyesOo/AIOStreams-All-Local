@@ -19,6 +19,24 @@ spec.loader.exec_module(portal)
 
 
 class PortalTests(unittest.TestCase):
+    def test_nntp_success_survives_socket_cleanup(self):
+        sock = MagicMock()
+        sock.makefile.return_value.readline.side_effect = [b"200 ready\r\n", b"381 password\r\n", b"281 accepted\r\n"]
+        with patch("socket.create_connection", return_value=sock):
+            ok, detail = portal.test_nntp_login("news.example.org", 119, "fixture-user", "fixture-pass", False)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "Authentication accepted")
+        sock.close.assert_called_once()
+
+    def test_nntp_rejection_and_connection_failure_survive_cleanup(self):
+        sock = MagicMock()
+        sock.makefile.return_value.readline.side_effect = [b"200 ready\r\n", b"502 denied\r\n"]
+        with patch("socket.create_connection", return_value=sock):
+            self.assertFalse(portal.test_nntp_login("news.example.org", 119, "fixture", "fixture", False)[0])
+        sock.close.assert_called_once()
+        with patch("socket.create_connection", side_effect=OSError("fixture connection failed")):
+            self.assertFalse(portal.test_nntp_login("news.example.org", 119, "fixture", "fixture", False)[0])
+
     def test_appliance_startup_portal_cannot_save_or_launch_host_bootstrap(self):
         with patch.dict(os.environ, {"AIO_STARTUP_ONLY": "true"}), patch.object(portal.subprocess, "Popen") as start:
             self.assertEqual(portal.setup_snapshot()["status"], "running")
@@ -687,6 +705,89 @@ class PortalTests(unittest.TestCase):
             self.assertTrue(data.get("ready"))
             self.assertEqual(data.get("phase"), "idle")
 
+    def test_lumiere_cached_manifest_does_not_claim_service_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "data/lumiere-db/search/generation/manifest.json"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({"docs": 0, "indexVersion": "cached-generation"}))
+            with patch.object(portal, "WEB_ROOT", directory), \
+                 patch("urllib.request.urlopen", side_effect=OSError("offline")):
+                status, body, _ = self.request("/api/lumiere/stats", auth=True)
+            self.assertEqual(status, 200)
+            result = json.loads(body)
+            self.assertFalse(result["online"])
+            self.assertFalse(result["ready"])
+            self.assertEqual(result["docs"], 0)
+            self.assertIsNone(result["episodes"])
+            self.assertEqual(result["generationId"], "cached-generation")
+
+    def test_lumiere_unknown_stats_are_not_zero_or_ready(self):
+        response = MagicMock(status=200)
+        response.__enter__.return_value = response
+        for payload in ({"index": None}, {"index": {"ready": "false"}}):
+            response.read.return_value = json.dumps(payload).encode()
+            with patch("urllib.request.urlopen", return_value=response):
+                status, body, _ = self.request("/api/lumiere/stats", auth=True)
+            self.assertEqual(status, 200)
+            result = json.loads(body)
+            self.assertTrue(result["online"])
+            self.assertFalse(result["ready"])
+            self.assertIsNone(result["docs"])
+
+    def test_missing_profile_defaults_to_core(self):
+        with patch.object(portal, "read_saved_env", return_value={}), \
+             patch("socket.create_connection") as connect:
+            result = portal.probe_integration(("Jikan", "jikan-api", 8080, "anime"))
+            self.assertFalse(result["enabled"])
+            connect.assert_not_called()
+
+    def test_lumiere_rebuild_targets_own_project_container(self):
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "fixture-stack"}), \
+             patch.object(portal.subprocess, "run", side_effect=[
+                 MagicMock(returncode=0, stdout="generated-container-id\n"),
+                 MagicMock(returncode=0, stdout="accepted", stderr="")]) as run:
+            status, body, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["success"])
+            self.assertIn("label=com.docker.compose.project=fixture-stack", run.call_args_list[0].args[0])
+            self.assertEqual(run.call_args_list[1].args[0], ["docker", "exec", "generated-container-id", "/app/api", "rebuild"])
+            self.assertIn("not been verified", json.loads(body)["output"])
+
+    def test_lumiere_rebuild_rejects_missing_or_ambiguous_service(self):
+        for output in ("", "one\ntwo\n"):
+            with patch.dict(os.environ, {"AIO_PROJECT_NAME": "fixture-stack"}), \
+                 patch.object(portal.subprocess, "run", return_value=MagicMock(returncode=0, stdout=output)) as run:
+                status, body, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+                self.assertEqual(status, 503)
+                self.assertFalse(json.loads(body)["success"])
+                self.assertEqual(run.call_count, 1)
+
+    def test_lumiere_rebuild_failure_does_not_expose_command_output(self):
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "fixture-stack"}), \
+             patch.object(portal.subprocess, "run", side_effect=[
+                 MagicMock(returncode=0, stdout="generated-container-id"),
+                 MagicMock(returncode=1, stdout="private-fixture", stderr="private-fixture")]):
+            status, body, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+            self.assertEqual(status, 502)
+            self.assertNotIn(b"private-fixture", body)
+
+    def test_lumiere_rebuild_requires_project_identity(self):
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": ""}), \
+             patch.object(portal.subprocess, "run") as run:
+            status, _, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+            self.assertEqual(status, 503)
+            run.assert_not_called()
+
+    def test_lumiere_rebuild_recovers_project_from_own_container(self):
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-fixture"}), \
+             patch.object(portal.subprocess, "run", side_effect=[
+                 MagicMock(returncode=0, stdout="recovered-stack\n"),
+                 MagicMock(returncode=0, stdout="service-fixture\n"),
+                 MagicMock(returncode=0, stdout="")]) as run:
+            status, _, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
+            self.assertEqual(status, 200)
+            self.assertIn("label=com.docker.compose.project=recovered-stack", run.call_args_list[1].args[0])
+
     def test_lumiere_search_endpoint(self):
         self.assertEqual(self.request("/api/lumiere/search?q=Inception", auth=False)[0], 401)
         with patch("urllib.request.urlopen") as mock_url:
@@ -841,7 +942,7 @@ class PortalTests(unittest.TestCase):
             "NZB_INDEXER_URL": "https://api.althub.co.za",
             "NZB_INDEXER_API_KEY": "dummy_nzb_key"
         })
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><searching></searching></caps>"
             mock_resp.status = 200
@@ -979,12 +1080,12 @@ class PortalTests(unittest.TestCase):
             res_prowlarr = portal.probe_integration(("Prowlarr", "prowlarr", 9696, "Indexers"))
             self.assertFalse(res_prowlarr["enabled"])
 
-        # 3. Empty COMPOSE_PROFILES defaults to core and all (enabling all services with 'core' or 'all')
+        # 3. Empty COMPOSE_PROFILES enables core, leaving optional anime disabled.
         with patch.object(portal, "read_saved_env", return_value={}), patch("socket.create_connection"):
             res_prowlarr = portal.probe_integration(("Prowlarr", "prowlarr", 9696, "Indexers"))
             self.assertTrue(res_prowlarr["enabled"])
             res_kitsu = portal.probe_integration(("Anime Kitsu", "anime-kitsu", 7000, "Metadata"))
-            self.assertTrue(res_kitsu["enabled"])
+            self.assertFalse(res_kitsu["enabled"])
 
         # 4. /api/save-env allows legacy profiles and normalizes them on save
         with patch.object(portal, "save_env_updates") as mock_save:
@@ -1116,7 +1217,7 @@ class PortalTests(unittest.TestCase):
             self.assertIn("token=tb-secret-token", req2.full_url)
 
     def test_validate_provider_nzb_drunkenslug_explicit_url_and_key(self):
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><searching></searching></caps>"
             mock_resp.status = 200
@@ -1163,7 +1264,7 @@ class PortalTests(unittest.TestCase):
         portal.save_env_updates({
             "USENET_EXTRA_INDEXERS_B64": base64.b64encode(json.dumps(slug_indexer).encode()).decode()
         })
-        with patch.object(portal.urllib.request, "urlopen") as mock_url:
+        with patch("tools.indexer_validation.OPENER.open") as mock_url:
             mock_resp = unittest.mock.MagicMock()
             mock_resp.read.return_value = b"<caps><server version=\"1.0\"/></caps>"
             mock_resp.status = 200
@@ -1910,6 +2011,40 @@ class PortalTests(unittest.TestCase):
                 self.assertEqual(status, 302)
                 self.assertEqual(headers.get("Location"), "https://stream.example.com/jellyfin/test-uuid/test-enc-pass/web/")
 
+    def test_cloudflare_status_does_not_expose_run_token(self):
+        token = base64.b64encode(json.dumps({"a": "fixture-account", "t": "fixture-tunnel", "s": "fixture-secret"}).encode()).decode()
+        with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value={}), \
+             patch.object(portal, "read_saved_env", return_value={"CLOUDFLARE_TUNNEL_TOKEN": token}):
+            for path in ("/api/cloudflare/status", "/api/env"):
+                status, body, _ = self.request(path, "GET", auth=True)
+                self.assertEqual(status, 200)
+                self.assertNotIn(token.encode(), body)
+                self.assertNotIn(b"fixture-secret", body)
+
+    def test_cloudflare_start_passes_saved_or_entered_token(self):
+        for payload, expected in (({"action": "start"}, "saved-fixture"),
+                                  ({"action": "restart", "token": "new-fixture"}, "new-fixture")):
+            with patch.object(portal, "read_saved_env", return_value={"CLOUDFLARE_TUNNEL_TOKEN": "saved-fixture"}), \
+                 patch.object(portal, "save_env_updates"), \
+                 patch("tools.cloudflare_helper.manage_local_tunnel", return_value={"success": True}) as manage:
+                status, _, _ = self.request("/api/cloudflare/tunnel", "POST", payload, auth=True)
+                self.assertEqual(status, 200)
+                self.assertEqual(manage.call_args.kwargs["token"], expected)
+
+    def test_cloudflare_dns_reuses_api_key_but_not_another_tunnels_token(self):
+        token = base64.b64encode(json.dumps({"a": "fixture-account", "t": "old-tunnel", "s": "fixture-secret"}).encode()).decode()
+        saved = {"CLOUDFLARE_API_TOKEN": "saved-api-fixture", "CLOUDFLARE_TUNNEL_TOKEN": token}
+        with patch.object(portal, "read_saved_env", return_value=saved), \
+             patch.object(portal, "save_env_updates"), \
+             patch("tools.cloudflare_helper.push_cloudflare_dns", return_value={"success": True, "message": "DNS updated", "account_id": "fixture-account", "tunnel_id": "new-tunnel"}) as push, \
+             patch("tools.cloudflare_helper.fetch_cloudflare_tunnel_token", return_value={"success": False}), \
+             patch("tools.cloudflare_helper.manage_local_tunnel") as manage:
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {"hostname": "watch.example.com", "cname_target": "new-tunnel.cfargotunnel.com"}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(push.call_args.kwargs["api_token"], "saved-api-fixture")
+            self.assertFalse(json.loads(body)["tunnel_started"])
+            manage.assert_not_called()
+
     def test_cloudflare_status_endpoint(self):
         mock_containers = {
             "available": True,
@@ -1930,7 +2065,8 @@ class PortalTests(unittest.TestCase):
 
     def test_cloudflare_push_dns_endpoint(self):
         # 1. Missing api_token -> 400
-        with patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
+        with patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": ""}), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com"}):
             status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {"api_token": ""}, auth=True)
             self.assertEqual(status, 400)
             data = json.loads(body.decode("utf-8"))
@@ -2098,7 +2234,8 @@ class PortalTests(unittest.TestCase):
             self.assertFalse(data.get("success"))
 
         # 9. /api/lumiere/rebuild error masking
-        with patch.object(portal.subprocess, "run", side_effect=Exception(f"Lumiere exec crash: {leak_indicator}")):
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "fixture-stack"}), \
+             patch.object(portal.subprocess, "run", side_effect=Exception(f"Lumiere exec crash: {leak_indicator}")):
             status, body, _ = self.request("/api/lumiere/rebuild", "POST", auth=True)
             self.assertEqual(status, 500)
             self.assertNotIn(leak_indicator.encode(), body)

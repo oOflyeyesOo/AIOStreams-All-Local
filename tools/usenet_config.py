@@ -4,7 +4,7 @@ from collections.abc import Mapping
 import ipaddress
 import json
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 EXTRA_SOURCES = {
@@ -60,6 +60,21 @@ def indexer_address(value):
     except ValueError:
         raise ValueError('Use an HTTP(S) NZB indexer base address without credentials or a query')
     return value
+
+
+def newznab_endpoint(value):
+    """Canonical API identity; preserve path case because paths can be distinct."""
+    parsed = urlsplit(indexer_address(value))
+    host = parsed.hostname.lower()
+    if ':' in host:
+        host = '[' + host + ']'
+    default_port = 443 if parsed.scheme == 'https' else 80
+    if parsed.port is not None and parsed.port != default_port:
+        host += ':' + str(parsed.port)
+    path = parsed.path.rstrip('/')
+    if not path.endswith('/api'):
+        path += '/api'
+    return urlunsplit((parsed.scheme, host, path, '', ''))
 
 
 def newznab_indexers(values):
@@ -162,7 +177,7 @@ def update_sources(updates, existing, field, secret):
         row_id = (row_id if old is not None else None) or uuid4().hex
         ids.add(row_id)
         value = row.get(secret) or (old or {}).get(secret, '')
-        if isinstance(value, str):
+        if isinstance(value, str) and secret != 'password':
             value = value.strip()
         if not isinstance(value, str) or not value or len(value) > 400 or any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError('Every added source needs a valid password or API key')
@@ -174,6 +189,7 @@ def update_sources(updates, existing, field, secret):
             normalized = {key: (row.get(key, default).strip() if isinstance(row.get(key), str) else row.get(key, default)) for key, default in (
                 ('host', ''), ('port', '563'), ('username', ''), ('connections', '10'), ('tls', True), ('backupOnly', False))}
             normalized['password'] = value
+            normalized['username'] = row.get('username', '')
             extra_server(normalized)
         else:
             if not isinstance(row.get('url'), str):
@@ -206,7 +222,7 @@ def form_updates(submitted, existing):
     urls = [row['url'] for row in extra_sources(values, 'USENET_EXTRA_INDEXERS')]
     if values.get('NZB_INDEXER_URL'):
         urls.append(indexer_address(values['NZB_INDEXER_URL']))
-    if len({url.lower() for url in urls}) != len(urls):
+    if len({newznab_endpoint(url) for url in urls}) != len(urls):
         raise ValueError('An NZB indexer address appears more than once')
     return updates
 

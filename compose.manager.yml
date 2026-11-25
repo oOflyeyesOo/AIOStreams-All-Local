@@ -117,6 +117,7 @@ services:
     - DISCORD_WEBHOOK_URL=
     - ENABLE_ANIME_SOURCES=
     - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
+    - COMPOSE_PROFILES=${COMPOSE_PROFILES:-}
     - AIO_IMAGE_TAG=${AIO_IMAGE_TAG:-latest}
     - AIO_IMAGE_PREFIX=${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}
     - PORT_PORTAL=${PORT_PORTAL:-8088}
@@ -519,6 +520,11 @@ services:
         - aio-tunnel
     volumes: []
   anime-kitsu:
+    profiles:
+    - anime
+    - anime-db
+    - scrapers
+    - all
     restart: unless-stopped
     logging:
       driver: json-file
@@ -657,6 +663,10 @@ services:
         condition: service_completed_successfully
   jikan-mongo:
     image: mongo:7-jammy
+    profiles:
+    - anime
+    - anime-db
+    - all
     restart: unless-stopped
     logging:
       driver: json-file
@@ -684,6 +694,10 @@ services:
         - jikan-mongo
   jikan-api:
     image: ghcr.io/jikan-me/jikan-rest:latest
+    profiles:
+    - anime
+    - anime-db
+    - all
     restart: unless-stopped
     logging:
       driver: json-file

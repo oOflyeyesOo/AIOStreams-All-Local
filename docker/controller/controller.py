@@ -122,7 +122,7 @@ def apply():
                     raw = line.split('=', 1)[1].split('#', 1)[0].strip().strip("\"'")
                     profiles = {p.strip().strip("\"'") for p in raw.split(',') if p.strip().strip("\"'")}
         if not profiles:
-            profiles = {'core', 'all'}
+            profiles = {'core'}
         else:
             if 'scrapers' in profiles:
                 profiles.add('core')

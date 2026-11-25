@@ -5,6 +5,8 @@ Unit tests for Cloudflare Tunnel & DNS Automation Helper.
 import base64
 import json
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
@@ -28,6 +30,15 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertEqual(res["account_id"], "account-xyz-123")
         self.assertEqual(res["tunnel_id"], "tunnel-uuid-456")
         self.assertEqual(res["cname_target"], "tunnel-uuid-456.cfargotunnel.com")
+        self.assertTrue(res["is_run_token"])
+        self.assertNotIn("token", res)
+        self.assertNotIn(token, json.dumps(res))
+
+    def test_tunnel_identifiers_without_secret_are_not_run_tokens(self):
+        for data in ({"a": "account", "t": "tunnel"}, {"t": "tunnel", "s": "secret"}):
+            with self.subTest(data=data):
+                token = base64.b64encode(json.dumps(data).encode()).decode()
+                self.assertFalse(parse_tunnel_token(token)["is_run_token"])
 
     def test_parse_tunnel_token_unpadded(self):
         raw = {"a": "acc", "t": "tun", "s": "sec"}
@@ -246,6 +257,28 @@ class TestCloudflareHelper(unittest.TestCase):
         res_invalid = manage_local_tunnel("bad_action")
         self.assertFalse(res_invalid["success"])
 
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_manager_tunnel_uses_existing_project_and_definition(self, mock_run, _sleep):
+        with tempfile.TemporaryDirectory() as directory:
+            definition = Path(directory) / "compose.manager.yml"
+            definition.write_text("services: {}")
+            mock_run.side_effect = [MagicMock(returncode=0, stdout=""),
+                                    MagicMock(returncode=0, stdout="generated-container-id"),
+                                    MagicMock(returncode=0, stdout="running true")]
+            with patch.dict(os.environ, {"AIO_PROJECT_NAME": "existing-stack"}):
+                result = manage_local_tunnel("start", cwd=directory, token="fixture-token")
+            self.assertTrue(result["success"])
+            prefix = ["docker", "compose", "-p", "existing-stack", "-f", str(definition.resolve()), "--profile", "tunnel"]
+            self.assertEqual(mock_run.call_args_list[0].args[0][:len(prefix)], prefix)
+            self.assertEqual(mock_run.call_args_list[1].args[0][:len(prefix)], prefix)
+            self.assertEqual(mock_run.call_args_list[2].args[0][-1], "generated-container-id")
+            mock_run.reset_mock()
+            with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": ""}):
+                result = manage_local_tunnel("start", cwd=directory, token="fixture-token")
+            self.assertFalse(result["success"])
+            mock_run.assert_not_called()
+
     @patch("urllib.request.urlopen")
     def test_fetch_cloudflare_tunnel_token(self, mock_urlopen):
         mock_ctx = MagicMock()
@@ -258,6 +291,45 @@ class TestCloudflareHelper(unittest.TestCase):
         res = fetch_cloudflare_tunnel_token("api_token_xyz", "acc_123", "tun_456")
         self.assertTrue(res["success"])
         self.assertEqual(res["token"], "eyJhIjoiYWNjb3VudCIsInQiOiJ0dW5uZWwtMTIzIiwicyI6InNlY3JldCJ9")
+
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_tunnel_restart_applies_explicit_token(self, mock_run, _sleep):
+        token = base64.b64encode(json.dumps({"a": "account", "t": "tunnel", "s": "secret"}).encode()).decode()
+        mock_run.side_effect = [MagicMock(returncode=0, stdout="", stderr=""),
+                                MagicMock(returncode=0, stdout="manager-tunnel-id", stderr=""),
+                                MagicMock(returncode=0, stdout="running true", stderr="")]
+        with patch.dict(os.environ, {"CLOUDFLARE_TUNNEL_TOKEN": "old-token"}):
+            result = manage_local_tunnel("restart", token=f"cloudflared tunnel run --token {token}")
+        self.assertTrue(result["success"])
+        call = mock_run.call_args_list[0]
+        self.assertIn("--force-recreate", call.args[0])
+        self.assertEqual(call.kwargs["env"]["CLOUDFLARE_TUNNEL_TOKEN"], token)
+        self.assertNotIn(token, str(call.args[0]))
+        self.assertNotIn("and connected", result["output"])
+        self.assertEqual(mock_run.call_args_list[2].args[0][-1], "manager-tunnel-id")
+
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_tunnel_inspect_failure_does_not_report_success(self, mock_run, _sleep):
+        mock_run.side_effect = [MagicMock(returncode=0, stdout="", stderr=""),
+                                MagicMock(returncode=0, stdout="manager-tunnel-id", stderr=""),
+                                MagicMock(returncode=1, stdout="", stderr="not found")]
+        result = manage_local_tunnel("start", token="fixture-token")
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "unknown")
+
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_tunnel_exited_container_is_failure(self, mock_run, _sleep):
+        mock_run.side_effect = [MagicMock(returncode=0, stdout="", stderr=""),
+                                MagicMock(returncode=0, stdout="manager-tunnel-id", stderr=""),
+                                MagicMock(returncode=0, stdout="exited false", stderr=""),
+                                MagicMock(returncode=0, stdout="invalid credentials", stderr=""),
+                                MagicMock(returncode=0)]
+        result = manage_local_tunnel("start", token="fixture-token")
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "failed")
 
 
 if __name__ == "__main__":

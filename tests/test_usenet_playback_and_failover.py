@@ -158,8 +158,9 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
         presets = config.get("presets", [])
         newznab_presets = [p for p in presets if p.get("type") == "newznab"]
         self.assertTrue(len(newznab_presets) >= 1)
-        althub = next((p for p in newznab_presets if "althub" in p.get("instanceId", "")), None)
+        althub = next((p for p in newznab_presets if p.get("options", {}).get("api", {}).get("url") == "https://api.althub.co.za/api"), None)
         self.assertIsNotNone(althub)
+        self.assertEqual(althub["instanceId"], "newznab-managed-primary")
         self.assertTrue(althub.get("enabled"))
         self.assertEqual(althub.get("options", {}).get("api", {}).get("apiKey"), "test_althub_key")
         self.assertEqual(althub.get("options", {}).get("services"), ["aiostreams"])
