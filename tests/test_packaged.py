@@ -13,6 +13,12 @@ spec.loader.exec_module(entrypoint)
 
 
 class PackagedPortalTests(unittest.TestCase):
+    def test_bitmagnet_does_not_start_autonomous_dht_crawling(self):
+        for filename in ('docker-compose.yml', 'compose.manager.yml'):
+            config = yaml.safe_load((ROOT / filename).read_text(encoding='utf-8'))
+            command = config['services']['bitmagnet']['command']
+            self.assertEqual(command, ['worker', 'run', '--keys=http_server', '--keys=queue_server'])
+
     def test_manager_profiles_match_source_and_keep_anime_optional(self):
         source = yaml.safe_load((ROOT / 'docker-compose.yml').read_text(encoding='utf-8'))
         manager = generate(yaml.safe_load((ROOT / 'docker-compose.yml').read_text(encoding='utf-8')))

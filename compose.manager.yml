@@ -320,7 +320,6 @@ services:
     - POSTGRES_SSLMODE=disable
     - POSTGRES_MAX_OPEN_CONNS=25
     - POSTGRES_MAX_IDLE_CONNS=10
-    - DHT_CRAWLER_SAVE_PIECES=false
     - LOG_LEVEL=${BITMAGNET_LOG_LEVEL:-warn}
     - REDIS_ADDR=shared-redis:6379
     - REDIS_HOST=shared-redis:6379
@@ -330,7 +329,6 @@ services:
     - run
     - --keys=http_server
     - --keys=queue_server
-    - --keys=dht_crawler
     volumes:
     - bitmagnet-data:/root/.local/share/bitmagnet
     networks:
