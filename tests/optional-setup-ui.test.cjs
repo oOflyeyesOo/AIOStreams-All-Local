@@ -42,12 +42,13 @@ function form(saved){
       if(path==='/api/env')return saved;
       calls.push({path,payload:options.body?JSON.parse(options.body):null});return {success:true};
     }});
+  const validation=source.slice(source.indexOf('const SUPPORTED_VALIDATION_PROVIDERS ='),source.indexOf('function renderFields('));
   const load=source.match(/async function loadSettings\(options\) \{[\s\S]*?\n\}/)[0];
   const submit=source.slice(source.indexOf("document.getElementById('setup-form').addEventListener('submit'"),source.indexOf("document.getElementById('refresh-services').addEventListener"));
   vm.runInContext(source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0],context);
   const state=source.slice(source.indexOf('let settingsEditRevision ='),source.indexOf('async function loadSettings('));
   const dirty=source.match(/function setFormDirty\(dirty\) \{[\s\S]*?\n\}/)[0];
-  vm.runInContext(state+'\n'+dirty+'\n'+load+'\n'+submit,context);
+  vm.runInContext(validation+'\n'+state+'\n'+dirty+'\n'+load+'\n'+submit,context);
   return {context,nodes,calls,document};
 }
 
@@ -177,11 +178,71 @@ test('native anime switch reloads and is saved with the selected account',async(
 });
 
 test('saved keys reveal test button for validating credentials without re-entering them',async()=>{
-  const env=form({configuredKeys:['PROVIDER_KEY']});
+  const env=form({configuredKeys:['REALDEBRID_API_KEY']});
+  env.context.fields.push(['REALDEBRID_API_KEY']);
   await vm.runInContext('loadSettings()',env.context);
-  assert.equal(env.nodes.get('PROVIDER_KEY-saved').textContent,'SAVED');
-  assert.equal(env.nodes.get('PROVIDER_KEY-test').hidden,false);
-  assert.equal(env.nodes.get('PROVIDER_KEY-remove').hidden,false);
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-saved').textContent,'SAVED');
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-test').hidden,false);
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-remove').hidden,false);
+});
+
+test('unsupported saved keys like OPENSUBTITLES_API_KEY keep -test hidden while supported provider keys reveal it',async()=>{
+  const supportedKeys=[
+    'TMDB_API_KEY',
+    'REALDEBRID_API_KEY',
+    'PREMIUMIZE_API_KEY',
+    'TORBOX_API_KEY',
+    'ALLDEBRID_API_KEY',
+    'DEBRIDLINK_API_KEY',
+    'EASYDEBRID_API_KEY',
+    'NZB_INDEXER_API_KEY'
+  ];
+  const env=form({configuredKeys:[...supportedKeys,'OPENSUBTITLES_API_KEY']});
+  for(const key of [...supportedKeys,'OPENSUBTITLES_API_KEY']){
+    if(!env.context.fields.some(([existing])=>existing===key))env.context.fields.push([key]);
+  }
+  await vm.runInContext('loadSettings()',env.context);
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-saved').textContent,'SAVED');
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-remove').hidden,false);
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-test').hidden,true);
+  for(const key of supportedKeys){
+    assert.equal(env.nodes.get(`${key}-test`).hidden,false,`${key}-test should be visible when saved`);
+  }
+
+  const createdIds=[];
+  const makeNode=(tag)=>({
+    tagName:tag,
+    children:[],
+    style:{},
+    setAttribute(){},
+    addEventListener(){},
+    append(...kids){
+      for(const kid of kids){
+        if(kid&&typeof kid==='object'){
+          this.children.push(kid);
+          if(kid.id)createdIds.push(kid.id);
+        }
+      }
+    }
+  });
+  const target=makeNode('div');
+  const renderCtx=vm.createContext({
+    document:{
+      getElementById:id=>(id==='test-fields'?target:null),
+      createElement:tag=>makeNode(tag),
+      createTextNode:text=>({text})
+    },
+    savedKeys:new Set(),
+    api:async()=>({}),
+    notify:()=>{},
+    setFormDirty:()=>{}
+  });
+  const validation=source.slice(source.indexOf('const SUPPORTED_VALIDATION_PROVIDERS ='),source.indexOf('function renderFields('));
+  const renderFn=source.slice(source.indexOf('function renderFields('),source.indexOf("renderFields('provider-fields'"));
+  vm.runInContext(validation+'\n'+renderFn,renderCtx);
+  renderCtx.renderFields('test-fields',[['REALDEBRID_API_KEY','Real-Debrid','R'],['OPENSUBTITLES_API_KEY','OpenSubtitles subtitles','OS']]);
+  assert.equal(createdIds.includes('REALDEBRID_API_KEY-test'),true);
+  assert.equal(createdIds.includes('OPENSUBTITLES_API_KEY-test'),false);
 });
 
 test('local access scope configures direct host and port endpoints',async()=>{
