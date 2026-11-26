@@ -846,3 +846,21 @@ class BootstrapTests(unittest.TestCase):
                 config = bootstrap.build_default_config(probe_services=False)
                 self.assertEqual(config.get("preferredLanguages"), ["Japanese"])
                 self.assertEqual(config.get("preferredSubtitleLanguages"), ["English"])
+
+    def test_opensubtitles_api_key_passed_to_subsense_when_set(self):
+        captured = []
+
+        def fake_request(url, method="GET", data=None, headers=None, timeout=12):
+            if url.endswith("/api/config/encrypt"):
+                captured.append(data)
+                return {"encrypted": "enc-subsense-token"}
+            return {}
+
+        with patch.dict(os.environ, {"OPENSUBTITLES_API_KEY": "os-fixture-key"}), \
+             patch.object(bootstrap, "make_request", side_effect=fake_request):
+            config = bootstrap.build_default_config(probe_services=True)
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["config"].get("openSubtitlesApiKey"), "os-fixture-key")
+        sub = next(p for p in config["presets"] if p["instanceId"] == "subsense-local")
+        self.assertEqual(sub["options"]["manifestUrl"], "http://subsense:3100/enc-subsense-token/manifest.json")

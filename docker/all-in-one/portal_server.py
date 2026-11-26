@@ -797,12 +797,14 @@ def run_playback_test(mode=None, content_id=None, kind=None):
 
 
 def run_smoke_test(kind, content_id):
-    kind = str(kind or "").lower()
+    kind = str(kind or "").strip().lower()
     content_id = str(content_id or "").strip()
-    if kind not in ("movie", "series") or not content_id:
-        return {"status": "invalid", "detail": "Use movie or series with a content ID."}
+    if kind not in ("movie", "series", "anime") or not content_id:
+        return {"status": "invalid", "detail": "Use movie, series, or anime with a content ID."}
+    if not re.fullmatch(r"[a-zA-Z0-9:_.-]{1,100}", content_id):
+        return {"status": "invalid", "detail": "Invalid content ID format."}
     base = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
-    url = f"{base}/stremio/u/local/stream/{kind}/{urllib.parse.quote(content_id, safe='')}.json"
+    url = f"{base}/stremio/u/local/stream/{kind}/{urllib.parse.quote(content_id, safe=':')}.json"
     try:
         with urllib.request.urlopen(url, timeout=25) as response:
             payload = json.load(response)
@@ -1334,7 +1336,7 @@ PORTAL_API_POST_PATHS = {
     "/api/validate-provider", "/api/test-provider", "/api/smoke-test", "/api/test-playback",
     "/api/config-import", "/api/save-env", "/api/quick-setup",
     "/api/settings", "/api/env", "/api/save", "/api/restart",
-    "/api/clean-cache", "/api/watchdog", "/api/backups/prune",
+    "/api/clean-cache", "/api/watchdog", "/api/backups/prune", "/api/backups/restore",
     "/api/lumiere/rebuild", "/api/aniskip", "/api/player-preferences",
     "/api/cloudflare/push-dns", "/api/cloudflare/tunnel",
 }
@@ -2632,12 +2634,13 @@ button:hover {{ background: #0369a1; }}
                     "BASE_URL", "AIOMETADATA_HOST", "AIOMETADATA_TEMPLATE", "COMPOSE_PROFILES",
                     "ENABLE_ANIME_SOURCES", "STREAMING_MODE", "BACKUP_SCHEDULE",
                     "ENABLE_TORRENTIO", "TORRENTIO_URL", "ENABLE_DMM", "ENABLE_REMUXDB",
-                    "JELLYFIN_ENABLED",
+                    "JELLYFIN_ENABLED", "AIO_PRECACHE_NEXT_EPISODE",
                     "DISCORD_WEBHOOK_URL",
                     "TMDB_API_KEY", "TVDB_API_KEY", "FANART_API_KEY", "MDBLIST_API_KEY", "GEMINI_API_KEY", "RPDB_API_KEY",
                     "REALDEBRID_API_KEY", "TORBOX_API_KEY", "PREMIUMIZE_API_KEY", "ALLDEBRID_API_KEY", "DEBRIDLINK_API_KEY", "EASYDEBRID_API_KEY", "OFFCLOUD_API_KEY", "SEEDR_API_KEY",
+                    "EASYNEWS_USER",
                     "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "SIMKL_CLIENT_ID", "SIMKL_CLIENT_SECRET", "ANILIST_CLIENT_ID", "ANILIST_CLIENT_SECRET",
-                    "SUBDL_API_KEY", "SUBSOURCE_API_KEY", "WYZIE_API_KEY",
+                    "SUBDL_API_KEY", "SUBSOURCE_API_KEY", "WYZIE_API_KEY", "OPENSUBTITLES_API_KEY",
                     "USENET_ENABLED", "USENET_HOST", "USENET_PORT", "USENET_USER", "USENET_CONNECTIONS", "USENET_SSL", "NZB_INDEXER_URL", "NZB_INDEXER_API_KEY"
                 }
                 supplied = payload["values"]
@@ -2667,6 +2670,8 @@ button:hover {{ background: #0369a1; }}
                 updates = supplied
                 if updates.get('ENABLE_ANIME_SOURCES','false') not in ('true','false'):
                     raise ValueError('Invalid optional-source state')
+                if updates.get('AIO_PRECACHE_NEXT_EPISODE', 'false').lower() not in ('true', 'false', '1', '0'):
+                    raise ValueError('Invalid precache state')
                 save_env_updates(updates)
                 self.json_response({"success": True, "updated": sorted(updates)})
             except (json.JSONDecodeError, TypeError, OSError, ValueError):
@@ -2690,6 +2695,9 @@ button:hover {{ background: #0369a1; }}
             return
         elif path == "/api/backups/prune":
             self.handle_api_backups_prune()
+            return
+        elif path == "/api/backups/restore":
+            self.handle_api_backups_restore()
             return
         elif path == "/api/cloudflare/push-dns":
             self.handle_api_cloudflare_push_dns()
@@ -2892,6 +2900,11 @@ button:hover {{ background: #0369a1; }}
                 "ENABLE_DMM": env_vars.get("ENABLE_DMM", "true"),
                 "ENABLE_REMUXDB": env_vars.get("ENABLE_REMUXDB", "true"),
                 "JELLYFIN_ENABLED": env_vars.get("JELLYFIN_ENABLED", "true"),
+                "AIO_PRECACHE_NEXT_EPISODE": env_vars.get("AIO_PRECACHE_NEXT_EPISODE") or os.environ.get("AIO_PRECACHE_NEXT_EPISODE") or "false",
+                "COMPOSE_PROFILES": env_vars.get("COMPOSE_PROFILES") or os.environ.get("COMPOSE_PROFILES") or "core",
+                "EASYNEWS_USER": env_vars.get("EASYNEWS_USER", ""),
+                "EASYNEWS_PASSWORD_SAVED": bool(env_vars.get("EASYNEWS_PASSWORD")),
+                "OPENSUBTITLES_API_KEY_SAVED": bool(env_vars.get("OPENSUBTITLES_API_KEY")),
                 "ENABLE_ANIME_SOURCES": env_vars.get("ENABLE_ANIME_SOURCES", "false"),
                 "BASE_URL": base_val,
                 "AIOMETADATA_HOST": aiom_val,
@@ -3272,7 +3285,7 @@ button:hover {{ background: #0369a1; }}
                     if norm not in normalized:
                         normalized.append(norm)
                 keys_to_update["COMPOSE_PROFILES"] = ",".join(normalized)
-            for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED'):
+            for bkey in ('ENABLE_TORRENTIO', 'ENABLE_DMM', 'ENABLE_REMUXDB', 'JELLYFIN_ENABLED', 'AIO_PRECACHE_NEXT_EPISODE'):
                 if bkey in keys_to_update and keys_to_update[bkey].lower() not in ('true', 'false', '1', '0'):
                     raise ValueError(f'{bkey} must be true or false')
             port_keys = ('PORT_PORTAL', 'PORT_AIOSTREAMS', 'PORT_AIOMETADATA', 'PORT_SUBSENSE', 'USENET_PORT')
@@ -3642,6 +3655,59 @@ button:hover {{ background: #0369a1; }}
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while pruning backups."}, 500)
 
+    def handle_api_backups_restore(self):
+        try:
+            payload = self.read_json_body()
+            filename = payload.get("filename")
+            if not isinstance(filename, str) or not filename.strip():
+                self.json_response({"success": False, "error": "Backup filename is required."}, 400)
+                return
+            filename = filename.strip()
+            if (
+                "/" in filename
+                or "\\" in filename
+                or ".." in filename
+                or "\x00" in filename
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz", filename)
+            ):
+                self.json_response({"success": False, "error": "Invalid backup filename."}, 400)
+                return
+            backup_dir = Path(WEB_ROOT) / "backups"
+            if backup_dir.is_symlink():
+                self.json_response({"success": False, "error": "Backups directory cannot be a symbolic link."}, 400)
+                return
+            resolved_dir = backup_dir.resolve()
+            candidate = backup_dir / filename
+            if candidate.is_symlink():
+                self.json_response({"success": False, "error": "Symbolic link backups are not allowed."}, 400)
+                return
+            resolved_target = candidate.resolve()
+            if resolved_target.parent != resolved_dir or not resolved_target.is_relative_to(resolved_dir):
+                self.json_response({"success": False, "error": "Backup path must stay inside backups directory."}, 400)
+                return
+            if not resolved_target.is_file():
+                self.json_response({"success": False, "error": "Backup archive not found."}, 404)
+                return
+            sys.path.insert(0, str(WEB_ROOT))
+            import tools.backup as stack_backup
+            ok = stack_backup.restore_backup(resolved_target, Path(WEB_ROOT))
+            if not ok:
+                self.json_response({
+                    "success": False,
+                    "filename": filename,
+                    "error": "Backup restore failed. Check archive integrity or database status."
+                }, 500)
+                return
+            self.json_response({
+                "success": True,
+                "filename": filename,
+                "message": f"Backup restored from {filename}. Restart the stack to apply restored data."
+            })
+        except ValueError as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
+        except Exception:
+            self.json_response({"success": False, "error": "Internal server error occurred while restoring backup."}, 500)
+
     def handle_api_resources(self):
         try:
             sys.path.insert(0, str(WEB_ROOT))
@@ -3653,10 +3719,22 @@ button:hover {{ background: #0369a1; }}
 
     def handle_api_clean_cache(self):
         try:
+            payload = self.read_json_body()
+            dry_run = payload.get("dry_run", False)
+            include_poster_cache = payload.get("include_poster_cache", False)
+            if not isinstance(dry_run, bool) or not isinstance(include_poster_cache, bool):
+                self.json_response({"success": False, "error": "dry_run and include_poster_cache must be booleans."}, 400)
+                return
             sys.path.insert(0, str(WEB_ROOT))
             import tools.clean_cache as stack_cleaner
-            res = stack_cleaner.clean_stack_cache(Path(WEB_ROOT))
+            res = stack_cleaner.clean_stack_cache(
+                Path(WEB_ROOT),
+                include_poster_cache=include_poster_cache,
+                dry_run=dry_run,
+            )
             self.json_response(res)
+        except ValueError as e:
+            self.json_response({"success": False, "error": str(e)}, 400)
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while cleaning cache."}, 500)
 
