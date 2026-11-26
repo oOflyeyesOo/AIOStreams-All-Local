@@ -67,6 +67,10 @@ function deriveAiometaHost(baseUrl) {
   }
 }
 
+const SUPPORTED_VALIDATION_PROVIDERS = new Set([
+  'tmdb', 'realdebrid', 'premiumize', 'torbox', 'alldebrid', 'debridlink', 'easydebrid', 'nzb'
+]);
+
 function getProviderCode(key) {
   if (key === 'REALDEBRID_API_KEY') return 'realdebrid';
   if (key === 'PREMIUMIZE_API_KEY') return 'premiumize';
@@ -77,6 +81,10 @@ function getProviderCode(key) {
   if (key === 'TMDB_API_KEY') return 'tmdb';
   if (key === 'NZB_INDEXER_API_KEY') return 'nzb';
   return key.toLowerCase().replace(/_api_key|_key|_client_id/, '');
+}
+
+function supportsSavedKeyValidation(key) {
+  return SUPPORTED_VALIDATION_PROVIDERS.has(getProviderCode(key));
 }
 
 function renderFields(id, values) {
@@ -116,38 +124,41 @@ function renderFields(id, values) {
     saved.id = `${key}-saved`; saved.className = 'saved-indicator';
     title.append(name,saved);
 
-    const testSavedBtn = document.createElement('button');
-    testSavedBtn.type = 'button';
-    testSavedBtn.id = `${key}-test`;
-    testSavedBtn.className = 'test-saved-key';
-    testSavedBtn.textContent = 'Test Saved Key';
-    testSavedBtn.hidden = true;
-    testSavedBtn.title = `Test saved ${label} key without re-entering it`;
-    testSavedBtn.addEventListener('click', async event => {
-      event.preventDefault();
-      testSavedBtn.disabled = true;
-      testSavedBtn.textContent = '…';
-      try {
-        const prov = getProviderCode(key);
-        const res = await api('/api/validate-provider', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ provider: prov, key: 'saved' })
-        });
-        const isValid = res.status === 'valid' || res.status === 'ok';
-        notify(isValid ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`, !isValid);
-        if (saved) {
-          saved.textContent = isValid ? 'SAVED (VALID)' : 'SAVED (INVALID)';
-          saved.style.color = isValid ? '#34d399' : '#f87171';
+    let testSavedBtn = null;
+    if (supportsSavedKeyValidation(key)) {
+      testSavedBtn = document.createElement('button');
+      testSavedBtn.type = 'button';
+      testSavedBtn.id = `${key}-test`;
+      testSavedBtn.className = 'test-saved-key';
+      testSavedBtn.textContent = 'Test Saved Key';
+      testSavedBtn.hidden = true;
+      testSavedBtn.title = `Test saved ${label} key without re-entering it`;
+      testSavedBtn.addEventListener('click', async event => {
+        event.preventDefault();
+        testSavedBtn.disabled = true;
+        testSavedBtn.textContent = '…';
+        try {
+          const prov = getProviderCode(key);
+          const res = await api('/api/validate-provider', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ provider: prov, key: 'saved' })
+          });
+          const isValid = res.status === 'valid' || res.status === 'ok';
+          notify(isValid ? `✓ ${label} key is valid: ${res.detail}` : `✗ ${label}: ${res.detail}`, !isValid);
+          if (saved) {
+            saved.textContent = isValid ? 'SAVED (VALID)' : 'SAVED (INVALID)';
+            saved.style.color = isValid ? '#34d399' : '#f87171';
+          }
+        } catch (err) {
+          notify(`Validation error: ${err.message}`, true);
+        } finally {
+          testSavedBtn.disabled = false;
+          testSavedBtn.textContent = 'Test Saved Key';
         }
-      } catch (err) {
-        notify(`Validation error: ${err.message}`, true);
-      } finally {
-        testSavedBtn.disabled = false;
-        testSavedBtn.textContent = 'Test Saved Key';
-      }
-    });
-    title.append(testSavedBtn);
+      });
+      title.append(testSavedBtn);
+    }
 
     const remove = document.createElement('button');
     remove.type = 'button'; remove.id = `${key}-remove`; remove.className = 'clear-key';
@@ -156,7 +167,7 @@ function renderFields(id, values) {
     remove.addEventListener('click',event=>{
       event.preventDefault();
       savedKeys.delete(key); saved.textContent = ''; remove.hidden = true;
-      testSavedBtn.hidden = true;
+      if (testSavedBtn) testSavedBtn.hidden = true;
       input.value = ''; input.placeholder = key.endsWith('_URL') ? 'Paste configured manifest URL' : 'Paste API key';
       if (typeof setFormDirty === 'function') setFormDirty(true);
     });
@@ -680,7 +691,7 @@ async function loadSettings(options) {
     const removeEl = document.getElementById(`${key}-remove`);
     if (removeEl) removeEl.hidden = !saved;
     const testEl = document.getElementById(`${key}-test`);
-    if (testEl) testEl.hidden = !saved;
+    if (testEl) testEl.hidden = !(saved && supportsSavedKeyValidation(key));
   }
   if (typeof setFormDirty === 'function') setFormDirty(false);
   return true;
