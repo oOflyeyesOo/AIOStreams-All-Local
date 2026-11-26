@@ -795,7 +795,7 @@ def sync_aiostreams_native_usenet():
         max_connections = int(os.environ.get('USENET_CONNECTIONS') or 30)
     except (ValueError, TypeError):
         max_connections = 30
-    max_connections = max(1, min(max_connections, 50))
+    max_connections = max(1, min(max_connections, 1000))
 
     use_ssl = str(port) in ("563", "443") or os.environ.get('USENET_SSL', 'true').lower() == 'true'
 
@@ -845,7 +845,7 @@ def sync_aiostreams_native_usenet():
                 "tls": bool(ex.get('tls', True)),
                 "username": e_user,
                 "password": e_pass,
-                "maxConnections": max(1, min(e_conns, 50)),
+                "maxConnections": max(1, min(e_conns, 1000)),
                 "priority": 1 if ex.get('backupOnly') else 0,
                 "isBackup": bool(ex.get('backupOnly', False)),
                 "enabled": True,

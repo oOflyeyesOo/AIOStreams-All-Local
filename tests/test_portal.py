@@ -129,6 +129,41 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(payload["format"], "aio-local-optimized-profile-v1")
         self.assertIn("services", payload["config"])
 
+    def test_profile_export_after_restart_uses_saved_keys_without_mutating_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_file = Path(directory) / '.env'
+            env_file.write_text('PREMIUMIZE_API_KEY=saved-provider-fixture\nBASE_URL=https://watch.example.test\n')
+            original = env_file.read_bytes()
+            settings = {'PREMIUMIZE_API_KEY': 'saved-provider-fixture', 'BASE_URL': 'https://watch.example.test'}
+            with patch.object(portal, 'WEB_ROOT', directory), \
+                 patch.object(portal, 'read_saved_env', return_value=settings), \
+                 patch.dict(os.environ, {'PREMIUMIZE_API_KEY': '', 'AIOMETADATA_HOST': '', 'AIO_SKIP_ENV_FILE': ''}), \
+                 patch('urllib.request.urlopen', side_effect=AssertionError('No live profile expected')):
+                before = dict(os.environ)
+                result = portal.optimized_profile_export()
+                self.assertEqual(dict(os.environ), before)
+            self.assertEqual(env_file.read_bytes(), original)
+            service = next(s for s in result['config']['services'] if s['id'] == 'premiumize')
+            self.assertTrue(service['enabled'])
+            self.assertEqual(service['credentials']['apiKey'], settings['PREMIUMIZE_API_KEY'])
+            self.assertIn('PREMIUMIZE_API_KEY', result['providerKeys'])
+
+    def test_profile_builder_keeps_concurrent_saved_settings_isolated(self):
+        path = str(Path(__file__).resolve().parents[1] / 'init/bootstrap/setup_stack.py')
+        with tempfile.TemporaryDirectory() as directory, patch.object(portal, 'WEB_ROOT', directory):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda key: portal.build_export_profile(path, {'PREMIUMIZE_API_KEY': key}),
+                                        ['first-provider-fixture', 'second-provider-fixture']))
+        keys = [next(s for s in result['services'] if s['id'] == 'premiumize')['credentials']['apiKey'] for result in results]
+        self.assertEqual(keys, ['first-provider-fixture', 'second-provider-fixture'])
+
+    def test_profile_builder_masks_child_errors_and_keeps_secrets_out_of_arguments(self):
+        with patch.object(portal.subprocess, 'run', return_value=MagicMock(returncode=1, stderr='private-child-fixture')) as run:
+            with self.assertRaisesRegex(RuntimeError, '^Profile builder is unavailable$'):
+                portal.build_export_profile('builder.py', {'PREMIUMIZE_API_KEY': 'private-provider-fixture'})
+            self.assertNotIn('private-provider-fixture', repr(run.call_args.args))
+            self.assertEqual(run.call_args.kwargs['env']['AIO_SKIP_ENV_FILE'], 'true')
+
     def test_profile_export_failure_returns_one_error_response(self):
         with patch.object(portal, "optimized_profile_export", side_effect=RuntimeError("unavailable")):
             status, body, _ = self.request("/api/export-profile", auth=True)
@@ -1736,6 +1771,30 @@ class PortalTests(unittest.TestCase):
             status, body, _ = self.request("/api/backups/prune", "POST", {"keep_last": "abc"}, auth=True)
             self.assertEqual(status, 400)
 
+    def test_proxy_routes_require_auth_even_with_service_cookie_or_referer(self):
+        routes = [('/service-proxy/prowlarr/api/v1/indexer', {}),
+                  ('/api/v1/indexer', {'Cookie': 'active_service_proxy=prowlarr'}),
+                  ('/api/v1/indexer', {'Referer': 'http://localhost/service-proxy/prowlarr/'})]
+        with patch.object(portal._PROXY_OPENER, 'open') as upstream:
+            for method in ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'):
+                for path, headers in routes:
+                    with self.subTest(method=method, path=path, headers=headers):
+                        portal.AUTH_FAILURES.clear()
+                        status, _, _ = self.request(path, method, auth=False, headers=headers)
+                        self.assertEqual(status, 401)
+            upstream.assert_not_called()
+        portal.AUTH_FAILURES.clear()
+
+    def test_proxy_mutations_reject_foreign_origin_even_on_fallback(self):
+        with patch.object(portal._PROXY_OPENER, 'open') as upstream:
+            for method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+                for path in ('/service-proxy/prowlarr/api/v1/indexer', '/api/v1/indexer'):
+                    with self.subTest(method=method, path=path):
+                        status, _, _ = self.request(path, method, auth=True, headers={
+                            'Cookie': 'active_service_proxy=prowlarr', 'Origin': 'https://untrusted.example'})
+                        self.assertEqual(status, 403)
+            upstream.assert_not_called()
+
     def test_service_proxy_routing(self):
         # 1. Unknown service returns 404
         status, _, _ = self.request("/service-proxy/nonexistent_service/", auth=True)
@@ -1874,7 +1933,7 @@ class PortalTests(unittest.TestCase):
         # 4. Referer fallback for /api/v1/... routes without /service-proxy/ prefix
         captured.clear()
         with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
-            status, body, _ = self.request("/api/v1/indexerstats", auth=False, headers={"Referer": "http://localhost:8088/service-proxy/prowlarr/"})
+            status, body, _ = self.request("/api/v1/indexerstats", auth=True, headers={"Referer": "http://localhost:8088/service-proxy/prowlarr/"})
             self.assertEqual(status, 200)
             self.assertTrue(len(captured) > 0)
             self.assertEqual(captured[0].selector, "/api/v1/indexerstats")
@@ -1882,7 +1941,7 @@ class PortalTests(unittest.TestCase):
         # 5. Cookie fallback for SPA routes when Referer is absent or lost
         captured.clear()
         with patch.object(portal._PROXY_OPENER, "open", side_effect=capture_open):
-            status, body, _ = self.request("/activity/queue", auth=False, headers={"Cookie": "active_service_proxy=prowlarr"})
+            status, body, _ = self.request("/activity/queue", auth=True, headers={"Cookie": "active_service_proxy=prowlarr"})
             self.assertEqual(status, 200)
             self.assertTrue(len(captured) > 0)
             self.assertEqual(captured[0].selector, "/activity/queue")

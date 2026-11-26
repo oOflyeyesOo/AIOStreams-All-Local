@@ -2,6 +2,24 @@ import base64,json,unittest
 from tools.usenet_config import form_updates,provider_config,public_settings
 
 class UsenetConfigTests(unittest.TestCase):
+    def test_selected_connection_limits_are_preserved_for_primary_and_extra_servers(self):
+        for connections in (1, 50, 100, 1000):
+            with self.subTest(connections=connections):
+                values = self.settings()
+                values.update(form_updates({'USENET_CONNECTIONS': str(connections),
+                    'USENET_EXTRA_SERVERS': [{'host': 'extra.fixture.invalid', 'username': 'fixture-user',
+                        'password': 'fixture-pass', 'connections': str(connections)}]}, values))
+                self.assertEqual([p['MaxConnections'] for p in provider_config(values)['Providers']],
+                                 [connections, connections])
+                self.assertEqual(form_updates({'TMDB_API_KEY': 'fixture-metadata'}, values),
+                                 {'TMDB_API_KEY': 'fixture-metadata'})
+
+    def test_connections_outside_portal_bounds_are_rejected(self):
+        for connections in ('0', '-1', '1001', 'invalid'):
+            with self.subTest(connections=connections):
+                with self.assertRaises(ValueError):
+                    form_updates({'USENET_CONNECTIONS': connections}, self.settings())
+
     def settings(self):
         return form_updates({'USENET_ENABLED':'true','USENET_HOST':'news.fixture.invalid','USENET_USER':'fixture-user',
                              'USENET_PASS':'fixture$pass\'"','USENET_PORT':'563','USENET_SSL':'true','USENET_CONNECTIONS':'10'}, {})

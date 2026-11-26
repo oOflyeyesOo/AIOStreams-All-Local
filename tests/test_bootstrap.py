@@ -581,6 +581,20 @@ class BootstrapTests(unittest.TestCase):
         with patch.dict(bootstrap.os.environ, {'USENET_ENABLED': 'false'}):
             self.assertFalse(bootstrap.sync_aiostreams_native_usenet())
 
+    def test_native_usenet_preserves_selected_connection_limits_above_fifty(self):
+        for primary, secondary in ((100, 200), (1000, 1000)):
+            with self.subTest(primary=primary, secondary=secondary), patch.dict(os.environ, {
+                'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',
+                'USENET_USER': 'fixture-user', 'USENET_PASS': 'fixture-pass',
+                'USENET_CONNECTIONS': str(primary),
+                'USENET_EXTRA_SERVERS': json.dumps([{'host': 'backup.fixture.invalid',
+                    'username': 'fixture-user', 'password': 'fixture-pass', 'connections': secondary}])
+            }, clear=True), patch.object(bootstrap, 'get_aiostreams_auth_headers', return_value={}), \
+                 patch.object(bootstrap, 'make_request', return_value={'success': True}) as request:
+                self.assertTrue(bootstrap.sync_aiostreams_native_usenet())
+                providers = request.call_args.kwargs['data']['providers']
+                self.assertEqual([p['maxConnections'] for p in providers], [primary, secondary])
+
     def test_native_usenet_extra_credentials_are_not_trimmed(self):
         with patch.dict(os.environ, {
             'USENET_ENABLED': 'true', 'USENET_HOST': 'news.fixture.invalid',

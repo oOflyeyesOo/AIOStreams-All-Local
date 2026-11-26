@@ -230,3 +230,25 @@ Branch: `audit/24-7-hardening-and-load`
    - `scripts/audit_portal.py` passed with 0 findings.
    - `scripts/pre_push_check.py` passed with all release gates green.
    - Generated manager Compose file (`compose.manager.yml`) synchronized and validated.
+
+### Follow-up regression audit — November 25, 2026
+
+Development branch: `codex/gemini-audit-20261124`; changes remain local pending merge approval.
+
+- Restored the portal-supported NNTP connection range of 1..1000 for primary and additional servers. Existing settings above 50 no longer block unrelated saves or get silently reduced during provisioning. PostgreSQL connection limits are unchanged.
+- Fixed fallback profile downloads after a portal restart: saved settings are passed into an isolated profile builder without modifying the portal environment or rewriting saved settings. Live AIOStreams profiles remain preferred.
+- Centralized service-proxy authentication and mutation-origin checks so cookie and Referer fallback routes cannot bypass them.
+- Corrected the preceding optimization: `synchronous_commit=off` is replaced with `on` in the database command, initializer, and inline fallback. This preserves acknowledgement durability; other checkpoint and WAL tuning remains intact.
+- Parallel review: Usenet and export agents implemented targeted fixes; the safety reviewer identified proxy bypass and durability issues, integrated and verified by the lead.
+
+Validation: 314 Python tests and 43 frontend tests passed in Docker; all three Compose configurations, service inventory, manager generation freshness, and diff whitespace checks passed. Portal, bootstrap, and postgres-init images built locally. A disposable PostgreSQL instance was explicitly given a persisted `synchronous_commit=off`; running initialization twice passed and restored `SHOW synchronous_commit` to `on`.
+
+Remaining security work: webhook validation rejects literal private addresses but does not yet safely bind DNS resolution and redirects to public destinations. Address this before treating outbound webhook SSRF protection as complete. No live server, provider-account, or playback verification is claimed by this regression round.
+
+### Final integration review — November 25, 2026
+
+- Closed the portal webhook URL gap by limiting this Discord-format integration to HTTPS webhook endpoints on discord.com and discordapp.com, blocking all redirects, rejecting malformed URLs, and suppressing token-bearing exception details. Custom webhook relays are intentionally unsupported by this endpoint.
+- Rechecked the prior Usenet, profile export, proxy authorization, and database durability fixes against current main (1e48061). No newer upstream main changes were present at review time.
+- Validation: 317 Python tests and 43 frontend tests passed in Docker; source, manager, and appliance Compose validation passed; portal structural audit reported zero findings; inventory and generated-manager checks passed; updated portal image built locally.
+- Parallel reviewers were requested but all three failed before review due to account usage limits. This final review was completed by the lead; no independent review is claimed for this round.
+- User approved merge. Live server streaming and storage hardware health remain outside this local regression verification.

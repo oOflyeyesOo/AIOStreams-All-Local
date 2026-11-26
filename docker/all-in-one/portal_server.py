@@ -830,19 +830,44 @@ def config_export():
     }
 
 
+def build_export_profile(path, settings):
+    """Isolate bootstrap globals and saved credentials from concurrent requests."""
+    environment = dict(os.environ)
+    environment.update({key: str(value) for key, value in settings.items()})
+    environment["AIO_SKIP_ENV_FILE"] = "true"
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    # Secrets are passed through the child environment, never command arguments.
+    # Bootstrap diagnostics must not corrupt the exported JSON or leak to logs.
+    script = """import contextlib, importlib.util, io, json, sys
+with contextlib.redirect_stdout(io.StringIO()):
+    spec = importlib.util.spec_from_file_location('aio_profile_builder', sys.argv[1])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = module.build_default_config(probe_services=False)
+json.dump(config, sys.stdout)
+"""
+    try:
+        result = subprocess.run([sys.executable, "-c", script, path], env=environment,
+                                cwd=WEB_ROOT, capture_output=True, text=True, timeout=20)
+        if result.returncode:
+            raise RuntimeError("Profile builder failed")
+        config = json.loads(result.stdout)
+        if not isinstance(config, dict):
+            raise ValueError("Invalid profile")
+        return config
+    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError):
+        raise RuntimeError("Profile builder is unavailable") from None
+
+
 def optimized_profile_export():
     """Build the same local profile used by bootstrap for authenticated download,
     preferring live user configuration from AIOStreams when available.
     """
-    import importlib.util
     path = os.path.join(WEB_ROOT, "init", "bootstrap", "setup_stack.py")
     if not os.path.isfile(path):
         path = os.path.join(os.path.dirname(__file__), "..", "..", "init", "bootstrap", "setup_stack.py")
-    spec = importlib.util.spec_from_file_location("aio_profile_builder", path)
-    if not spec or not spec.loader:
+    if not os.path.isfile(path):
         raise RuntimeError("Profile builder is unavailable")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
 
     live_config = None
     aiostreams_url = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstrip("/")
@@ -897,7 +922,7 @@ def optimized_profile_export():
                             "OFFCLOUD_API_KEY", "SEEDR_API_KEY", "TMDB_API_KEY", "TVDB_API_KEY")
             if os.environ.get(key) or saved_env.get(key)
         ),
-        "config": live_config if live_config is not None else module.build_default_config(probe_services=False),
+        "config": live_config if live_config is not None else build_export_profile(path, saved_env),
     }
 def proxy_config(kind, base_url):
     base_url = normalize_base_url(base_url or "https://aio.yourdomain.com")
@@ -1257,32 +1282,20 @@ def get_aniskip_times(mal_id, episode=1, duration=0):
         return res
 
 def is_safe_webhook_url(url_str):
-    if not url_str or not isinstance(url_str, str):
-        return False, "Invalid webhook URL"
-    parsed = urllib.parse.urlsplit(url_str)
-    if parsed.scheme != "https":
-        return False, "Webhook URL must use https"
-    host = parsed.hostname
-    if not host:
-        return False, "Webhook URL missing hostname"
-    host_lower = host.lower()
-    if host_lower in ("localhost", "127.0.0.1", "::1", "docker", "controller", "portal") or host_lower.endswith((".local", ".internal", ".lan")):
-        return False, "Internal and private hosts are not allowed"
+    """Accept only Discord webhook endpoints, never arbitrary outbound targets."""
+    if not isinstance(url_str, str) or not url_str or any(ord(c) <= 32 for c in url_str):
+        return False, "Invalid Discord webhook URL"
     try:
-        ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-            return False, "Private IP addresses are not allowed"
+        parsed = urllib.parse.urlsplit(url_str)
+        if (parsed.scheme != "https" or parsed.hostname not in ("discord.com", "discordapp.com")
+                or parsed.port not in (None, 443) or parsed.username is not None
+                or parsed.password is not None or parsed.fragment):
+            return False, "Use an HTTPS Discord webhook URL from Discord server settings"
+        if not re.fullmatch(r"/api(?:/v[0-9]+)?/webhooks/[0-9]+/[A-Za-z0-9_-]+", parsed.path):
+            return False, "Invalid Discord webhook endpoint"
     except ValueError:
-        pass
+        return False, "Invalid Discord webhook URL"
     return True, ""
-
-
-class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        ok, _ = is_safe_webhook_url(newurl)
-        if not ok:
-            return None
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def dispatch_webhook_notification(webhook_url, title, message, url=None):
@@ -1304,11 +1317,13 @@ def dispatch_webhook_notification(webhook_url, title, message, url=None):
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json", "User-Agent": "AIO-Stack-Notifier/1.0"})
-        opener = urllib.request.build_opener(SafeRedirectHandler())
+        opener = urllib.request.build_opener(NoRedirectHandler())
         with opener.open(req, timeout=6) as resp:
             return True, f"Delivered (HTTP {resp.status})"
-    except Exception as e:
-        return False, str(e)
+    except urllib.error.HTTPError as exc:
+        return False, f"Discord rejected the notification (HTTP {exc.code})"
+    except Exception:
+        return False, "Unable to deliver notification to Discord"
 
 _STATUS_PROBE_CACHE = {"docker_ready": False, "aggregator_ready": False, "timestamp": 0.0}
 
@@ -1596,6 +1611,12 @@ class AppliancePortalHandler(http.server.SimpleHTTPRequestHandler):
         return super().send_head()
 
     def proxy_to_service(self, service, subpath, query="", is_alias=False, watch_base=None):
+        # Every dispatch path, including cookie/referer fallbacks, shares this gate.
+        if not self.authorize():
+            return
+        if self.command not in ("GET", "HEAD", "OPTIONS") and not self.request_origin_is_local():
+            self.json_response({"error": "Cross-origin proxy request rejected"}, 403)
+            return
         if service not in INTERNAL_SERVICE_TARGETS:
             self.send_error(404, f"Service '{service}' not found")
             return

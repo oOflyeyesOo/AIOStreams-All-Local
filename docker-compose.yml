@@ -787,7 +787,7 @@ services:
             psql -h shared-postgres -U postgres -d postgres -c "CREATE DATABASE $$db;" 2>/dev/null || true
           done
           psql -h shared-postgres -U postgres -d postgres -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'aio') THEN CREATE USER aio WITH PASSWORD 'aio_local_secret' SUPERUSER; END IF; END \$\$;" 2>/dev/null || true
-          psql -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET synchronous_commit = 'off'; ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '200'; ALTER SYSTEM SET checkpoint_completion_target = '0.9'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; ALTER SYSTEM SET work_mem = '32MB'; ALTER SYSTEM SET shared_buffers = '256MB'; ALTER SYSTEM SET effective_cache_size = '512MB'; ALTER SYSTEM SET max_connections = '50'; SELECT pg_reload_conf();" 2>/dev/null || true
+          psql -h shared-postgres -U postgres -d postgres -c "ALTER SYSTEM SET synchronous_commit = 'on'; ALTER SYSTEM SET autovacuum_vacuum_scale_factor = '0.05'; ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '200'; ALTER SYSTEM SET checkpoint_completion_target = '0.9'; ALTER SYSTEM SET maintenance_work_mem = '128MB'; ALTER SYSTEM SET work_mem = '32MB'; ALTER SYSTEM SET shared_buffers = '256MB'; ALTER SYSTEM SET effective_cache_size = '512MB'; ALTER SYSTEM SET max_connections = '50'; SELECT pg_reload_conf();" 2>/dev/null || true
           echo "[init-postgres] Done!"
           exit 0
         fi
@@ -806,7 +806,7 @@ services:
     shm_size: 512mb
     command: >
       postgres
-      -c synchronous_commit=off
+      -c synchronous_commit=on
       -c shared_buffers=256MB
       -c max_connections=50
       -c checkpoint_completion_target=0.9

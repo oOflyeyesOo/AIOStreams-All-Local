@@ -13,6 +13,17 @@ spec.loader.exec_module(entrypoint)
 
 
 class PackagedPortalTests(unittest.TestCase):
+    def test_postgres_durability_is_preserved_in_all_deployment_paths(self):
+        for filename in ('docker-compose.yml', 'compose.manager.yml'):
+            config = yaml.safe_load((ROOT / filename).read_text(encoding='utf-8'))
+            command = config['services']['shared-postgres']['command']
+            self.assertIn('synchronous_commit=on', str(command))
+            self.assertNotIn('synchronous_commit=off', str(command))
+        for filename in ('docker-compose.yml', 'init/postgres/init-databases.sh'):
+            contents = (ROOT / filename).read_text(encoding='utf-8')
+            self.assertIn("ALTER SYSTEM SET synchronous_commit = 'on'", contents)
+            self.assertNotIn("synchronous_commit = 'off'", contents)
+
     def test_bitmagnet_is_decommissioned_from_compose(self):
         for filename in ('docker-compose.yml', 'compose.manager.yml'):
             config = yaml.safe_load((ROOT / filename).read_text(encoding='utf-8'))
