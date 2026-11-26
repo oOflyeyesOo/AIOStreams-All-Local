@@ -145,6 +145,60 @@ class BackupTests(unittest.TestCase):
             self.assertFalse(backup.restore_backup(archive, root=root))
             self.assertFalse((Path(temp_dir) / "outside.txt").exists())
 
+    def test_backup_and_restore_includes_player_preferences(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "source"
+            (root / "data" / "aiostreams").mkdir(parents=True)
+            (root / "data" / "player_preferences.json").write_text('{"audioLanguage":"jpn"}', encoding="utf-8")
+            with patch.object(backup, "dump_postgres", return_value=False):
+                archive = backup.create_backup(root=root)
+            with tarfile.open(archive) as tar:
+                self.assertIn("data/player_preferences.json", tar.getnames())
+            restored = Path(temp_dir) / "restored"
+            restored.mkdir()
+            self.assertTrue(backup.restore_backup(archive, root=restored))
+            self.assertEqual(
+                (restored / "data" / "player_preferences.json").read_text(encoding="utf-8"),
+                '{"audioLanguage":"jpn"}',
+            )
+
+    def test_postgres_container_uses_resolve_compose_project_fallback(self):
+        with patch.object(backup, "resolve_compose_project", return_value="mgr-stack"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = unittest.mock.MagicMock(returncode=0, stdout="pg-container-1\n")
+            cid = backup.postgres_container()
+            self.assertEqual(cid, "pg-container-1")
+            cmd = mock_run.call_args[0][0]
+            self.assertIn("label=com.docker.compose.project=mgr-stack", cmd)
+
+    def test_restore_postgres_injects_with_force_on_drop_database(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dump = Path(temp_dir) / "cluster.sql"
+            dump.write_text("DROP DATABASE IF EXISTS zilean;\nCREATE DATABASE zilean;\n", encoding="utf-8")
+            with patch.object(backup, "postgres_container", return_value="pg-cid"), \
+                 patch("subprocess.run") as mock_run:
+                mock_run.return_value = unittest.mock.MagicMock(returncode=0)
+                self.assertTrue(backup.restore_postgres(dump))
+                sent_sql = mock_run.call_args.kwargs["input"]
+                self.assertIn(b"DROP DATABASE IF EXISTS zilean WITH (FORCE);", sent_sql)
+
+    def test_get_backup_telemetry_reads_sidecar_completeness(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "data" / "aiostreams").mkdir(parents=True)
+            (root / ".env").write_text("ADDON_PASSWORD=test-only\n", encoding="utf-8")
+            (root / "data" / "aiostreams" / "db.sqlite").write_bytes(b"db")
+            (root / "data" / "aiostreams" / "aiostreams_install.json").write_text('{"uuid":"u"}', encoding="utf-8")
+            with patch.object(backup, "dump_postgres", return_value=False):
+                archive = backup.create_backup(root=root)
+            telemetry = backup.get_backup_telemetry(root=root)
+            self.assertEqual(telemetry["count"], 1)
+            item = telemetry["archives"][0]
+            self.assertEqual(item["name"], archive.name)
+            self.assertFalse(item["postgresIncluded"])
+            self.assertFalse(item["complete"])
+            self.assertEqual(item["status"], "partial")
+
 
 if __name__ == "__main__":
     unittest.main()

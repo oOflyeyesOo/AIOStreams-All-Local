@@ -88,6 +88,36 @@ class TestCleanCache(unittest.TestCase):
         self.assertFalse((self.posters / "poster.jpg").exists())
         self.assertFalse((self.pycache / "module.cpython-311.pyc").exists())
 
+    def test_cleans_prowlarr_and_postersplus_logs_and_preserves_symlink_safety(self):
+        prowlarr_logs = self.temp_dir / "data" / "prowlarr" / "logs"
+        posters_logs = self.temp_dir / "data" / "postersplus" / "logs"
+        prowlarr_logs.mkdir(parents=True, exist_ok=True)
+        posters_logs.mkdir(parents=True, exist_ok=True)
+        (prowlarr_logs / "prowlarr.txt").write_bytes(b"l" * 512)
+        (posters_logs / "posters.log").write_bytes(b"p" * 256)
+
+        dry = clean_stack_cache(repo_root=self.temp_dir, dry_run=True)
+        self.assertTrue(dry["success"])
+        self.assertTrue((prowlarr_logs / "prowlarr.txt").exists())
+        self.assertTrue((posters_logs / "posters.log").exists())
+
+        res = clean_stack_cache(repo_root=self.temp_dir, dry_run=False)
+        self.assertTrue(res["success"])
+        self.assertFalse((prowlarr_logs / "prowlarr.txt").exists())
+        self.assertFalse((posters_logs / "posters.log").exists())
+
+        with tempfile.TemporaryDirectory() as outside:
+            sentinel = Path(outside) / "keep.log"
+            sentinel.write_text("keep")
+            shutil.rmtree(prowlarr_logs)
+            try:
+                prowlarr_logs.symlink_to(outside, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symlinks not permitted in this environment")
+            escaped = clean_stack_cache(repo_root=self.temp_dir)
+            self.assertFalse(escaped["success"])
+            self.assertEqual(sentinel.read_text(), "keep")
+
 
 if __name__ == "__main__":
     unittest.main()

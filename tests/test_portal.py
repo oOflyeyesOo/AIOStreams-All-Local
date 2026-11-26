@@ -2242,6 +2242,162 @@ class PortalTests(unittest.TestCase):
             data = json.loads(body)
             self.assertFalse(data.get("success"))
 
+    def test_backups_restore_endpoint_validation_and_execution(self):
+        self.assertEqual(self.request("/api/backups/restore", "POST", {"filename": "a.tar.gz"}, auth=False)[0], 401)
+        self.assertEqual(self.request("/api/backups/restore", "POST", {"filename": "a.tar.gz"}, auth=True, headers={"Origin": "https://untrusted.example"})[0], 403)
+
+        for bad in ("", "../escape.tar.gz", "sub/a.tar.gz", "not-an-archive.zip", ".hidden.tar.gz"):
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": bad}, auth=True)
+            self.assertEqual(status, 400, f"Expected 400 for filename={bad!r}")
+            self.assertFalse(json.loads(body)["success"])
+
+        backup_dir = self.root / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        status, _, _ = self.request("/api/backups/restore", "POST", {"filename": "missing-backup.tar.gz"}, auth=True)
+        self.assertEqual(status, 404)
+
+        archive = backup_dir / "aio-backup-20261125-000000-abcdef123456.tar.gz"
+        archive.write_bytes(b"fixture-tar")
+        with patch("tools.backup.restore_backup", return_value=True) as mock_restore:
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": archive.name}, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["filename"], archive.name)
+            mock_restore.assert_called_once()
+
+        with patch("tools.backup.restore_backup", return_value=False):
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": archive.name}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertFalse(json.loads(body)["success"])
+
+        with tempfile.TemporaryDirectory() as outside:
+            ext = Path(outside) / "outside.tar.gz"
+            ext.write_bytes(b"outside")
+            link_path = backup_dir / "symlink-backup.tar.gz"
+            try:
+                link_path.symlink_to(ext)
+            except OSError:
+                return
+            with patch("tools.backup.restore_backup") as mock_restore:
+                status, _, _ = self.request("/api/backups/restore", "POST", {"filename": link_path.name}, auth=True)
+                self.assertEqual(status, 400)
+                mock_restore.assert_not_called()
+
+    def test_clean_cache_endpoint_options_and_defaults(self):
+        with patch("tools.clean_cache.clean_stack_cache", return_value={"success": True, "dry_run": False, "total_bytes": 0, "freed_mb": 0.0, "freed_gb": 0.0, "total_files": 0, "details": [], "errors": []}) as clean:
+            status, body, _ = self.request("/api/clean-cache", "POST", b"", auth=True, headers={"Content-Length": "0"})
+            self.assertEqual(status, 200)
+            clean.assert_called_once_with(Path(portal.WEB_ROOT), include_poster_cache=False, dry_run=False)
+
+        with patch("tools.clean_cache.clean_stack_cache", return_value={"success": True, "dry_run": True, "total_bytes": 1024, "freed_mb": 0.0, "freed_gb": 0.0, "total_files": 1, "details": [], "errors": []}) as clean:
+            status, body, _ = self.request("/api/clean-cache", "POST", {"dry_run": True, "include_poster_cache": True}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["dry_run"])
+            clean.assert_called_once_with(Path(portal.WEB_ROOT), include_poster_cache=True, dry_run=True)
+
+        status, _, _ = self.request("/api/clean-cache", "POST", {"dry_run": "yes"}, auth=True)
+        self.assertEqual(status, 400)
+
+    def test_setup_env_keys_masked_preserved_and_exposed(self):
+        status, _, _ = self.request("/api/save-env", "POST", {
+            "COMPOSE_PROFILES": "core,anime",
+            "OPENSUBTITLES_API_KEY": "os-secret-value",
+            "EASYNEWS_USER": "easyuser",
+            "EASYNEWS_PASSWORD": "easypass-secret",
+            "AIO_PRECACHE_NEXT_EPISODE": "true",
+            "JELLYFIN_ENABLED": "false",
+        }, auth=True)
+        self.assertEqual(status, 200)
+
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn(b"os-secret-value", body)
+        self.assertNotIn(b"easypass-secret", body)
+        data = json.loads(body)
+        self.assertEqual(data["COMPOSE_PROFILES"], "core,anime")
+        self.assertEqual(data["EASYNEWS_USER"], "easyuser")
+        self.assertTrue(data["EASYNEWS_PASSWORD_SAVED"])
+        self.assertTrue(data["OPENSUBTITLES_API_KEY_SAVED"])
+        self.assertIn("OPENSUBTITLES_API_KEY", data["configuredKeys"])
+        self.assertIn("EASYNEWS_PASSWORD", data["configuredKeys"])
+        self.assertEqual(data["AIO_PRECACHE_NEXT_EPISODE"], "true")
+        self.assertEqual(data["JELLYFIN_ENABLED"], "false")
+
+        # Omitting masked secrets on subsequent save preserves them
+        status, _, _ = self.request("/api/save", "POST", {"EASYNEWS_USER": "easyuser2"}, auth=True)
+        self.assertEqual(status, 200)
+        saved = portal.read_saved_env()
+        self.assertEqual(saved.get("OPENSUBTITLES_API_KEY"), "os-secret-value")
+        self.assertEqual(saved.get("EASYNEWS_PASSWORD"), "easypass-secret")
+        self.assertEqual(saved.get("EASYNEWS_USER"), "easyuser2")
+
+        status, _, _ = self.request("/api/save-env", "POST", {"AIO_PRECACHE_NEXT_EPISODE": "invalid"}, auth=True)
+        self.assertEqual(status, 400)
+
+    def test_smoke_test_and_playback_support_anime_and_safe_logs(self):
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self: json.dumps({"streams": [{"url": "https://cdn.example.test/anime.mp4"}]}).encode(),
+        })()
+        with patch("urllib.request.urlopen", return_value=response) as mock_open:
+            status, body, _ = self.request(
+                "/api/smoke-test", "POST", {"kind": "anime", "id": "kitsu:12:1"}, auth=True,
+                headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(status, 200)
+            payload = json.loads(body)
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["kind"], "anime")
+            self.assertIn("/stream/anime/kitsu:12:1.json", mock_open.call_args[0][0])
+
+        status, body, _ = self.request("/api/smoke-test", "POST", {"kind": "anime", "id": "bad id/.."}, auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["status"], "invalid")
+
+        with patch.object(portal, "playback_readiness", return_value={"ready": True}), \
+             patch.object(portal, "validate_provider", return_value={"status": "valid", "detail": "ok"}), \
+             patch.object(portal, "read_saved_env", return_value={"REALDEBRID_API_KEY": "rd-key"}):
+            pb = portal.run_playback_test(mode="debrid", content_id="kitsu:12:1", kind="anime")
+            self.assertEqual(pb["kind"], "anime")
+            self.assertEqual(pb["content_id"], "kitsu:12:1")
+
+        for svc in ("shared-postgres", "shared-redis", "jikan-api"):
+            with patch.dict(os.environ, {"HOSTNAME": "portal-cid"}), \
+                 patch.object(portal.subprocess, "run", side_effect=[
+                     MagicMock(returncode=0, stdout="testproj\n"),
+                     MagicMock(returncode=0, stdout="a1b2c3d4e5f6\n"),
+                     MagicMock(returncode=0, stdout=f"{svc} log line\n"),
+                 ]):
+                status, body, _ = self.request(f"/api/logs?container={svc}", auth=True)
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body)["container"], svc)
+
+    def test_cloudflare_helper_resolve_compose_project_fallback(self):
+        from tools import cloudflare_helper
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch.object(cloudflare_helper, "resolve_compose_project", return_value="mgr-proj"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=(
+                    "cid1\tmgr-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=mgr-proj,com.docker.compose.service=cloudflared\n"
+                    "cid2\tother-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=other-proj,com.docker.compose.service=cloudflared\n"
+                ),
+                stderr="",
+            )
+            res = cloudflare_helper.check_cloudflare_containers()
+            self.assertEqual(res["local_tunnel"]["name"], "mgr-cloudflared")
+            self.assertEqual(len(res["external_connectors"]), 1)
+            self.assertEqual(res["external_connectors"][0]["name"], "other-cloudflared")
+
+            mock_run.side_effect = [MagicMock(returncode=0, stdout="", stderr="")]
+            status_res = cloudflare_helper.manage_local_tunnel("status")
+            self.assertTrue(status_res["success"])
+            self.assertEqual(status_res["status"], "not_created")
+            self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "-p", "mgr-proj"])
+
 
 if __name__ == "__main__":
     unittest.main()

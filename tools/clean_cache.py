@@ -27,7 +27,7 @@ def get_dir_size(path: Path) -> int:
         return 0
     try:
         for entry in path.rglob("*"):
-            if entry.is_file():
+            if entry.is_file() and not entry.is_symlink():
                 try:
                     total += entry.stat().st_size
                 except (OSError, FileNotFoundError):
@@ -35,6 +35,16 @@ def get_dir_size(path: Path) -> int:
     except Exception:
         pass
     return total
+
+
+def _has_workspace_symlink(path: Path, allowed_roots: set) -> bool:
+    """Return True if path or any intermediate parent below allowed_roots is a symlink."""
+    cur = path
+    while cur not in allowed_roots and cur.parent != cur:
+        if cur.is_symlink():
+            return True
+        cur = cur.parent
+    return cur.is_symlink()
 
 
 def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False, dry_run: bool = False) -> dict:
@@ -47,7 +57,7 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
 
     repo_root = Path(repo_root).resolve()
     data_dir = repo_root / "data"
-    data_root = data_dir.resolve() if data_dir.exists() else data_dir
+    data_root = data_dir.resolve() if (data_dir.exists() and not data_dir.is_symlink()) else data_dir
     allowed_roots = {repo_root, data_root}
     details = []
     total_bytes = 0
@@ -58,13 +68,15 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
         ("StremThru Torrent Hashlists", data_root / "stremthru" / "hashlists"),
         ("StremThru IMDb Dumps", data_root / "stremthru" / "imdb"),
         ("StremThru Internal Cache", data_root / "stremthru" / "cache"),
+        ("Prowlarr Logs", data_root / "prowlarr" / "logs"),
+        ("Posters+ Logs", data_root / "postersplus" / "logs"),
     ]
 
     errors = []
     if include_poster_cache:
         # The volume also stores databases. Purge only image files, never the volume.
         poster_root = data_root / "postersplus"
-        if poster_root.exists() and any(r == poster_root.resolve() or r in poster_root.resolve().parents for r in allowed_roots):
+        if poster_root.exists() and not _has_workspace_symlink(poster_root, allowed_roots) and any(r == poster_root.resolve() or r in poster_root.resolve().parents for r in allowed_roots):
             images = [p for p in poster_root.rglob("*") if p.is_file() and not p.is_symlink()
                       and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"}]
             for image in images:
@@ -75,7 +87,7 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
     # Include bytecode cache across workspace, excluding data and git directories to avoid walking database volumes.
     try:
         for child in repo_root.iterdir():
-            if child.is_dir() and child.name not in ("data", ".git"):
+            if child.is_dir() and not child.is_symlink() and child.name not in ("data", ".git"):
                 if child.name == "__pycache__":
                     purge_targets.append(("Python Bytecode Cache", child))
                 else:
@@ -87,11 +99,11 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
         if not target_path.exists():
             continue
         resolved_target = target_path.resolve()
-        if not any(r == resolved_target or r in resolved_target.parents for r in allowed_roots) or target_path.is_symlink():
+        if not any(r == resolved_target or r in resolved_target.parents for r in allowed_roots) or _has_workspace_symlink(target_path, allowed_roots):
             errors.append(label + ": target escapes workspace or is a symbolic link")
             continue
         size = target_path.stat().st_size if target_path.is_file() else get_dir_size(target_path)
-        count = 1 if target_path.is_file() else sum(p.is_file() for p in target_path.rglob("*"))
+        count = 1 if target_path.is_file() else sum(p.is_file() and not p.is_symlink() for p in target_path.rglob("*"))
         if not size and not count:
             continue
         failed = None
@@ -109,7 +121,7 @@ def clean_stack_cache(repo_root: Path = None, include_poster_cache: bool = False
                 failed = type(error).__name__
                 errors.append(label + ": " + failed)
         remaining = 0 if not target_path.exists() else (target_path.stat().st_size if target_path.is_file() else get_dir_size(target_path))
-        remaining_count = 0 if not target_path.exists() else (1 if target_path.is_file() else sum(p.is_file() for p in target_path.rglob("*")))
+        remaining_count = 0 if not target_path.exists() else (1 if target_path.is_file() else sum(p.is_file() and not p.is_symlink() for p in target_path.rglob("*")))
         recovered = size if dry_run else max(0, size - remaining)
         total_bytes += recovered
         total_files += count if dry_run else max(0, count - remaining_count)

@@ -20,6 +20,32 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+try:
+    from tools.resources import resolve_compose_project
+except ImportError:
+    try:
+        from resources import resolve_compose_project
+    except ImportError:
+        def resolve_compose_project() -> str:
+            """Resolve the active Compose project name from env or docker container label."""
+            proj = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+            if proj:
+                return proj.strip()
+            hostname = os.environ.get("HOSTNAME")
+            if hostname:
+                try:
+                    inspect_res = subprocess.run(
+                        ["docker", "inspect", hostname, "--format", '{{index .Config.Labels "com.docker.compose.project"}}'],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if inspect_res.returncode == 0:
+                        found = inspect_res.stdout.strip()
+                        if found and found != "<no value>" and re.fullmatch(r"[a-zA-Z0-9._-]+", found):
+                            return found
+                except Exception:
+                    pass
+            return ""
+
 
 def normalize_tunnel_token(token: str) -> str:
     """Extract a token from pasted commands without exposing it in metadata."""
@@ -172,6 +198,7 @@ def check_cloudflare_containers() -> dict:
 
     local_tunnel = None
     external_connectors = []
+    project = resolve_compose_project().lower()
 
     for line in res.stdout.strip().splitlines():
         parts = line.split("\t")
@@ -204,7 +231,15 @@ def check_cloudflare_containers() -> dict:
         if not is_cf:
             continue
 
-        is_local = (
+        proj_label = ""
+        if "com.docker.compose.project=" in labels_l:
+            for lbl in labels_l.split(","):
+                lbl = lbl.strip()
+                if lbl.startswith("com.docker.compose.project="):
+                    proj_label = lbl.split("=", 1)[1].strip()
+                    break
+        same_project = (not project) or (not proj_label) or (proj_label == project)
+        is_local = same_project and (
             name in ("aio-tunnel", "cloudflared")
             or "com.docker.compose.service=cloudflared" in labels_l
         )
@@ -493,7 +528,7 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
 
     compose = ["docker", "compose"]
     root = Path(cwd or ".")
-    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME") or resolve_compose_project()
     if project:
         compose.extend(["-p", project])
     if not (root / "docker-compose.yml").exists() and (root / "compose.manager.yml").exists():
@@ -558,11 +593,30 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
                 "output": "aio-tunnel container is running. Cloudflare connectivity has not been verified."
             }
 
-        return {
+        result = {
             "success": True,
             "action": action,
             "output": output,
             "error": None
         }
+        if action == "status":
+            tunnel_status = "not_created"
+            for line in output.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    info = json.loads(line)
+                    if isinstance(info, list) and info:
+                        info = info[0]
+                    if isinstance(info, dict):
+                        st = str(info.get("State") or info.get("Status") or "").strip().lower()
+                        if st:
+                            tunnel_status = st
+                            break
+                except Exception:
+                    pass
+            result["status"] = tunnel_status
+        return result
     except Exception as e:
         return {"success": False, "action": action, "error": str(e)}

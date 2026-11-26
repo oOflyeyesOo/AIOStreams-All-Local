@@ -18,6 +18,7 @@ import os
 import json
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -66,9 +67,36 @@ def get_project_root() -> Path:
     return cwd
 
 
+try:
+    from tools.resources import resolve_compose_project
+except ImportError:
+    try:
+        from resources import resolve_compose_project
+    except ImportError:
+        def resolve_compose_project() -> str:
+            """Resolve the active Compose project name from env or docker container label."""
+            proj = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+            if proj:
+                return proj.strip()
+            hostname = os.environ.get("HOSTNAME")
+            if hostname:
+                try:
+                    inspect_res = subprocess.run(
+                        ["docker", "inspect", hostname, "--format", '{{index .Config.Labels "com.docker.compose.project"}}'],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if inspect_res.returncode == 0:
+                        found = inspect_res.stdout.strip()
+                        if found and found != "<no value>" and re.fullmatch(r"[a-zA-Z0-9._-]+", found):
+                            return found
+                except Exception:
+                    pass
+            return ""
+
+
 def postgres_container():
     """Resolve only this Compose project's database; never a global container name."""
-    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
+    project = resolve_compose_project()
     if project:
         command = ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.project={project}",
                    "--filter", "label=com.docker.compose.service=shared-postgres"]
@@ -131,12 +159,21 @@ def dump_postgres(dump_file: Path) -> bool:
         return False
 
 
+def _with_force_drop_database(sql_data: bytes) -> bytes:
+    """Append WITH (FORCE) to DROP DATABASE statements so active sessions do not block live restores."""
+    return re.sub(
+        rb'(?im)^(\s*DROP\s+DATABASE\s+(?:IF\s+EXISTS\s+)?(?:"[^"]+"|[A-Za-z0-9_.-]+))\s*;',
+        rb'\1 WITH (FORCE);',
+        sql_data,
+    )
+
+
 def restore_postgres(dump_file: Path) -> bool:
-    """Attempt to restore a pg_dumpall SQL dump into shared-postgres."""
+    """Attempt to restore a pg_dump SQL dump into shared-postgres."""
     try:
         if not dump_file.is_file():
             return False
-        sql_data = dump_file.read_bytes()
+        sql_data = _with_force_drop_database(dump_file.read_bytes())
         res = subprocess.run(
             ["docker", "exec", "-i", postgres_container(), "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
             input=sql_data,
@@ -190,6 +227,7 @@ def create_backup(output_dir: Path = None, root: Path = None, include_cache: boo
             ("aiostreams/db.sqlite", False),
             ("aiostreams/aiostreams_install.json", False),
             ("aiostreams/instance-id", False),
+            ("player_preferences.json", False),
             ("prowlarr/config.xml", False),
             ("prowlarr/prowlarr.db", False),
             ("postersplus", True),
@@ -292,10 +330,26 @@ def get_backup_telemetry(output_dir: Path = None, root: Path = None) -> dict:
         sz = arch.stat().st_size
         total_bytes += sz
         mtime = datetime.fromtimestamp(arch.stat().st_mtime, timezone.utc).isoformat()
+        pg_inc = None
+        complete = None
+        status = "unverified"
+        sidecar_path = arch.with_suffix(arch.suffix + ".json")
+        if sidecar_path.is_file():
+            try:
+                sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                if sidecar.get("archive") == arch.name and sidecar.get("sizeBytes") == sz:
+                    pg_inc = bool(sidecar.get("postgresIncluded"))
+                    complete = bool(sidecar.get("complete"))
+                    status = "complete" if complete else "partial"
+            except (OSError, ValueError, TypeError):
+                pass
         items.append({
             "name": arch.name,
             "size_mb": round(sz / (1024 * 1024), 2),
-            "mtime": mtime
+            "mtime": mtime,
+            "postgresIncluded": pg_inc,
+            "complete": complete,
+            "status": status,
         })
 
     return {
