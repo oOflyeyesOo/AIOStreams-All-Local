@@ -126,6 +126,37 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertEqual(res["local_tunnel"]["name"], "aio-tunnel")
         self.assertTrue(res["local_tunnel"]["is_local"])
 
+    @patch("subprocess.run")
+    def test_check_cloudflare_containers_derives_project_passively_from_hostname(self, mock_run):
+        mock_output = (
+            "cfother999999\taio-tunnel\tcloudflare/cloudflared:latest\tUp 2 hours\trunning\ttunnel run\t"
+            "com.docker.compose.project=other-stack,com.docker.compose.service=cloudflared\n"
+            "cflocal123456\taio-tunnel\tcloudflare/cloudflared:latest\tUp 1 hour\trunning\ttunnel run\t"
+            "com.docker.compose.project=my-stack,com.docker.compose.service=cloudflared\n"
+            "portalabcdef1\taio-portal\tghcr.io/example/portal:latest\tUp 1 hour\trunning\tpython portal.py\t"
+            "com.docker.compose.project=my-stack,com.docker.compose.service=portal\n"
+        )
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_output, stderr="")
+
+        with patch.dict(
+            os.environ,
+            {
+                "AIO_PROJECT_NAME": "",
+                "COMPOSE_PROJECT_NAME": "",
+                "HOSTNAME": "portalabcdef1234567890",
+            },
+        ):
+            res = check_cloudflare_containers()
+
+        mock_run.assert_called_once()
+        self.assertTrue(res["available"])
+        self.assertEqual(res["local_tunnel"]["id"], "cflocal123456")
+        self.assertTrue(res["local_tunnel"]["is_local"])
+        self.assertTrue(res["has_external"])
+        self.assertEqual(len(res["external_connectors"]), 1)
+        self.assertEqual(res["external_connectors"][0]["id"], "cfother999999")
+        self.assertFalse(res["external_connectors"][0]["is_local"])
+
     def test_push_cloudflare_dns_missing_args(self):
         res1 = push_cloudflare_dns("", "watch.example.com", "target.cfargotunnel.com")
         self.assertFalse(res1["success"])
@@ -330,6 +361,23 @@ class TestCloudflareHelper(unittest.TestCase):
         result = manage_local_tunnel("start", token="fixture-token")
         self.assertFalse(result["success"])
         self.assertEqual(result["status"], "failed")
+
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_manage_local_tunnel_ignores_hostname_without_project_env(self, mock_run, _sleep):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "compose.manager.yml").write_text("services: {}")
+            with patch.dict(
+                os.environ,
+                {
+                    "AIO_PROJECT_NAME": "",
+                    "COMPOSE_PROJECT_NAME": "",
+                    "HOSTNAME": "cddbf58da603",
+                },
+            ):
+                result = manage_local_tunnel("start", cwd=directory, token="fixture-token")
+            self.assertFalse(result["success"])
+            mock_run.assert_not_called()
 
 
 if __name__ == "__main__":

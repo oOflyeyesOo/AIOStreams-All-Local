@@ -2377,26 +2377,37 @@ class PortalTests(unittest.TestCase):
     def test_cloudflare_helper_resolve_compose_project_fallback(self):
         from tools import cloudflare_helper
         with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
-             patch.object(cloudflare_helper, "resolve_compose_project", return_value="mgr-proj"), \
              patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout=(
+                    "portal-cid\taiometadata-portal\tghcr.io/example/portal:latest\tUp\trunning\tpython portal.py\tcom.docker.compose.project=mgr-proj,com.docker.compose.service=portal\n"
                     "cid1\tmgr-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=mgr-proj,com.docker.compose.service=cloudflared\n"
                     "cid2\tother-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=other-proj,com.docker.compose.service=cloudflared\n"
                 ),
                 stderr="",
             )
             res = cloudflare_helper.check_cloudflare_containers()
+            mock_run.assert_called_once()
             self.assertEqual(res["local_tunnel"]["name"], "mgr-cloudflared")
             self.assertEqual(len(res["external_connectors"]), 1)
             self.assertEqual(res["external_connectors"][0]["name"], "other-cloudflared")
 
-            mock_run.side_effect = [MagicMock(returncode=0, stdout="", stderr="")]
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "mgr-proj", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch("subprocess.run", side_effect=[MagicMock(returncode=0, stdout="", stderr="")]) as mock_run:
             status_res = cloudflare_helper.manage_local_tunnel("status")
             self.assertTrue(status_res["success"])
             self.assertEqual(status_res["status"], "not_created")
+            mock_run.assert_called_once()
             self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "-p", "mgr-proj"])
+
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch("subprocess.run", side_effect=[MagicMock(returncode=0, stdout="", stderr="")]) as mock_run:
+            status_res = cloudflare_helper.manage_local_tunnel("status")
+            self.assertTrue(status_res["success"])
+            self.assertEqual(status_res["status"], "not_created")
+            mock_run.assert_called_once()
+            self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "--profile", "tunnel"])
 
 
 if __name__ == "__main__":
