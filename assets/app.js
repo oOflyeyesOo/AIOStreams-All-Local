@@ -20,6 +20,7 @@ const trackingKeys = [
 ];
 const extras = [
   ['RPDB_API_KEY','Rating posters (RPDB)','RP'],
+  ['OPENSUBTITLES_API_KEY','OpenSubtitles subtitles','OS'],
   ['SUBDL_API_KEY','SubDL subtitles','S'],
   ['SUBSOURCE_API_KEY','SubSource subtitles','SS'],
   ['WYZIE_API_KEY','Wyzie subtitles','W'],
@@ -508,6 +509,22 @@ for (const source of extraUsenetSources) {
 let settingsEditRevision = 0;
 let settingsLoadSequence = 0;
 let setupSaveInFlight = false;
+let easynewsPasswordSaved = false;
+let easynewsPasswordCleared = false;
+
+function normalizeComposeProfilesValue(raw) {
+  const parts = String(raw || 'core')
+    .split('#', 1)[0]
+    .split(',')
+    .map(p => p.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean)
+    .map(p => (p === 'scrapers' ? 'core' : (p === 'anime-db' ? 'anime' : p)));
+  const unique = [];
+  for (const p of parts) {
+    if (!unique.includes(p)) unique.push(p);
+  }
+  return unique.length ? unique.join(',') : 'core';
+}
 
 async function loadSettings(options) {
   const {expectedEditRevision = settingsEditRevision, ...requestOptions} = options || {};
@@ -530,6 +547,21 @@ async function loadSettings(options) {
   if (dmmToggle) dmmToggle.checked = env.ENABLE_DMM !== 'false';
   const remuxdbToggle = document.getElementById('enable-remuxdb');
   if (remuxdbToggle) remuxdbToggle.checked = env.ENABLE_REMUXDB !== 'false';
+  const precacheToggle = document.getElementById('aio-precache-next-episode');
+  if (precacheToggle) precacheToggle.checked = env.AIO_PRECACHE_NEXT_EPISODE === 'true';
+  const jellyfinToggle = document.getElementById('jellyfin-enabled');
+  if (jellyfinToggle) jellyfinToggle.checked = env.JELLYFIN_ENABLED !== 'false';
+  const profilesSelect = document.getElementById('compose-profiles');
+  if (profilesSelect) {
+    const normalizedProfiles = normalizeComposeProfilesValue(env.COMPOSE_PROFILES || 'core');
+    if (profilesSelect.options && typeof document.createElement === 'function' && !Array.from(profilesSelect.options).some(opt => opt.value === normalizedProfiles)) {
+      const customOpt = document.createElement('option');
+      customOpt.value = normalizedProfiles;
+      customOpt.textContent = `Custom (${normalizedProfiles})`;
+      profilesSelect.appendChild(customOpt);
+    }
+    profilesSelect.value = normalizedProfiles;
+  }
   document.getElementById('enable-anime-sources').checked=env.ENABLE_ANIME_SOURCES==='true';
   document.getElementById('enable-usenet').checked = env.USENET_ENABLED === 'true';
   for(const [id,key] of [['usenet-host','USENET_HOST'],['usenet-port','USENET_PORT'],['usenet-user','USENET_USER'],['usenet-connections','USENET_CONNECTIONS'],['nzb-indexer-url','NZB_INDEXER_URL']])document.getElementById(id).value=env[key]||'';
@@ -539,6 +571,20 @@ async function loadSettings(options) {
   document.getElementById('usenet-pass').placeholder=usenetPasswordSaved?'Saved · enter to replace':'Usenet password';
   savedKeys.clear();
   for (const key of env.configuredKeys || []) savedKeys.add(key);
+  if (env.OPENSUBTITLES_API_KEY_SAVED) savedKeys.add('OPENSUBTITLES_API_KEY');
+  const easynewsUserEl = document.getElementById('easynews-user');
+  if (easynewsUserEl) easynewsUserEl.value = env.EASYNEWS_USER || '';
+  easynewsPasswordSaved = Boolean(env.EASYNEWS_PASSWORD_SAVED || savedKeys.has('EASYNEWS_PASSWORD'));
+  easynewsPasswordCleared = false;
+  const easynewsPassEl = document.getElementById('easynews-pass');
+  if (easynewsPassEl) {
+    easynewsPassEl.value = '';
+    easynewsPassEl.placeholder = easynewsPasswordSaved ? 'Saved · enter to replace' : 'Easynews password';
+  }
+  const easynewsSavedEl = document.getElementById('easynews-pass-saved');
+  if (easynewsSavedEl) easynewsSavedEl.textContent = easynewsPasswordSaved ? 'SAVED' : '';
+  const easynewsRemoveEl = document.getElementById('easynews-pass-remove');
+  if (easynewsRemoveEl) easynewsRemoveEl.hidden = !easynewsPasswordSaved;
   if (typeof loadExtraUsenetSources === 'function') loadExtraUsenetSources(env);
   for (const key of savedKeys) {
     const input = document.getElementById(key);
@@ -1412,6 +1458,8 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     TORRENTIO_URL: document.getElementById('torrentio-url')?.value.trim() || '',
     ENABLE_DMM: document.getElementById('enable-dmm')?.checked ? 'true' : 'false',
     ENABLE_REMUXDB: document.getElementById('enable-remuxdb')?.checked ? 'true' : 'false',
+    AIO_PRECACHE_NEXT_EPISODE: document.getElementById('aio-precache-next-episode')?.checked ? 'true' : 'false',
+    JELLYFIN_ENABLED: document.getElementById('jellyfin-enabled')?.checked ? 'true' : 'false',
     ENABLE_ANIME_SOURCES:document.getElementById('enable-anime-sources').checked?'true':'false',
     USENET_ENABLED: document.getElementById('enable-usenet').checked ? 'true' : 'false',
     USENET_HOST: document.getElementById('usenet-host').value.trim(),
@@ -1426,6 +1474,18 @@ document.getElementById('setup-form').addEventListener('submit',async event=>{
     AIOMETADATA_TEMPLATE: document.getElementById('aiometadata-template')?.value || 'tamtaro-aiometadata-with-anime.json',
     DISCORD_WEBHOOK_URL: document.getElementById('discord-webhook-url')?.value.trim() || ''
   };
+  const composeProfilesVal = document.getElementById('compose-profiles')?.value;
+  if (composeProfilesVal) payload.COMPOSE_PROFILES = composeProfilesVal;
+  const easynewsUserEl = document.getElementById('easynews-user');
+  if (easynewsUserEl && easynewsUserEl.value !== undefined) {
+    payload.EASYNEWS_USER = String(easynewsUserEl.value).trim();
+  }
+  const easynewsPass = document.getElementById('easynews-pass')?.value || '';
+  if (easynewsPass) {
+    payload.EASYNEWS_PASSWORD = easynewsPass;
+  } else if (easynewsPasswordCleared) {
+    payload.EASYNEWS_PASSWORD = '';
+  }
   const newPassword = document.getElementById('stack-admin-password')?.value;
   if (newPassword) payload.ADDON_PASSWORD = newPassword;
   const usenetPassword=document.getElementById('usenet-pass').value;
@@ -1675,6 +1735,21 @@ if (setupFormEl) {
   setupFormEl.addEventListener('input', () => { if (typeof setFormDirty === 'function') setFormDirty(true); });
   setupFormEl.addEventListener('change', () => { if (typeof setFormDirty === 'function') setFormDirty(true); });
 }
+
+document.getElementById('easynews-pass-remove')?.addEventListener('click', event => {
+  event.preventDefault();
+  easynewsPasswordSaved = false;
+  easynewsPasswordCleared = true;
+  const passInput = document.getElementById('easynews-pass');
+  if (passInput) {
+    passInput.value = '';
+    passInput.placeholder = 'Easynews password';
+  }
+  const savedEl = document.getElementById('easynews-pass-saved');
+  if (savedEl) savedEl.textContent = '';
+  event.currentTarget.hidden = true;
+  if (typeof setFormDirty === 'function') setFormDirty(true);
+});
 
 function updateTemplateDisplay() {
   const select = document.getElementById('aiometadata-template');
@@ -2313,6 +2388,35 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
   }
 });
 
+async function runCloudflareTunnelAction(action, btn, pendingLabel, successMsg) {
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = pendingLabel;
+  try {
+    const res = await api('/api/cloudflare/tunnel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    notify(res.success ? successMsg : `Tunnel ${action} failed: ${res.error || 'Unknown error'}`, !res.success);
+    await refreshCloudflareStatus();
+  } catch (err) {
+    notify(`Could not ${action} tunnel: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+document.getElementById('btn-stop-cf-tunnel')?.addEventListener('click', e => {
+  return runCloudflareTunnelAction('stop', e.currentTarget, 'Stopping…', '✓ Local Cloudflare tunnel stopped.');
+});
+
+document.getElementById('btn-restart-cf-tunnel')?.addEventListener('click', e => {
+  return runCloudflareTunnelAction('restart', e.currentTarget, 'Restarting…', '✓ Local Cloudflare tunnel restarted.');
+});
+
 document.getElementById('btn-copy-cf-cname')?.addEventListener('click', (e) => {
   const targetEl = document.getElementById('cf-cname-target');
   const target = targetEl ? targetEl.textContent.trim() : '';
@@ -2621,12 +2725,16 @@ async function runPlaybackTest() {
 
   testBtns.forEach(btn => { if (btn) btn.disabled = true; });
   const mode = document.getElementById('streaming-mode')?.value || 'debrid';
+  const kind = document.getElementById('playback-test-kind')?.value || 'movie';
+  const contentId = document.getElementById('playback-test-id')?.value?.trim() || '';
+  const playbackPayload = { mode, kind };
+  if (contentId) playbackPayload.content_id = contentId;
 
   try {
     const res = await api('/api/test-playback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode })
+      body: JSON.stringify(playbackPayload)
     });
 
     let authStep = null, streamStep = null, mediaStep = null;
@@ -2740,6 +2848,105 @@ async function runPlaybackTest() {
   }
 }
 
+function renderBackupArchives(telemetry) {
+  const listEl = document.getElementById('backup-archives-list');
+  if (!listEl) return;
+  const archives = Array.isArray(telemetry?.archives) ? telemetry.archives : [];
+  if (!archives.length) {
+    listEl.innerHTML = '<div style="font-size:12.5px;color:var(--text-muted);padding:6px 2px;">No backup archives found in backups/.</div>';
+    return;
+  }
+  listEl.innerHTML = archives.map(arch => {
+    const safeName = escapeHtml(arch.name || '');
+    const dateStr = arch.mtime ? escapeHtml(new Date(arch.mtime).toLocaleString()) : 'Unknown date';
+    const sizeNum = Number(arch.size_mb ?? 0);
+    const sizeLabel = `${Number.isFinite(sizeNum) ? sizeNum.toFixed(2) : '0.00'} MB`;
+    const pgBadge = arch.postgresIncluded === true
+      ? '<span class="op-badge badge-pg-included">Postgres Included</span>'
+      : (arch.postgresIncluded === false
+        ? '<span class="op-badge badge-pg-missing">No Postgres</span>'
+        : '<span class="op-badge badge-pg-unknown">Postgres Unverified</span>');
+    return `<div class="backup-archive-row">
+      <div class="backup-archive-meta">
+        <span class="backup-archive-name">${safeName}</span>
+        <span class="backup-archive-sub"><span>${dateStr}</span><span>•</span><span>${escapeHtml(sizeLabel)}</span>${pgBadge}</span>
+      </div>
+      <div class="backup-archive-actions">
+        <button type="button" class="mini-action-btn btn-restore-backup" data-archive="${safeName}">Restore ↺</button>
+      </div>
+    </div>`;
+  }).join('');
+  if (typeof listEl.querySelectorAll === 'function') {
+    listEl.querySelectorAll('.btn-restore-backup').forEach(btn => {
+      btn.addEventListener('click', event => {
+        const targetBtn = event.currentTarget || btn;
+        const filename = targetBtn.dataset?.archive || targetBtn.getAttribute?.('data-archive') || '';
+        restoreBackupArchive(filename, targetBtn);
+      });
+    });
+  }
+}
+
+async function refreshBackupsList() {
+  const telemetry = await api('/api/backups');
+  renderBackupArchives(telemetry);
+  return telemetry;
+}
+
+async function restoreBackupArchive(filename, button) {
+  if (!filename) return false;
+  if (!confirm(`Restore backup "${filename}"? This will overwrite current stack configuration and databases.`)) return false;
+  const restoreBtns = Array.from(document.querySelectorAll?.('.btn-restore-backup') || []);
+  const targets = restoreBtns.length ? restoreBtns : (button ? [button] : []);
+  const origText = button ? button.textContent : '';
+  targets.forEach(btn => { if (btn) btn.disabled = true; });
+  if (button) button.textContent = 'Restoring…';
+  try {
+    const res = await api('/api/backups/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename })
+    });
+    const out = document.getElementById('maintenance-output');
+    if (out) out.textContent = res.message || `Restored ${filename}.`;
+    notify(res.message || `Backup ${filename} restored.`);
+    return true;
+  } catch (error) {
+    const out = document.getElementById('maintenance-output');
+    if (out) out.textContent = `Restore failed: ${error.message}`;
+    notify(`Restore failed: ${error.message}`, true);
+    return false;
+  } finally {
+    targets.forEach(btn => { if (btn) btn.disabled = false; });
+    if (button) button.textContent = origText;
+  }
+}
+
+async function pruneBackups(keepLast, button) {
+  const parsed = Number.parseInt(keepLast, 10);
+  const keep = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 5;
+  if (button) button.disabled = true;
+  try {
+    const res = await api('/api/backups/prune', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_last: keep })
+    });
+    const prunedCount = res.pruned ? res.pruned.length : 0;
+    notify(`Backup retention: kept ${res.retained?.length || 0} (limit ${keep}), deleted ${prunedCount} old archive(s).`);
+    await refreshBackupsList();
+    if (typeof refreshHealthTelemetry === 'function') {
+      refreshHealthTelemetry().catch(() => {});
+    }
+    return res;
+  } catch (e) {
+    notify(`Prune failed: ${e.message}`, true);
+    return null;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function refreshMaintenance() {
   const state = await api('/api/maintenance');
   document.getElementById('readiness-output').textContent = [
@@ -2756,10 +2963,40 @@ async function refreshMaintenance() {
     backup.createdAt ? `Created: ${new Date(backup.createdAt).toLocaleString()}` : 'Make a backup before an upgrade.',
     `PostgreSQL included: ${backup.postgresIncluded ? 'yes' : 'not confirmed'}`
   ].join('\n');
+  if (typeof refreshBackupsList === 'function') {
+    try { await refreshBackupsList(); } catch (_) {}
+  }
 }
 
 async function runOperations() {
   document.getElementById('refresh-maintenance')?.addEventListener('click', () => refreshMaintenance().catch(error=>notify(error.message, true)));
+  document.getElementById('btn-refresh-backups')?.addEventListener('click', () => {
+    if (typeof refreshBackupsList === 'function') refreshBackupsList().catch(error => notify(error.message, true));
+  });
+  document.getElementById('btn-maintenance-prune-backups')?.addEventListener('click', event => {
+    const keepVal = document.getElementById('backup-keep-last')?.value || 5;
+    if (typeof pruneBackups === 'function') pruneBackups(keepVal, event.currentTarget);
+  });
+  document.getElementById('btn-restart-stack')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (!confirm('Restart stack containers? Active streams will briefly pause.')) return;
+    button.disabled = true;
+    try {
+      const result = await api('/api/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+      const msg = result.message || 'Stack restart initiated.';
+      const readinessOut = document.getElementById('readiness-output');
+      if (readinessOut) readinessOut.textContent = msg;
+      notify(msg, result.success === false);
+    } catch (error) {
+      notify(`Stack restart failed: ${error.message}`, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.getElementById('refresh-resources')?.addEventListener('click', async () => {
     try {
       const result = await api('/api/resources');
@@ -2770,16 +3007,33 @@ async function runOperations() {
     try { document.getElementById('search-status-output').textContent = JSON.stringify(await api('/api/search-status'), null, 2); }
     catch (error) { document.getElementById('search-status-output').textContent = error.message; }
   });
-  document.getElementById('clean-cache')?.addEventListener('click', async event => {
-    const button=event.currentTarget;
-    if (!confirm('Clear temporary cache? Stored profiles and databases will be kept.')) return;
-    button.disabled=true;
+  const runCacheAction = async (button, dryRun) => {
+    if (!dryRun && !confirm('Clear temporary cache? Stored profiles and databases will be kept.')) return;
+    button.disabled = true;
     try {
-      const result=await api('/api/clean-cache',{method:'POST'});
-      document.getElementById('cache-output').textContent = result.success ? `Cleared ${result.freed_mb} MB.` : `Cleanup incomplete: ${(result.errors || []).join('; ')}`;
-    } catch(error) { document.getElementById('cache-output').textContent=error.message; }
-    finally { button.disabled=false; }
-  });
+      const includePosterCache = Boolean(document.getElementById('clean-cache-posters')?.checked);
+      const result = await api('/api/clean-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: dryRun, include_poster_cache: includePosterCache })
+      });
+      const detailLines = Array.isArray(result.details) && result.details.length
+        ? '\n' + result.details.map(d => {
+          const mb = ((d.size_bytes || 0) / (1024 * 1024)).toFixed(2);
+          return `• ${d.target}: ${mb} MB (${d.file_count || 0} files) [${d.status}]`;
+        }).join('\n')
+        : '';
+      const summary = dryRun
+        ? `Preview: ${result.freed_mb} MB recoverable (${result.total_files || 0} files).`
+        : `Cleared ${result.freed_mb} MB.`;
+      document.getElementById('cache-output').textContent = result.success
+        ? `${summary}${detailLines}`
+        : `Cleanup incomplete: ${(result.errors || []).join('; ')}`;
+    } catch (error) { document.getElementById('cache-output').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  document.getElementById('preview-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, true));
+  document.getElementById('clean-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, false));
   const output = id => document.getElementById(id);
   document.getElementById('run-diagnostics')?.addEventListener('click', async () => {
     try {
@@ -2808,9 +3062,26 @@ async function runOperations() {
       output('smoke-output').textContent = JSON.stringify(result, null, 2);
     } catch (error) { output('smoke-output').textContent = error.message; }
   });
+  const providerCheckSelect = document.getElementById('provider-check');
+  const providerKeyInput = document.getElementById('provider-key');
+  const syncProviderKeyPlaceholder = () => {
+    if (!providerCheckSelect || !providerKeyInput) return;
+    if (providerCheckSelect.value === 'usenet') {
+      providerKeyInput.placeholder = 'Tests saved Usenet NNTP server (no key needed)';
+    } else if (providerCheckSelect.value === 'nzb') {
+      providerKeyInput.placeholder = 'Paste NZB key or leave blank for saved';
+    } else {
+      providerKeyInput.placeholder = 'Paste key to test';
+    }
+  };
+  providerCheckSelect?.addEventListener('change', syncProviderKeyPlaceholder);
+  syncProviderKeyPlaceholder();
   document.getElementById('validate-provider')?.addEventListener('click', async () => {
     try {
-      const result = await api('/api/validate-provider', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider:document.getElementById('provider-check').value, key:document.getElementById('provider-key').value})});
+      const provider = document.getElementById('provider-check').value;
+      const rawKey = document.getElementById('provider-key').value;
+      const key = (provider === 'nzb' && !rawKey.trim()) ? 'saved' : rawKey;
+      const result = await api('/api/validate-provider', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, key})});
       output('provider-output').textContent = `${result.status.toUpperCase()}: ${result.detail}`;
       document.getElementById('provider-key').value = '';
     } catch (error) { output('provider-output').textContent = error.message; }
@@ -2896,7 +3167,7 @@ async function runOperations() {
         'TMDB_API_KEY','TVDB_API_KEY','FANART_API_KEY','MDBLIST_API_KEY','GEMINI_API_KEY','RPDB_API_KEY',
         'REALDEBRID_API_KEY','TORBOX_API_KEY','PREMIUMIZE_API_KEY','ALLDEBRID_API_KEY','DEBRIDLINK_API_KEY','EASYDEBRID_API_KEY',
         'TRAKT_CLIENT_ID','TRAKT_CLIENT_SECRET','SIMKL_CLIENT_ID','SIMKL_CLIENT_SECRET','ANILIST_CLIENT_ID','ANILIST_CLIENT_SECRET',
-        'SUBDL_API_KEY','SUBSOURCE_API_KEY','WYZIE_API_KEY','NZB_INDEXER_API_KEY','NZB_INDEXER_URL'
+        'SUBDL_API_KEY','SUBSOURCE_API_KEY','WYZIE_API_KEY','OPENSUBTITLES_API_KEY','NZB_INDEXER_API_KEY','NZB_INDEXER_URL'
       ]) {
         if (typeof data[key] === 'string') values[key] = data[key];
       }
@@ -3387,19 +3658,9 @@ function initHealthTelemetry() {
     }
   });
 
-  document.getElementById('btn-prune-backups')?.addEventListener('click', async () => {
-    try {
-      const res = await api('/api/backups/prune', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keep_last: 5 })
-      });
-      const prunedCount = res.pruned ? res.pruned.length : 0;
-      notify(`Backup retention: kept ${res.retained?.length || 0}, deleted ${prunedCount} old archive(s).`);
-      await refreshHealthTelemetry();
-    } catch (e) {
-      notify(`Prune failed: ${e.message}`, true);
-    }
+  document.getElementById('btn-prune-backups')?.addEventListener('click', async event => {
+    const keepVal = document.getElementById('backup-keep-last')?.value || 5;
+    await pruneBackups(keepVal, event.currentTarget);
   });
 
   const select = document.getElementById('auto-refresh-select');

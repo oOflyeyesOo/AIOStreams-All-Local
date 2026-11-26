@@ -156,3 +156,125 @@ test('cache cleanup needs confirmation and is a single POST with a disabled butt
  const request=button.handlers.click({currentTarget:button});assert.equal(button.disabled,true);assert.equal(calls,1);
  resolve({success:true,freed_mb:4});await request;assert.equal(button.disabled,false);assert.match(env.nodes.get('cache-output').textContent,/4 MB/);
 });
+
+test('preview-cache runs dry_run without confirmation and forwards include_poster_cache toggle',async()=>{
+ const calls=[];
+ const env=environment(async(path,options)=>{
+  calls.push({path,body:JSON.parse(options.body)});
+  return {success:true,dry_run:true,freed_mb:12.5,total_files:42,details:[{target:'Posters+ Image Cache',size_bytes:13107200,file_count:42,status:'dry-run'}]};
+ });
+ await vm.runInContext('runOperations()',env.context);
+ env.document.getElementById('clean-cache-posters').checked=true;
+ const previewBtn=env.document.getElementById('preview-cache');
+ await previewBtn.handlers.click({currentTarget:previewBtn});
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].path,'/api/clean-cache');
+ assert.deepEqual(calls[0].body,{dry_run:true,include_poster_cache:true});
+ assert.equal(previewBtn.disabled,false);
+ assert.match(env.nodes.get('cache-output').textContent,/Preview: 12\.5 MB recoverable \(42 files\)/);
+ assert.match(env.nodes.get('cache-output').textContent,/Posters\+ Image Cache/);
+});
+
+test('clean-cache forwards include_poster_cache when poster toggle is checked',async()=>{
+ const calls=[];
+ const env=environment(async(path,options)=>{
+  calls.push({path,body:JSON.parse(options.body)});
+  return {success:true,freed_mb:8.2};
+ },()=>true);
+ await vm.runInContext('runOperations()',env.context);
+ env.document.getElementById('clean-cache-posters').checked=true;
+ const button=env.document.getElementById('clean-cache');
+ await button.handlers.click({currentTarget:button});
+ assert.deepEqual(calls,[{path:'/api/clean-cache',body:{dry_run:false,include_poster_cache:true}}]);
+ assert.match(env.nodes.get('cache-output').textContent,/Cleared 8\.2 MB/);
+});
+
+test('backup browser renders escaped archives, postgres badges, retention prune, and confirmed restore',async()=>{
+ const nodes=new Map();
+ const calls=[];
+ let confirmed=false;
+ const makeNode=(id)=>({id,textContent:'',innerHTML:'',value:'',disabled:false,handlers:{},dataset:{},addEventListener(t,h){this.handlers[t]=h;},querySelectorAll(){return [];}});
+ const document={
+  getElementById(id){if(!nodes.has(id))nodes.set(id,makeNode(id));return nodes.get(id);},
+  querySelectorAll(){return [];}
+ };
+ const context=vm.createContext({
+  document,
+  confirm:()=>confirmed,
+  notify:()=>{},
+  api:async(path,options)=>{
+   const body=options?.body?JSON.parse(options.body):null;
+   calls.push({path,method:options?.method||'GET',body});
+   if(path==='/api/backups'){
+    return {count:2,total_size_mb:15.5,archives:[
+     {name:'aio-backup-2026.tar.gz',size_mb:10.25,mtime:'2026-11-25T12:00:00Z',postgresIncluded:true},
+     {name:'<img src=x onerror=alert(1)>.tar.gz',size_mb:5.25,mtime:'2026-11-24T12:00:00Z',postgresIncluded:false}
+    ]};
+   }
+   if(path==='/api/backups/prune')return {retained:['aio-backup-2026.tar.gz'],pruned:['old.tar.gz'],keep_last:body.keep_last};
+   if(path==='/api/backups/restore')return {success:true,filename:body.filename,message:'Restored '+body.filename};
+   return {success:true};
+  }
+ });
+ const escape=source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0];
+ const backupCode=source.slice(source.indexOf('function renderBackupArchives('),source.indexOf('async function refreshMaintenance('));
+ vm.runInContext(escape+'\n'+backupCode,context);
+
+ await vm.runInContext('refreshBackupsList()',context);
+ const listHtml=nodes.get('backup-archives-list').innerHTML;
+ assert.match(listHtml,/aio-backup-2026\.tar\.gz/);
+ assert.match(listHtml,/10\.25 MB/);
+ assert.match(listHtml,/Postgres Included/);
+ assert.match(listHtml,/No Postgres/);
+ assert.doesNotMatch(listHtml,/<img/);
+ assert.match(listHtml,/&lt;img/);
+
+ const pruneBtn=makeNode('prune-btn');
+ await context.pruneBackups('10',pruneBtn);
+ assert.equal(pruneBtn.disabled,false);
+ const pruneCall=calls.find(c=>c.path==='/api/backups/prune');
+ assert.equal(pruneCall.body.keep_last,10);
+
+ const restoreBtn=makeNode('restore-btn');
+ restoreBtn.textContent='Restore ↺';
+ confirmed=false;
+ assert.equal(await context.restoreBackupArchive('aio-backup-2026.tar.gz',restoreBtn),false);
+ assert.equal(calls.some(c=>c.path==='/api/backups/restore'),false);
+
+ confirmed=true;
+ let resolveRestore;
+ const origApi=context.api;
+ context.api=(path,options)=>path==='/api/backups/restore'
+  ?(calls.push({path,method:options.method,body:JSON.parse(options.body)}),new Promise(r=>{resolveRestore=r;}))
+  :origApi(path,options);
+ const restoring=context.restoreBackupArchive('aio-backup-2026.tar.gz',restoreBtn);
+ assert.equal(restoreBtn.disabled,true);
+ assert.equal(restoreBtn.textContent,'Restoring…');
+ resolveRestore({success:true,message:'Restored aio-backup-2026.tar.gz'});
+ assert.equal(await restoring,true);
+ assert.equal(restoreBtn.disabled,false);
+ assert.equal(restoreBtn.textContent,'Restore ↺');
+ assert.match(nodes.get('maintenance-output').textContent,/Restored aio-backup-2026\.tar\.gz/);
+});
+
+test('safe stack restart requires confirmation and disables button in flight',async()=>{
+ let calls=0,resolve;
+ const env=environment((path,options)=>{
+  assert.equal(path,'/api/restart');
+  assert.equal(options.method,'POST');
+  calls++;
+  return new Promise(r=>resolve=r);
+ });
+ await vm.runInContext('runOperations()',env.context);
+ const button=env.document.getElementById('btn-restart-stack');
+ await button.handlers.click({currentTarget:button});
+ assert.equal(calls,0);
+ env.context.confirm=()=>true;
+ const req=button.handlers.click({currentTarget:button});
+ assert.equal(button.disabled,true);
+ assert.equal(calls,1);
+ resolve({success:true,message:'Stack restart initiated.'});
+ await req;
+ assert.equal(button.disabled,false);
+ assert.match(env.nodes.get('readiness-output').textContent,/Stack restart initiated/);
+});
