@@ -20,31 +20,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-try:
-    from tools.resources import resolve_compose_project
-except ImportError:
-    try:
-        from resources import resolve_compose_project
-    except ImportError:
-        def resolve_compose_project() -> str:
-            """Resolve the active Compose project name from env or docker container label."""
-            proj = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME")
-            if proj:
-                return proj.strip()
-            hostname = os.environ.get("HOSTNAME")
-            if hostname:
-                try:
-                    inspect_res = subprocess.run(
-                        ["docker", "inspect", hostname, "--format", '{{index .Config.Labels "com.docker.compose.project"}}'],
-                        capture_output=True, text=True, timeout=5
-                    )
-                    if inspect_res.returncode == 0:
-                        found = inspect_res.stdout.strip()
-                        if found and found != "<no value>" and re.fullmatch(r"[a-zA-Z0-9._-]+", found):
-                            return found
-                except Exception:
-                    pass
-            return ""
+
+def _extract_compose_project_label(labels_l: str) -> str:
+    """Extract the lowercase com.docker.compose.project value from docker ps labels."""
+    if "com.docker.compose.project=" not in labels_l:
+        return ""
+    for lbl in labels_l.split(","):
+        lbl = lbl.strip()
+        if lbl.startswith("com.docker.compose.project="):
+            return lbl.split("=", 1)[1].strip()
+    return ""
 
 
 def normalize_tunnel_token(token: str) -> str:
@@ -198,9 +183,26 @@ def check_cloudflare_containers() -> dict:
 
     local_tunnel = None
     external_connectors = []
-    project = resolve_compose_project().lower()
+    project = (
+        os.environ.get("AIO_PROJECT_NAME", "").strip()
+        or os.environ.get("COMPOSE_PROJECT_NAME", "").strip()
+    ).lower()
+    lines = res.stdout.strip().splitlines()
+    if not project:
+        hostname = os.environ.get("HOSTNAME", "").strip().lower()
+        if hostname:
+            for line in lines:
+                parts = line.split("\t")
+                if len(parts) < 7:
+                    continue
+                cid_l = parts[0].strip().lower()
+                if cid_l and (cid_l.startswith(hostname) or hostname.startswith(cid_l)):
+                    found = _extract_compose_project_label(parts[6].lower())
+                    if found:
+                        project = found
+                        break
 
-    for line in res.stdout.strip().splitlines():
+    for line in lines:
         parts = line.split("\t")
         if len(parts) < 5:
             continue
@@ -231,13 +233,7 @@ def check_cloudflare_containers() -> dict:
         if not is_cf:
             continue
 
-        proj_label = ""
-        if "com.docker.compose.project=" in labels_l:
-            for lbl in labels_l.split(","):
-                lbl = lbl.strip()
-                if lbl.startswith("com.docker.compose.project="):
-                    proj_label = lbl.split("=", 1)[1].strip()
-                    break
+        proj_label = _extract_compose_project_label(labels_l)
         same_project = (not project) or (not proj_label) or (proj_label == project)
         is_local = same_project and (
             name in ("aio-tunnel", "cloudflared")
@@ -528,7 +524,10 @@ def manage_local_tunnel(action: str, cwd: str = None, token: str = None) -> dict
 
     compose = ["docker", "compose"]
     root = Path(cwd or ".")
-    project = os.environ.get("AIO_PROJECT_NAME") or os.environ.get("COMPOSE_PROJECT_NAME") or resolve_compose_project()
+    project = (
+        os.environ.get("AIO_PROJECT_NAME", "").strip()
+        or os.environ.get("COMPOSE_PROJECT_NAME", "").strip()
+    )
     if project:
         compose.extend(["-p", project])
     if not (root / "docker-compose.yml").exists() and (root / "compose.manager.yml").exists():
