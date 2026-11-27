@@ -190,6 +190,7 @@ async function api(path, options, attempt=0) {
     const response = await fetch(new URL(path,location.origin).href, options);
     if (!response.ok) {
       let msg = response.status === 401 ? 'Sign in with your portal password, then retry.' : `The server returned ${response.status}. Check setup details and retry.`;
+      const cloned = typeof response.clone === 'function' ? response.clone() : null;
       try {
         const detail = await response.json();
         if (detail) {
@@ -205,10 +206,14 @@ async function api(path, options, attempt=0) {
         }
       } catch {
         try {
-          const rawText = await response.text();
+          const textSource = cloned && typeof cloned.text === 'function' ? cloned : (typeof response.text === 'function' ? response : null);
+          const rawText = textSource ? await textSource.text() : '';
           if (rawText && typeof rawText === 'string') {
             const trimmed = rawText.trim();
-            if (trimmed && trimmed.length < 300 && !trimmed.startsWith('<!DOCTYPE') && !trimmed.startsWith('<html')) {
+            const looksLikeHtmlOrTrace = /^\s*<(!doctype|html|head|body|\?xml|title|h1|h2|center|pre|script|style)\b/i.test(trimmed)
+              || /<\/?[a-z][\s\S]*>/i.test(trimmed)
+              || /traceback\s*\(|at\s+\S+\s*\(/i.test(trimmed);
+            if (trimmed && trimmed.length < 300 && !looksLikeHtmlOrTrace) {
               msg = trimmed;
             }
           }
@@ -218,7 +223,11 @@ async function api(path, options, attempt=0) {
       error.status = response.status;
       throw error;
     }
-    return await response.json();
+    try {
+      return await response.json();
+    } catch {
+      throw new Error('The server returned an unexpected non-JSON response. Please retry.');
+    }
   } catch(error) {
     const readOnly = !options?.method || options.method === 'GET';
     if (readOnly && attempt < 2 && (!error.status || error.status >= 500)) {
@@ -2299,7 +2308,7 @@ async function refreshCloudflareStatus() {
     } else {
       if (hostBadge) hostBadge.style.display = 'none';
       if (hintBox) hintBox.style.display = 'none';
-      if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
+      if (res.local_tunnel && (res.local_tunnel.state === 'running' || String(res.local_tunnel.status || '').toLowerCase().includes('up'))) {
         html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is running (Origin: <code>${escapeHtml(recommendedOrigin)}</code>). Remote connectivity is not verified.</div>
                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${escapeHtml(res.local_tunnel.status)}</div>`;
       } else if (res.token_configured) {
@@ -2315,8 +2324,10 @@ async function refreshCloudflareStatus() {
 
     body.innerHTML = html;
     if (banner) banner.style.display = 'block';
+    return true;
   } catch (err) {
     if (body) body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${escapeHtml(err.message)}</span>`;
+    return false;
   }
 }
 if (typeof window !== 'undefined') window.refreshCloudflareStatus = refreshCloudflareStatus;
@@ -2400,8 +2411,25 @@ if (proxyUrlEl) {
   });
 }
 
-document.getElementById('btn-scan-cf-connectors')?.addEventListener('click', () => {
-  refreshCloudflareStatus().then(() => notify('Scanned Docker host for Cloudflare connectors ↻'));
+document.getElementById('btn-scan-cf-connectors')?.addEventListener('click', async (e) => {
+  const btn = e?.currentTarget || document.getElementById('btn-scan-cf-connectors');
+  const orig = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.setAttribute?.('aria-busy', 'true');
+    btn.textContent = 'Scanning…';
+  }
+  try {
+    const ok = await refreshCloudflareStatus();
+    if (ok) notify('Scanned Docker host for Cloudflare connectors ↻');
+    else notify('Could not scan Docker host for Cloudflare connectors.', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.removeAttribute?.('aria-busy');
+      btn.textContent = orig;
+    }
+  }
 });
 
 document.getElementById('cf-tunnel-token')?.addEventListener('input', () => {
@@ -2430,11 +2458,14 @@ document.getElementById('cf-origin-preset')?.addEventListener('change', (e) => {
   updateCloudflareOriginWarning(cachedCloudflareStatus);
 });
 
-document.getElementById('btn-save-cf-token')?.addEventListener('click', async () => {
+document.getElementById('btn-save-cf-token')?.addEventListener('click', async (e) => {
+  const btn = e?.currentTarget || document.getElementById('btn-save-cf-token');
+  const orig = btn ? btn.textContent : '';
   const input = document.getElementById('cf-tunnel-token');
   let token = input ? input.value.trim() : '';
   if (!token) {
-    if (cachedCloudflareStatus?.token_configured || input?.placeholder?.includes('Saved') || cachedEnv?.CLOUDFLARE_TUNNEL_TOKEN_SAVED) {
+    const savedEnv = typeof cachedEnv !== 'undefined' ? cachedEnv : null;
+    if (cachedCloudflareStatus?.token_configured || input?.placeholder?.includes('Saved') || savedEnv?.CLOUDFLARE_TUNNEL_TOKEN_SAVED) {
       notify('✓ Cloudflare Tunnel Token is already saved in configuration! (To replace, type a new token here.)');
     } else {
       notify('Enter a Cloudflare Tunnel Token in the input box above to save.', true);
@@ -2458,6 +2489,11 @@ document.getElementById('btn-save-cf-token')?.addEventListener('click', async ()
     notify('⚠️ Notice: You entered a Tunnel UUID. Cloudflared needs the full base64 token starting with eyJh... to authenticate the container.', true);
   }
 
+  if (btn) {
+    btn.disabled = true;
+    btn.setAttribute?.('aria-busy', 'true');
+    btn.textContent = 'Saving…';
+  }
   try {
     await api('/api/save-env', {
       method: 'POST',
@@ -2483,6 +2519,12 @@ document.getElementById('btn-save-cf-token')?.addEventListener('click', async ()
     await refreshCloudflareStatus();
   } catch (err) {
     notify(`Failed to save tunnel token: ${err.message}`, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.removeAttribute?.('aria-busy');
+      btn.textContent = orig;
+    }
   }
 });
 
@@ -2492,39 +2534,43 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
   const tokenInput = document.getElementById('cf-tunnel-token');
   let tokenVal = tokenInput ? tokenInput.value.trim() : '';
 
-  if (tokenVal) {
-    const tokenMatch = tokenVal.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_.\-+/=]+)\1/i);
-    if (tokenMatch) {
-      tokenVal = tokenMatch[2];
-    } else {
-      tokenVal = tokenVal.replace(/^["']|["']$/g, '').trim();
-      const words = tokenVal.split(/\s+/);
-      if (words.length > 1) {
-        const longest = words.reduce((a, b) => b.length > a.length ? b : a, '');
-        if (longest.length >= 20) tokenVal = longest;
-      }
-    }
-    try {
-      await api('/api/save-env', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ CLOUDFLARE_TUNNEL_TOKEN: tokenVal })
-      });
-      tokenInput.value = '';
-      tokenInput.placeholder = 'Saved · enter to replace';
-      if (typeof cachedEnv !== 'undefined' && cachedEnv) {
-        cachedEnv.CLOUDFLARE_TUNNEL_TOKEN_SAVED = true;
-      }
-    } catch (_) {}
-  } else if (!cachedCloudflareStatus?.token_configured && !tokenInput?.placeholder?.includes('Saved') && !cachedEnv?.CLOUDFLARE_TUNNEL_TOKEN_SAVED) {
+  const savedEnvStart = typeof cachedEnv !== 'undefined' ? cachedEnv : null;
+  if (!tokenVal && !cachedCloudflareStatus?.token_configured && !tokenInput?.placeholder?.includes('Saved') && !savedEnvStart?.CLOUDFLARE_TUNNEL_TOKEN_SAVED) {
     notify('Please enter your Cloudflare Tunnel Token in the input box above before starting the tunnel.', true);
     if (tokenInput && typeof tokenInput.focus === 'function') tokenInput.focus();
     return;
   }
 
   btn.disabled = true;
+  btn.setAttribute?.('aria-busy', 'true');
   btn.textContent = 'Starting…';
   try {
+    if (tokenVal) {
+      const tokenMatch = tokenVal.match(/(?:--token(?:\s+|=)|(?:^|\s)[A-Za-z_]*TOKEN=)(["']?)([A-Za-z0-9_.\-+/=]+)\1/i);
+      if (tokenMatch) {
+        tokenVal = tokenMatch[2];
+      } else {
+        tokenVal = tokenVal.replace(/^["']|["']$/g, '').trim();
+        const words = tokenVal.split(/\s+/);
+        if (words.length > 1) {
+          const longest = words.reduce((a, b) => b.length > a.length ? b : a, '');
+          if (longest.length >= 20) tokenVal = longest;
+        }
+      }
+      try {
+        await api('/api/save-env', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ CLOUDFLARE_TUNNEL_TOKEN: tokenVal })
+        });
+        tokenInput.value = '';
+        tokenInput.placeholder = 'Saved · enter to replace';
+        if (typeof cachedEnv !== 'undefined' && cachedEnv) {
+          cachedEnv.CLOUDFLARE_TUNNEL_TOKEN_SAVED = true;
+        }
+      } catch (_) {}
+    }
+
     const startPayload = { action: 'start' };
     if (tokenVal) startPayload.token = tokenVal;
     const res = await api('/api/cloudflare/tunnel', {
@@ -2532,12 +2578,13 @@ document.getElementById('btn-start-cf-tunnel')?.addEventListener('click', async 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(startPayload)
     });
-    notify(res.success ? '✓ Local Cloudflare tunnel container (aio-tunnel) is active and running!' : `Tunnel start failed: ${res.error}`, !res.success);
+    notify(res?.success ? '✓ Local Cloudflare tunnel container (aio-tunnel) is active and running!' : `Tunnel start failed: ${res?.error || 'Unknown error'}`, !res?.success);
     await refreshCloudflareStatus();
   } catch (err) {
     notify(`Could not start tunnel: ${err.message}`, true);
   } finally {
     btn.disabled = false;
+    btn.removeAttribute?.('aria-busy');
     btn.textContent = orig;
   }
 });
@@ -2546,6 +2593,7 @@ async function runCloudflareTunnelAction(action, btn, pendingLabel, successMsg) 
   if (!btn) return;
   const orig = btn.textContent;
   btn.disabled = true;
+  btn.setAttribute?.('aria-busy', 'true');
   btn.textContent = pendingLabel;
   try {
     const res = await api('/api/cloudflare/tunnel', {
@@ -2553,12 +2601,13 @@ async function runCloudflareTunnelAction(action, btn, pendingLabel, successMsg) 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action })
     });
-    notify(res.success ? successMsg : `Tunnel ${action} failed: ${res.error || 'Unknown error'}`, !res.success);
+    notify(res?.success ? successMsg : `Tunnel ${action} failed: ${res?.error || 'Unknown error'}`, !res?.success);
     await refreshCloudflareStatus();
   } catch (err) {
     notify(`Could not ${action} tunnel: ${err.message}`, true);
   } finally {
     btn.disabled = false;
+    btn.removeAttribute?.('aria-busy');
     btn.textContent = orig;
   }
 }
@@ -2625,8 +2674,9 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     return;
   }
 
+  const savedEnvPush = typeof cachedEnv !== 'undefined' ? cachedEnv : null;
   const apiToken = apiTokenInput ? apiTokenInput.value.trim() : '';
-  const isApiTokenSaved = !!(cachedEnv?.CLOUDFLARE_API_TOKEN_SAVED || apiTokenInput?.placeholder?.includes('Saved'));
+  const isApiTokenSaved = !!(savedEnvPush?.CLOUDFLARE_API_TOKEN_SAVED || apiTokenInput?.placeholder?.includes('Saved'));
   if (!apiToken && !isApiTokenSaved) {
     notify('Enter a Cloudflare API Token (Zone:DNS:Edit permission) in the field below.', true);
     if (apiTokenInput && typeof apiTokenInput.focus === 'function') apiTokenInput.focus();
@@ -2659,17 +2709,18 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
   }
   if (!cnameTarget) {
     const cnameEl = document.getElementById('cf-cname-target');
-    const text = cnameEl ? cnameEl.textContent.trim() : '';
+    const text = cnameEl?.textContent ? cnameEl.textContent.trim() : '';
     if (text && !text.includes('<tunnel_id>') && text.includes('.cfargotunnel.com')) {
       cnameTarget = text;
     }
   }
 
-  const zoneId = (zoneIdInput ? zoneIdInput.value.trim() : '') || (cachedEnv?.CLOUDFLARE_ZONE_ID || '');
+  const zoneId = (zoneIdInput?.value ? zoneIdInput.value.trim() : '') || (savedEnvPush?.CLOUDFLARE_ZONE_ID || '');
   const originInput = document.getElementById('cf-origin-target');
   const serviceUrl = (originInput && originInput.value ? originInput.value.trim() : '') || (cachedCloudflareStatus?.recommended_origin || '');
 
   btn.disabled = true;
+  btn.setAttribute?.('aria-busy', 'true');
   btn.textContent = 'Pushing DNS…';
   if (resultBox) {
     resultBox.style.display = 'block';
@@ -2705,6 +2756,13 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
         notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
       }
       await refreshCloudflareStatus();
+      const syncedBase = res.recommended_base_url || res.BASE_URL || '';
+      if (res.base_url_synced && syncedBase) {
+        if (baseUrlInput) baseUrlInput.value = syncedBase;
+        if (proxyUrlInput) proxyUrlInput.value = syncedBase;
+        if (typeof cachedEnv !== 'undefined' && cachedEnv) cachedEnv.BASE_URL = syncedBase;
+        if (typeof updateGuidePlayerPreview === 'function') updateGuidePlayerPreview();
+      }
       if (resultBox) {
         resultBox.style.display = 'block';
         const appliedOrigin = res.service_url || serviceUrl;
@@ -2722,6 +2780,21 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
             ⚠️ Ingress update note: ${escapeHtml(res.ingress_error)}
           </div>`;
         }
+        if (res.base_url_synced && syncedBase) {
+          statusHtml += `<div id="cf-base-url-mismatch-box" class="cf-base-url-sync-ok" role="status">
+            ✓ Synced <code>BASE_URL</code> to <code>${escapeHtml(syncedBase)}</code> for Usenet &amp; Jellyfin stream URLs.
+          </div>`;
+        } else if (res.base_url_mismatch && res.recommended_base_url) {
+          const currentBase = res.current_base_url || 'http://localhost:3001';
+          const recommendedBase = res.recommended_base_url;
+          statusHtml += `<div id="cf-base-url-mismatch-box" class="cf-origin-warning" style="margin-top:8px;" role="status" aria-live="polite">
+            <div><strong>⚠️ BASE_URL Mismatch Detected:</strong> Saved <code>BASE_URL</code> is <code>${escapeHtml(currentBase)}</code>, so Usenet &amp; Jellyfin stream URLs will stay local instead of <code>${escapeHtml(recommendedBase)}</code>.</div>
+            <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button type="button" id="btn-sync-cf-base-url" class="mini-action-btn" data-recommended-base-url="${escapeHtml(recommendedBase)}" aria-label="Sync BASE_URL to ${escapeHtml(recommendedBase)}">Sync BASE_URL to ${escapeHtml(recommendedBase)}</button>
+              <span id="cf-base-url-mismatch-status" style="font-size:11.5px;"></span>
+            </div>
+          </div>`;
+        }
         if (!res.tunnel_started && !res.external_connector_active) {
           statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:12px;color:#fbbf24;">
             <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but local connector startup was not confirmed. Check its status and logs, then use <strong>Start Local Tunnel ▶</strong> if needed. A running connector alone does not verify the origin service.
@@ -2732,6 +2805,51 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
           </div>`;
         }
         resultBox.innerHTML = statusHtml;
+        const syncBaseBtn = resultBox.querySelector?.('#btn-sync-cf-base-url') || document.getElementById('btn-sync-cf-base-url');
+        if (syncBaseBtn && typeof syncBaseBtn.addEventListener === 'function') {
+          syncBaseBtn.addEventListener('click', async (syncEvt) => {
+            const targetBtn = syncEvt?.currentTarget || syncBaseBtn;
+            const origSyncLabel = targetBtn.textContent;
+            const targetBaseUrl = targetBtn.dataset?.recommendedBaseUrl
+              || targetBtn.getAttribute?.('data-recommended-base-url')
+              || res.recommended_base_url;
+            const mismatchBox = resultBox.querySelector?.('#cf-base-url-mismatch-box') || document.getElementById('cf-base-url-mismatch-box');
+            const mismatchStatus = resultBox.querySelector?.('#cf-base-url-mismatch-status') || document.getElementById('cf-base-url-mismatch-status');
+            if (!targetBaseUrl) return;
+            targetBtn.disabled = true;
+            targetBtn.setAttribute?.('aria-busy', 'true');
+            targetBtn.textContent = 'Syncing BASE_URL…';
+            if (mismatchStatus) mismatchStatus.textContent = 'Saving BASE_URL…';
+            try {
+              const saveRes = await api('/api/save-env', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ BASE_URL: targetBaseUrl })
+              });
+              if (saveRes && saveRes.success === false) {
+                throw new Error(saveRes.error || 'Failed to save BASE_URL');
+              }
+              if (baseUrlInput) baseUrlInput.value = targetBaseUrl;
+              if (proxyUrlInput) proxyUrlInput.value = targetBaseUrl;
+              if (typeof cachedEnv !== 'undefined' && cachedEnv) cachedEnv.BASE_URL = targetBaseUrl;
+              if (typeof updateGuidePlayerPreview === 'function') updateGuidePlayerPreview();
+              if (mismatchBox) {
+                mismatchBox.className = 'cf-base-url-sync-ok';
+                mismatchBox.innerHTML = `✓ Saved <code>BASE_URL</code> as <code>${escapeHtml(targetBaseUrl)}</code>. Click <strong>Connect my stack</strong> if containers need to reload the updated environment.`;
+              }
+              notify(`✓ Synced BASE_URL to ${targetBaseUrl}`);
+            } catch (syncErr) {
+              if (mismatchStatus) {
+                mismatchStatus.innerHTML = `<span style="color:#fecaca;">✗ ${escapeHtml(syncErr.message)}</span>`;
+              }
+              notify(`Failed to sync BASE_URL: ${syncErr.message}`, true);
+            } finally {
+              targetBtn.disabled = false;
+              targetBtn.removeAttribute?.('aria-busy');
+              targetBtn.textContent = origSyncLabel;
+            }
+          });
+        }
       }
     } else {
       throw new Error(res.error || 'Failed to push DNS record');
@@ -2744,6 +2862,7 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     }
   } finally {
     btn.disabled = false;
+    btn.removeAttribute?.('aria-busy');
     btn.textContent = orig;
   }
 });
@@ -2751,19 +2870,21 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
 function renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl) {
   const checks = Array.isArray(res?.checks) ? res.checks : [];
   const summary = res?.summary || {};
-  const passed = Number.isFinite(Number(summary.passed)) ? Number(summary.passed) : checks.filter(c => c.status === 'ok' || c.ok === true).length;
-  const failed = Number.isFinite(Number(summary.failed)) ? Number(summary.failed) : checks.filter(c => c.status === 'fail' || c.ok === false).length;
+  const passed = Number.isFinite(Number(summary.passed)) ? Number(summary.passed) : checks.filter(c => c.status === 'ok' || (!c.status && c.ok === true)).length;
+  const failed = Number.isFinite(Number(summary.failed)) ? Number(summary.failed) : checks.filter(c => c.status === 'fail' || (!c.status && c.ok === false)).length;
   const warnings = Number.isFinite(Number(summary.warnings)) ? Number(summary.warnings) : checks.filter(c => c.status === 'warn').length;
   const skipped = Number.isFinite(Number(summary.skipped)) ? Number(summary.skipped) : checks.filter(c => c.status === 'skipped').length;
   const total = Number.isFinite(Number(summary.total)) ? Number(summary.total) : checks.length;
 
   const categoryLabels = {
-    internal: 'Internal',
+    streaming: 'Streaming & Proxy',
+    cloudflare: 'Cloudflare Origin',
+    remote: 'Public URL',
     host_port: 'Host Port',
     portal: 'Portal Route',
-    cloudflare: 'Cloudflare Origin',
-    remote: 'Public URL'
+    internal: 'Internal'
   };
+  const categoryOrder = ['streaming', 'cloudflare', 'remote', 'host_port', 'portal', 'internal'];
   const statusLabels = {
     ok: '✓ Reachable',
     fail: '✗ Unreachable',
@@ -2795,12 +2916,19 @@ function renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl) {
       resultsEl.innerHTML = '<div class="reachability-item">No reachability checks returned.</div>';
       return;
     }
-    resultsEl.innerHTML = checks.map(check => {
+
+    const grouped = new Map();
+    for (const cat of categoryOrder) grouped.set(cat, []);
+    for (const check of checks) {
+      const catKey = String(check?.category || 'other').toLowerCase() || 'other';
+      if (!grouped.has(catKey)) grouped.set(catKey, []);
+      grouped.get(catKey).push(check);
+    }
+
+    const renderCheckCard = (check, categoryKey, categoryText) => {
       const rawStatus = String(check?.status || (check?.ok === true ? 'ok' : (check?.ok === false ? 'fail' : 'warn'))).toLowerCase();
       const statusKey = ['ok', 'fail', 'warn', 'skipped'].includes(rawStatus) ? rawStatus : (check?.ok === false ? 'fail' : 'warn');
       const badgeLabel = statusLabels[statusKey];
-      const categoryKey = String(check?.category || '').toLowerCase();
-      const categoryText = categoryLabels[categoryKey] || escapeHtml(String(check?.category || 'Check'));
       const latencyText = (typeof check?.latency_ms === 'number' && Number.isFinite(check.latency_ms))
         ? `${check.latency_ms.toFixed(1)} ms`
         : (check?.latency_ms != null && check.latency_ms !== '' ? `${escapeHtml(String(check.latency_ms))} ms` : '');
@@ -2810,18 +2938,36 @@ function renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl) {
         ? `<div class="reachability-remediation"><strong>Remediation:</strong> ${escapeHtml(String(check.remediation))}</div>`
         : '';
 
-      return `<div class="reachability-item reachability-${statusKey}" data-reachability-status="${statusKey}">
+      return `<div class="reachability-item reachability-${statusKey}" data-reachability-status="${statusKey}" data-reachability-category="${escapeHtml(categoryKey)}">
         <div class="reachability-item-head">
           <span class="reachability-name">${escapeHtml(String(check?.name || check?.id || 'Check'))}</span>
           <span class="reachability-badge reachability-badge-${statusKey}">${badgeLabel}</span>
         </div>
         <div class="reachability-meta">
-          <span>${categoryText}</span>${targetHtml}${latencyText ? `<span>${latencyText}</span>` : ''}
+          <span class="reachability-cat-pill">${categoryText}</span>${targetHtml}${latencyText ? `<span>${latencyText}</span>` : ''}
         </div>
         ${detailHtml}
         ${remediationHtml}
       </div>`;
-    }).join('');
+    };
+
+    const htmlParts = [];
+    for (const [categoryKey, items] of grouped.entries()) {
+      if (!items.length) continue;
+      const categoryText = categoryLabels[categoryKey] || escapeHtml(categoryKey);
+      const groupOk = items.filter(c => (c?.status || (c?.ok === true ? 'ok' : 'fail')) === 'ok').length;
+      const groupFail = items.filter(c => (c?.status || (c?.ok === false ? 'fail' : 'ok')) === 'fail').length;
+      const groupWarn = items.filter(c => c?.status === 'warn').length;
+      const groupSummary = groupFail > 0
+        ? `${groupFail} issue${groupFail === 1 ? '' : 's'}`
+        : (groupWarn > 0 ? `${groupWarn} warning${groupWarn === 1 ? '' : 's'}` : `${groupOk}/${items.length} ok`);
+      const headerExtraClass = categoryKey === 'streaming' ? ' reachability-group-streaming' : '';
+      htmlParts.push(`<div class="reachability-group-header${headerExtraClass}" data-reachability-group="${escapeHtml(categoryKey)}"><span>${categoryText}</span><span class="reachability-group-count">${escapeHtml(groupSummary)}</span></div>`);
+      for (const check of items) {
+        htmlParts.push(renderCheckCard(check, categoryKey, categoryText));
+      }
+    }
+    resultsEl.innerHTML = htmlParts.join('');
   }
 }
 
@@ -2837,10 +2983,11 @@ async function runReachabilityCheck(options = {}) {
   const origText = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
+    btn.setAttribute?.('aria-busy', 'true');
     btn.textContent = 'Testing Reachability…';
   }
   if (summaryEl) {
-    summaryEl.textContent = 'Checking internal services, host ports (:3001, :4005, :8088), Cloudflare origin, and public URLs…';
+    summaryEl.textContent = 'Checking internal services, host ports (:3001, :4005, :8088), Cloudflare origin, streaming health, and public URLs…';
   }
   if (resultsEl) {
     if (resultsEl.style) resultsEl.style.display = 'block';
@@ -2857,8 +3004,12 @@ async function runReachabilityCheck(options = {}) {
     });
     renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl);
     if (!summaryEl && resultsEl) {
-      const failed = Number(res?.summary?.failed ?? (Array.isArray(res?.checks) ? res.checks.filter(c => c.status === 'fail' || c.ok === false).length : 0));
-      const summaryBanner = `<div class="reachability-summary" style="grid-column:1 / -1;margin-top:0;">${failed === 0 && res?.ok !== false ? '<span style="color:#34d399;font-weight:700;">✓ All checked targets reachable</span>' : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`}${res?.recommended_origin ? ` · Recommended origin: <code>${escapeHtml(String(res.recommended_origin))}</code>` : ''}</div>`;
+      const checks = Array.isArray(res?.checks) ? res.checks : [];
+      const failed = Number(res?.summary?.failed ?? checks.filter(c => c.status === 'fail' || (!c.status && c.ok === false)).length);
+      const warnings = Number(res?.summary?.warnings ?? checks.filter(c => c.status === 'warn').length);
+      const warnSuffix = warnings > 0 ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
+      const modeSuffix = res?.connector_mode ? ` · Connector: <code>${escapeHtml(String(res.connector_mode))}</code>` : '';
+      const summaryBanner = `<div class="reachability-summary" style="grid-column:1 / -1;margin-top:0;">${failed === 0 && res?.ok !== false ? '<span style="color:#34d399;font-weight:700;">✓ All checked targets reachable</span>' : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`}${warnSuffix}${res?.recommended_origin ? ` · Recommended origin: <code>${escapeHtml(String(res.recommended_origin))}</code>` : ''}${modeSuffix}</div>`;
       resultsEl.innerHTML = summaryBanner + resultsEl.innerHTML;
     }
     return res;
@@ -2870,6 +3021,7 @@ async function runReachabilityCheck(options = {}) {
   } finally {
     if (btn) {
       btn.disabled = false;
+      btn.removeAttribute?.('aria-busy');
       btn.textContent = origText;
     }
   }
@@ -3168,7 +3320,8 @@ function renderBackupArchives(telemetry) {
   }
   listEl.innerHTML = archives.map(arch => {
     const safeName = escapeHtml(arch.name || '');
-    const dateStr = arch.mtime ? escapeHtml(new Date(arch.mtime).toLocaleString()) : 'Unknown date';
+    const parsedDate = arch.mtime ? new Date(arch.mtime) : null;
+    const dateStr = parsedDate && !Number.isNaN(parsedDate.getTime()) ? escapeHtml(parsedDate.toLocaleString()) : 'Unknown date';
     const sizeNum = Number(arch.size_mb ?? 0);
     const sizeLabel = `${Number.isFinite(sizeNum) ? sizeNum.toFixed(2) : '0.00'} MB`;
     const pgBadge = arch.postgresIncluded === true
@@ -3182,7 +3335,7 @@ function renderBackupArchives(telemetry) {
         <span class="backup-archive-sub"><span>${dateStr}</span><span>•</span><span>${escapeHtml(sizeLabel)}</span>${pgBadge}</span>
       </div>
       <div class="backup-archive-actions">
-        <button type="button" class="mini-action-btn btn-restore-backup" data-archive="${safeName}">Restore ↺</button>
+        <button type="button" class="mini-action-btn btn-restore-backup" data-archive="${safeName}" aria-label="Restore backup ${safeName}">Restore ↺</button>
       </div>
     </div>`;
   }).join('');
@@ -3210,16 +3363,22 @@ async function restoreBackupArchive(filename, button) {
   const targets = restoreBtns.length ? restoreBtns : (button ? [button] : []);
   const origText = button ? button.textContent : '';
   targets.forEach(btn => { if (btn) btn.disabled = true; });
-  if (button) button.textContent = 'Restoring…';
+  if (button) {
+    button.setAttribute?.('aria-busy', 'true');
+    button.textContent = 'Restoring…';
+  }
   try {
     const res = await api('/api/backups/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename })
     });
+    if (res && res.success === false) {
+      throw new Error(res.error || 'Restore failed');
+    }
     const out = document.getElementById('maintenance-output');
-    if (out) out.textContent = res.message || `Restored ${filename}.`;
-    notify(res.message || `Backup ${filename} restored.`);
+    if (out) out.textContent = res?.message || `Restored ${filename}.`;
+    notify(res?.message || `Backup ${filename} restored.`);
     return true;
   } catch (error) {
     const out = document.getElementById('maintenance-output');
@@ -3228,32 +3387,49 @@ async function restoreBackupArchive(filename, button) {
     return false;
   } finally {
     targets.forEach(btn => { if (btn) btn.disabled = false; });
-    if (button) button.textContent = origText;
+    if (button) {
+      button.removeAttribute?.('aria-busy');
+      button.textContent = origText;
+    }
   }
 }
 
 async function pruneBackups(keepLast, button) {
   const parsed = Number.parseInt(keepLast, 10);
   const keep = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 5;
-  if (button) button.disabled = true;
+  const origText = button ? button.textContent : '';
+  if (button) {
+    button.disabled = true;
+    button.setAttribute?.('aria-busy', 'true');
+    button.textContent = 'Pruning…';
+  }
   try {
     const res = await api('/api/backups/prune', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keep_last: keep })
     });
-    const prunedCount = res.pruned ? res.pruned.length : 0;
-    notify(`Backup retention: kept ${res.retained?.length || 0} (limit ${keep}), deleted ${prunedCount} old archive(s).`);
+    if (res && res.success === false) {
+      throw new Error(res.error || 'Prune failed');
+    }
+    const prunedCount = res?.pruned ? res.pruned.length : 0;
+    notify(`Backup retention: kept ${res?.retained?.length || 0} (limit ${keep}), deleted ${prunedCount} old archive(s).`);
     await refreshBackupsList();
     if (typeof refreshHealthTelemetry === 'function') {
       refreshHealthTelemetry().catch(() => {});
     }
     return res;
   } catch (e) {
+    const out = document.getElementById('maintenance-output');
+    if (out) out.textContent = `Prune failed: ${e.message}`;
     notify(`Prune failed: ${e.message}`, true);
     return null;
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute?.('aria-busy');
+      button.textContent = origText;
+    }
   }
 }
 
@@ -3280,31 +3456,60 @@ async function refreshMaintenance() {
 
 async function runOperations() {
   document.getElementById('refresh-maintenance')?.addEventListener('click', () => refreshMaintenance().catch(error=>notify(error.message, true)));
-  document.getElementById('btn-refresh-backups')?.addEventListener('click', () => {
-    if (typeof refreshBackupsList === 'function') refreshBackupsList().catch(error => notify(error.message, true));
+  document.getElementById('btn-refresh-backups')?.addEventListener('click', async event => {
+    const btn = event?.currentTarget || document.getElementById('btn-refresh-backups');
+    const orig = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.setAttribute?.('aria-busy', 'true');
+      btn.textContent = 'Refreshing…';
+    }
+    try {
+      if (typeof refreshBackupsList === 'function') await refreshBackupsList();
+    } catch (error) {
+      const out = document.getElementById('maintenance-output');
+      if (out) out.textContent = `Could not load backup archives: ${error.message}`;
+      notify(`Could not load backup archives: ${error.message}`, true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.removeAttribute?.('aria-busy');
+        btn.textContent = orig;
+      }
+    }
   });
   document.getElementById('btn-maintenance-prune-backups')?.addEventListener('click', event => {
     const keepVal = document.getElementById('backup-keep-last')?.value || 5;
     if (typeof pruneBackups === 'function') pruneBackups(keepVal, event.currentTarget);
   });
   document.getElementById('btn-restart-stack')?.addEventListener('click', async event => {
-    const button = event.currentTarget;
+    const button = event?.currentTarget || document.getElementById('btn-restart-stack');
     if (!confirm('Restart stack containers? Active streams will briefly pause.')) return;
+    const origText = button.textContent;
     button.disabled = true;
+    button.setAttribute?.('aria-busy', 'true');
+    button.textContent = 'Restarting…';
     try {
       const result = await api('/api/restart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}'
       });
-      const msg = result.message || 'Stack restart initiated.';
+      if (result && result.success === false) {
+        throw new Error(result.error || result.message || 'Stack restart failed');
+      }
+      const msg = result?.message || 'Stack restart initiated.';
       const readinessOut = document.getElementById('readiness-output');
       if (readinessOut) readinessOut.textContent = msg;
-      notify(msg, result.success === false);
+      notify(msg, false);
     } catch (error) {
+      const readinessOut = document.getElementById('readiness-output');
+      if (readinessOut) readinessOut.textContent = `Stack restart failed: ${error.message}`;
       notify(`Stack restart failed: ${error.message}`, true);
     } finally {
       button.disabled = false;
+      button.removeAttribute?.('aria-busy');
+      button.textContent = origText;
     }
   });
   document.getElementById('refresh-resources')?.addEventListener('click', async () => {
@@ -3319,7 +3524,10 @@ async function runOperations() {
   });
   const runCacheAction = async (button, dryRun) => {
     if (!dryRun && !confirm('Clear temporary cache? Stored profiles and databases will be kept.')) return;
+    const origText = button.textContent;
     button.disabled = true;
+    button.setAttribute?.('aria-busy', 'true');
+    button.textContent = dryRun ? 'Previewing…' : 'Clearing…';
     try {
       const includePosterCache = Boolean(document.getElementById('clean-cache-posters')?.checked);
       const result = await api('/api/clean-cache', {
@@ -3333,14 +3541,19 @@ async function runOperations() {
           return `• ${d.target}: ${mb} MB (${d.file_count || 0} files) [${d.status}]`;
         }).join('\n')
         : '';
+      const freedMb = result.freed_mb ?? 0;
       const summary = dryRun
-        ? `Preview: ${result.freed_mb} MB recoverable (${result.total_files || 0} files).`
-        : `Cleared ${result.freed_mb} MB.`;
+        ? `Preview: ${freedMb} MB recoverable (${result.total_files || 0} files).`
+        : `Cleared ${freedMb} MB.`;
       document.getElementById('cache-output').textContent = result.success
         ? `${summary}${detailLines}`
-        : `Cleanup incomplete: ${(result.errors || []).join('; ')}`;
+        : `Cleanup incomplete: ${(result.errors || []).join('; ') || result.error || 'Unknown error'}`;
     } catch (error) { document.getElementById('cache-output').textContent = error.message; }
-    finally { button.disabled = false; }
+    finally {
+      button.disabled = false;
+      button.removeAttribute?.('aria-busy');
+      button.textContent = origText;
+    }
   };
   document.getElementById('preview-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, true));
   document.getElementById('clean-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, false));

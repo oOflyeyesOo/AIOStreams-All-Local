@@ -1256,3 +1256,265 @@ test('btn-push-cf-dns confirms external connector without Start Local Tunnel war
   assert.match(dnsHtml, /without starting a duplicate <code>aio-tunnel<\/code>/i);
   assert.match(lastNotification, /external connector/i);
 });
+
+test('api handles non-JSON 502/503 HTML gateway errors via response.clone() without body-stream errors or leaking HTML/stack traces', async () => {
+  const html502 = '<!doctype html><html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>';
+  const trace503 = 'Traceback (most recent call last):\n  File "portal_server.py", line 10, in handle\nRuntimeError: boom';
+  for (const [status, body] of [[502, html502], [503, trace503]]) {
+    let bodyConsumed = false;
+    const context = vm.createContext({
+      URL,
+      location: new URL('http://server:8088'),
+      fetch: async () => ({
+        ok: false,
+        status,
+        clone() {
+          return {
+            async text() {
+              return body;
+            }
+          };
+        },
+        async json() {
+          if (bodyConsumed) throw new TypeError('body stream already read');
+          bodyConsumed = true;
+          throw new SyntaxError('Unexpected token <');
+        },
+        async text() {
+          if (bodyConsumed) throw new TypeError('body stream already read');
+          bodyConsumed = true;
+          return body;
+        }
+      })
+    });
+    vm.runInContext(source.slice(source.indexOf('async function api('), source.indexOf('function notify(')), context);
+    await assert.rejects(
+      vm.runInContext("api('/api/backups/prune',{method:'POST'})", context),
+      (err) => {
+        assert.match(err.message, new RegExp(`server returned ${status}`));
+        assert.doesNotMatch(err.message, /<html|<title|Traceback|portal_server\.py/i);
+        return true;
+      }
+    );
+  }
+
+  // Unexpected 200 HTML response also yields a clean non-JSON error
+  const okHtmlCtx = vm.createContext({
+    URL,
+    location: new URL('http://server:8088'),
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      async json() { throw new SyntaxError('Unexpected token <'); }
+    })
+  });
+  vm.runInContext(source.slice(source.indexOf('async function api('), source.indexOf('function notify(')), okHtmlCtx);
+  await assert.rejects(
+    vm.runInContext("api('/api/reachability',{method:'POST'})", okHtmlCtx),
+    /unexpected non-JSON response/i
+  );
+});
+
+test('renderReachabilityResults groups streaming checks alongside other categories, displays remediation, and escapes XSS payloads', async () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const env = form({ USENET_ENABLED: 'true', configuredKeys: ['PROVIDER_KEY'] });
+  env.context.notify = () => {};
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/reachability') {
+      return {
+        success: true,
+        ok: false,
+        status: 'fail',
+        recommended_origin: `http://host.docker.internal:3001/${evil}`,
+        connector_mode: `external_bridge ${evil}`,
+        summary: { total: 8, passed: 4, failed: 3, warnings: 1, skipped: 0 },
+        checks: [
+          { id: 'internal:aiostreams', name: 'AIOStreams (Internal)', category: 'internal', target: 'http://aiostreams:3000/health', ok: true, status: 'ok', latency_ms: 2.1, detail: 'HTTP 200', remediation: null },
+          { id: 'host:aiostreams', name: 'AIOStreams Host Port', category: 'host_port', target: '127.0.0.1:3001', ok: true, status: 'ok', latency_ms: 3.4, detail: 'HTTP 200', remediation: null },
+          { id: 'portal:healthz', name: 'Portal Healthz', category: 'portal', target: 'http://127.0.0.1:8088/healthz', ok: true, status: 'ok', latency_ms: 1.8, detail: 'HTTP 200', remediation: null },
+          { id: 'stream:memory', name: 'AIOStreams Memory Limit', category: 'streaming', target: '512m', ok: false, status: 'fail', latency_ms: null, detail: `AIOSTREAMS_MEM_LIMIT=512m too small ${evil}`, remediation: `Set AIOSTREAMS_MEM_LIMIT=1024m for memory headroom ${evil}` },
+          { id: 'stream:proxy_urls', name: 'Stream & Proxy Base URL', category: 'streaming', target: 'http://localhost:3001', ok: true, status: 'warn', latency_ms: null, detail: 'BASE_URL mismatch while Cloudflare active', remediation: 'Set BASE_URL=https://watch.example.com' },
+          { id: 'stream:usenet_route', name: 'Native Usenet Stream Route', category: 'streaming', target: 'http://127.0.0.1:3001/api/v1/usenet/stream/', ok: true, status: 'ok', latency_ms: 5.5, detail: 'HTTP 404', remediation: null },
+          { id: 'stream:keepalive', name: 'Origin HTTP Keep-Alive Reuse', category: 'cloudflare', target: 'http://host.docker.internal:3001', ok: false, status: 'fail', latency_ms: 11.2, detail: 'Connection reset on reuse', remediation: 'Tune keepAliveTimeout above 60s (120s)' },
+          { id: 'cloudflare:jellyfin_web', name: 'Jellyfin Web & Forwarded Headers', category: 'cloudflare', target: 'http://host.docker.internal:3001/jellyfin/web/', ok: false, status: 'fail', latency_ms: 9.7, detail: 'Expected HTTPS LocalAddress behind /jellyfin/web/', remediation: 'Ensure TRUSTED_IPS includes connector subnet' },
+          { id: 'remote:base', name: 'Public BASE_URL', category: 'remote', target: 'https://watch.example.com', ok: true, status: 'ok', latency_ms: 42.0, detail: 'HTTP 200', remediation: null }
+        ]
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  const opsFn = source.match(/async function runOperations\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(cfBlock + '\n' + opsFn, env.context);
+  await vm.runInContext('runOperations()', env.context);
+
+  const btn = env.nodes.get('btn-test-reachability');
+  await btn.handlers.click({ currentTarget: btn });
+
+  const summaryHtml = env.nodes.get('reachability-summary').innerHTML;
+  const resultsHtml = env.nodes.get('reachability-results').innerHTML;
+  assert.match(resultsHtml, /reachability-group-streaming/);
+  assert.match(resultsHtml, /Streaming & Proxy/);
+  assert.match(resultsHtml, /Cloudflare Origin/);
+  assert.match(resultsHtml, /Host Port/);
+  assert.match(resultsHtml, /Portal Route/);
+  assert.match(resultsHtml, /Internal/);
+  assert.match(resultsHtml, /Public URL/);
+  assert.match(resultsHtml, /keepAliveTimeout/i);
+  assert.match(resultsHtml, /BASE_URL mismatch/i);
+  assert.match(resultsHtml, /memory headroom/i);
+  assert.match(resultsHtml, /\/jellyfin\/web\//);
+  assert.ok(!resultsHtml.includes('<img') && !summaryHtml.includes('<img'), 'XSS payload must be escaped');
+  assert.ok(resultsHtml.includes('&lt;img') && summaryHtml.includes('&lt;img'));
+  assert.equal(btn.disabled, false);
+});
+
+test('btn-push-cf-dns surfaces base_url_mismatch sync button, saves BASE_URL via /api/save-env, and handles 502 errors cleanly', async () => {
+  const notices = [];
+  const syncBtnNode = {
+    textContent: 'Sync BASE_URL to https://watch.customdomain.org',
+    disabled: false,
+    dataset: { recommendedBaseUrl: 'https://watch.customdomain.org' },
+    attrs: {},
+    handlers: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    removeAttribute(k) { delete this.attrs[k]; },
+    getAttribute(k) { return this.attrs[k]; },
+    addEventListener(t, h) { this.handlers[t] = h; }
+  };
+  const mismatchBoxNode = { className: '', innerHTML: '' };
+  const mismatchStatusNode = { textContent: '', innerHTML: '' };
+  const env = form({
+    USENET_ENABLED: 'true',
+    BASE_URL: 'http://localhost:3001',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-sync',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: { valid: true, tunnel_id: 'sync-tun', cname_target: 'sync-tun.cfargotunnel.com' }
+  });
+  env.context.notify = (msg, isErr) => notices.push({ msg, isErr });
+  const dnsResultNode = env.document.getElementById('cf-dns-result');
+  dnsResultNode.querySelector = (sel) => {
+    if (sel === '#btn-sync-cf-base-url') return syncBtnNode;
+    if (sel === '#cf-base-url-mismatch-box') return mismatchBoxNode;
+    if (sel === '#cf-base-url-mismatch-status') return mismatchStatusNode;
+    return null;
+  };
+
+  let failSaveEnv = true;
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/cloudflare/status') {
+      return {
+        has_external: false,
+        connector_mode: 'local',
+        recommended_origin: 'http://aiostreams:3000',
+        token_configured: true,
+        local_tunnel: { state: 'running', status: 'Up 1 minute' }
+      };
+    }
+    if (path === '/api/cloudflare/push-dns') {
+      const payload = JSON.parse(options.body);
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        message: 'DNS record updated',
+        hostname: 'watch.customdomain.org',
+        cname_target: 'sync-tun.cfargotunnel.com',
+        zone_name: 'customdomain.org',
+        service_url: payload.service_url,
+        tunnel_started: true,
+        base_url_mismatch: true,
+        current_base_url: 'http://localhost:3001',
+        recommended_base_url: 'https://watch.customdomain.org',
+        base_url_synced: false
+      };
+    }
+    if (path === '/api/save-env') {
+      if (failSaveEnv) throw new Error('The server returned 502. Check setup details and retry.');
+      const payload = JSON.parse(options.body);
+      env.calls.push({ path, payload });
+      return { success: true };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+  await vm.runInContext('loadSettings()', env.context);
+  await vm.runInContext('refreshCloudflareStatus()', env.context);
+
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+
+  assert.match(dnsResultNode.innerHTML, /BASE_URL Mismatch Detected/i);
+  assert.match(dnsResultNode.innerHTML, /btn-sync-cf-base-url/);
+  assert.match(dnsResultNode.innerHTML, /http:\/\/localhost:3001/);
+  assert.ok(syncBtnNode.handlers.click, 'Expected one-click sync button click handler');
+
+  // First click fails with 502 -> button must re-enable and show error without clearing button
+  await syncBtnNode.handlers.click({ currentTarget: syncBtnNode });
+  assert.equal(syncBtnNode.disabled, false);
+  assert.equal(syncBtnNode.attrs['aria-busy'], undefined);
+  assert.match(mismatchStatusNode.innerHTML, /502/);
+
+  // Retry succeeds -> saves BASE_URL and updates inputs & confirmation box
+  failSaveEnv = false;
+  await syncBtnNode.handlers.click({ currentTarget: syncBtnNode });
+  const saveCall = env.calls.find(c => c.path === '/api/save-env');
+  assert.ok(saveCall);
+  assert.equal(saveCall.payload.BASE_URL, 'https://watch.customdomain.org');
+  assert.equal(env.nodes.get('base-url').value, 'https://watch.customdomain.org');
+  assert.equal(env.nodes.get('proxy-url').value, 'https://watch.customdomain.org');
+  assert.equal(env.nodes.get('guide-player-preview').textContent, 'https://watch.customdomain.org');
+  assert.equal(mismatchBoxNode.className, 'cf-base-url-sync-ok');
+  assert.match(mismatchBoxNode.innerHTML, /Saved <code>BASE_URL<\/code> as <code>https:\/\/watch\.customdomain\.org<\/code>/);
+  assert.equal(syncBtnNode.disabled, false);
+});
+
+test('tunnel and reachability buttons always release busy/disabled state on non-JSON 502 errors and escape error text', async () => {
+  const notices = [];
+  const env = form({ USENET_ENABLED: 'false', configuredKeys: ['PROVIDER_KEY'] });
+  env.context.notify = (msg, isErr) => notices.push({ msg, isErr });
+  env.context.api = async () => {
+    throw new Error('The server returned 502. <script>alert(1)</script>');
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  const opsFn = source.match(/async function runOperations\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(cfBlock + '\n' + opsFn, env.context);
+  await vm.runInContext('runOperations()', env.context);
+
+  const stopBtn = env.nodes.get('btn-stop-cf-tunnel');
+  stopBtn.textContent = 'Stop Tunnel ■';
+  await stopBtn.handlers.click({ currentTarget: stopBtn });
+  assert.equal(stopBtn.disabled, false);
+  assert.equal(stopBtn.textContent, 'Stop Tunnel ■');
+
+  const restartBtn = env.nodes.get('btn-restart-cf-tunnel');
+  restartBtn.textContent = 'Restart Tunnel ↻';
+  await restartBtn.handlers.click({ currentTarget: restartBtn });
+  assert.equal(restartBtn.disabled, false);
+  assert.equal(restartBtn.textContent, 'Restart Tunnel ↻');
+
+  const reachBtn = env.nodes.get('btn-test-reachability');
+  reachBtn.textContent = 'Test Reachability 🌐';
+  await reachBtn.handlers.click({ currentTarget: reachBtn });
+  assert.equal(reachBtn.disabled, false);
+  assert.equal(reachBtn.textContent, 'Test Reachability 🌐');
+  assert.doesNotMatch(env.nodes.get('reachability-results').innerHTML, /<script>/);
+  assert.match(env.nodes.get('reachability-results').innerHTML, /&lt;script&gt;/);
+
+  env.document.getElementById('base-url').value = 'https://watch.customdomain.org';
+  env.document.getElementById('cf-api-token').value = 'cf-api-tok';
+  const pushBtn = env.document.getElementById('btn-push-cf-dns');
+  pushBtn.textContent = 'Push DNS to Cloudflare 🚀';
+  await pushBtn.handlers.click({ currentTarget: pushBtn });
+  assert.equal(pushBtn.disabled, false);
+  assert.equal(pushBtn.textContent, 'Push DNS to Cloudflare 🚀');
+  assert.doesNotMatch(env.nodes.get('cf-dns-result').innerHTML, /<script>/);
+  assert.match(env.nodes.get('cf-dns-result').innerHTML, /&lt;script&gt;/);
+  assert.ok(notices.some(n => n.isErr && /502/.test(n.msg)));
+});
