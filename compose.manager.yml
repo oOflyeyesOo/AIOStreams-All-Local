@@ -65,6 +65,8 @@ services:
         condition: service_healthy
   portal:
     image: ${AIO_IMAGE_PREFIX:-ghcr.io/ooflyeyesoo/aio-local}-portal:${AIO_IMAGE_TAG:-latest}
+    extra_hosts:
+    - host.docker.internal:host-gateway
     restart: unless-stopped
     logging:
       driver: json-file

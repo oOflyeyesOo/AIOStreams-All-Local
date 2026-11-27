@@ -299,79 +299,39 @@ def _check_host_port(service: str, env_vars: dict, timeout: float, inside_contai
     spec = SERVICE_REACHABILITY_SPECS.get(service, {"name": "Portal", "path": "/healthz", "critical": True})
     _, host_port = _service_ports(service, env_vars)
     path = spec["path"]
-    primary_target = f"127.0.0.1:{host_port}"
-    http_url = f"http://{primary_target}{path}"
+    # A bridge container's loopback is not the Docker host. Never count the
+    # portal's own listener as evidence that its host port is published.
+    host = "host.docker.internal" if inside_container else "127.0.0.1"
+    target = f"http://{host}:{host_port}{path}"
+    label = f"{spec['name']} Host Port (:{host_port})"
+    if inside_container and service not in ALL_INTERFACE_SERVICES:
+        return _make_check(
+            f"host:{service}", label, "host_port", target, True, "skipped",
+            False, None, "Host-only binding cannot be verified from the portal container.",
+            "Check this port from the Docker host if direct access is needed.",
+        )
 
-    ok, _, ms, detail, _ = _probe_http(http_url, timeout=timeout)
+    ok, code, ms, detail, exc = _probe_http(target, timeout=timeout)
     if ok:
+        return _make_check(f"host:{service}", label, "host_port", target,
+                           True, "ok", spec["critical"], ms, detail)
+    if inside_container and exc is not None and _is_dns_error(exc):
         return _make_check(
-            f"host:{service}",
-            f"{spec['name']} Host Port (:{host_port})",
-            "host_port",
-            http_url,
-            True,
-            "ok",
-            spec["critical"],
-            ms,
-            detail,
+            f"host:{service}", label, "host_port", target, True, "skipped",
+            False, ms, "Docker host address is unavailable to this container; host port is unverified.",
+            "Update/recreate the portal to enable its host-gateway mapping, or test the server IP from your browser.",
         )
-
-    # Fallback TCP probe on 127.0.0.1 (some services return 404/401 or non-HTTP on root)
-    tcp_ok, tcp_ms, tcp_detail, _ = _probe_tcp("127.0.0.1", host_port, timeout=min(timeout, 1.5))
-    if tcp_ok:
-        return _make_check(
-            f"host:{service}",
-            f"{spec['name']} Host Port (:{host_port})",
-            "host_port",
-            primary_target,
-            True,
-            "ok",
-            spec["critical"],
-            tcp_ms,
-            tcp_detail,
-        )
-
-    # Inside a bridge container, host-published ports on 0.0.0.0 are reached via host.docker.internal
-    if inside_container and service in ALL_INTERFACE_SERVICES:
-        gw_url = f"http://host.docker.internal:{host_port}{path}"
-        gw_ok, _, gw_ms, gw_detail, _ = _probe_http(gw_url, timeout=timeout)
-        if gw_ok:
-            return _make_check(
-                f"host:{service}",
-                f"{spec['name']} Host Port (:{host_port})",
-                "host_port",
-                gw_url,
-                True,
-                "ok",
-                spec["critical"],
-                gw_ms,
-                gw_detail,
-            )
-
-    if inside_container and service not in ALL_INTERFACE_SERVICES and internal_ok:
-        return _make_check(
-            f"host:{service}",
-            f"{spec['name']} Host Port (:{host_port})",
-            "host_port",
-            primary_target,
-            True,
-            "skipped",
-            False,
-            ms,
-            "Loopback-bound on Docker host (verified via internal network)",
-        )
-
+    # An HTTP error is a real application failure, not a successful TCP check.
+    if code is None:
+        tcp_ok, tcp_ms, tcp_detail, _ = _probe_tcp(host, host_port, timeout=min(timeout, 1.5))
+        if tcp_ok:
+            return _make_check(f"host:{service}", label, "host_port", target,
+                               True, "warn", False, tcp_ms,
+                               "Port accepts connections, but HTTP health is unverified: " + detail)
     return _make_check(
-        f"host:{service}",
-        f"{spec['name']} Host Port (:{host_port})",
-        "host_port",
-        http_url,
-        False,
-        "fail",
-        spec["critical"],
-        ms,
-        detail or tcp_detail,
-        f"Verify '{service}' host port mapping :{host_port} in Docker Compose and check container logs.",
+        f"host:{service}", label, "host_port", target, False, "fail",
+        spec["critical"], ms, detail,
+        f"Check '{service}' published port :{host_port} and container health. In the appliance this tests the inner Docker host; test the server IP separately.",
     )
 
 

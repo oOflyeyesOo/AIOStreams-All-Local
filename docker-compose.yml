@@ -62,6 +62,8 @@ services:
   portal:
     image: python:3.11-alpine
     container_name: aio-portal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     logging: *default-logging
     ports:

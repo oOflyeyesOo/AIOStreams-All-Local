@@ -601,3 +601,44 @@ class TestCheckStackModes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostPortNamespaceTests(unittest.TestCase):
+    def test_container_probes_gateway_never_its_own_loopback(self):
+        for service in ('portal', 'aiostreams', 'aiometadata'):
+            with self.subTest(service=service), patch.object(reachability, '_probe_http', return_value=(True, 200, 1, 'HTTP 200', None)) as probe:
+                check = reachability._check_host_port(service, {}, 1, True, True)
+                self.assertEqual(check['status'], 'ok')
+                self.assertIn('host.docker.internal:', probe.call_args.args[0])
+
+    def test_missing_gateway_dns_is_unverified_not_bad_mapping(self):
+        error = URLError(socket.gaierror(-2, 'Name does not resolve'))
+        with patch.object(reachability, '_probe_http', return_value=(False, None, 1, 'DNS unavailable', error)), patch.object(reachability, '_probe_tcp') as tcp:
+            check = reachability._check_host_port('aiostreams', {}, 1, True, True)
+        self.assertEqual(check['status'], 'skipped')
+        self.assertFalse(check['required'])
+        self.assertIn('unverified', check['detail'])
+        tcp.assert_not_called()
+
+    def test_real_gateway_refusal_remains_failure(self):
+        error = URLError(ConnectionRefusedError())
+        with patch.object(reachability, '_probe_http', return_value=(False, None, 1, 'Connection refused', error)), patch.object(reachability, '_probe_tcp', return_value=(False, 1, 'Connection refused', error)):
+            check = reachability._check_host_port('aiostreams', {}, 1, True, True)
+        self.assertEqual(check['status'], 'fail')
+        self.assertIn('host.docker.internal:', check['target'])
+
+    def test_http_failure_is_not_hidden_by_open_tcp_port(self):
+        with patch.object(reachability, '_probe_http', return_value=(False, 503, 1, 'HTTP 503', None)), patch.object(reachability, '_probe_tcp') as tcp:
+            check = reachability._check_host_port('aiometadata', {}, 1, True, True)
+        self.assertEqual(check['status'], 'fail')
+        tcp.assert_not_called()
+
+    def test_host_execution_still_checks_loopback(self):
+        with patch.object(reachability, '_probe_http', return_value=(True, 200, 1, 'HTTP 200', None)) as probe:
+            reachability._check_host_port('aiostreams', {}, 1, False, True)
+        self.assertIn('127.0.0.1:3001', probe.call_args.args[0])
+
+    def test_both_compose_variants_supply_host_gateway(self):
+        for name in ('docker-compose.yml', 'compose.manager.yml'):
+            doc = yaml.safe_load((ROOT / name).read_text(encoding='utf-8'))
+            self.assertIn('host.docker.internal:host-gateway', doc['services']['portal']['extra_hosts'])
