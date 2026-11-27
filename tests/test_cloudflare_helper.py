@@ -385,8 +385,24 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertEqual(validate_service_url("http://host.docker.internal:3001/"), "http://host.docker.internal:3001")
         self.assertEqual(validate_service_url("127.0.0.1:3001"), "http://127.0.0.1:3001")
         self.assertEqual(validate_service_url("https://[::1]:3001"), "https://[::1]:3001")
-        for bad in ("", "   ", "ftp://aiostreams:3000", "http://user:pass@127.0.0.1:3001", "http://127.0.0.1:3001/configure", "http://127.0.0.1:99999", "http://127.0.0.1:3001?a=1"):
-            with self.assertRaises(ValueError):
+        for bad in (
+            "",
+            "   ",
+            "ftp://aiostreams:3000",
+            "http://user:pass@127.0.0.1:3001",
+            "http://127.0.0.1:3001/configure",
+            "http://127.0.0.1:99999",
+            "http://127.0.0.1:3001?a=1",
+            "http://bad$var:3001",
+            "http://bad'host:3001",
+            'http://bad"host:3001',
+            "http://bad`cmd`:3001",
+            "http://bad\\host:3001",
+            "http://bad\x07host:3001",
+            "http://bad\x7fhost:3001",
+            "http://bad\nhost:3001",
+        ):
+            with self.assertRaises(ValueError, msg=f"Expected ValueError for {bad!r}"):
                 validate_service_url(bad)
 
     @patch("subprocess.run")

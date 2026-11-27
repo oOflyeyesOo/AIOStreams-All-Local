@@ -236,6 +236,128 @@ class TestReachabilityModule(unittest.TestCase):
         self.assertEqual(ids["remote:base_url"]["status"], "fail")
         self.assertIn("3001", ids["remote:base_url"]["remediation"])
 
+    def test_loopback_and_host_origin_fallback_inside_container_without_masking_failures(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "state": "none", "status": "Not created", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+            "active_external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+            "has_external": True,
+        }
+        conn_refused = URLError(ConnectionRefusedError(111, "Connection refused"))
+        dns_err = URLError(socket.gaierror(-2, "Name or service not known"))
+
+        # 1. Inside container: 127.0.0.1:3001 refuses connection, host.docker.internal:3001 succeeds -> ok
+        def probe_gw_ok(url, timeout=2.5, follow_redirects=False):
+            if "127.0.0.1:3001" in url:
+                return False, None, 1.0, "URLError: Connection refused", conn_refused
+            if "host.docker.internal:3001" in url:
+                return True, 200, 2.0, "HTTP 200", None
+            return False, None, 1.0, "unexpected", conn_refused
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=True), \
+             patch("tools.reachability._probe_http", side_effect=probe_gw_ok):
+            rep = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertTrue(rep["ok"])
+        self.assertEqual(rep["checks"][0]["status"], "ok")
+        self.assertIn("host.docker.internal", rep["checks"][0]["detail"])
+
+        # 2. Inside container: 127.0.0.1:3001 refuses & host.docker.internal DNS fails, aiostreams:3000 up -> warn
+        def probe_warn_fallback(url, timeout=2.5, follow_redirects=False):
+            if "127.0.0.1:3001" in url:
+                return False, None, 1.0, "URLError: Connection refused", conn_refused
+            if "host.docker.internal:3001" in url:
+                return False, None, 1.0, "URLError: Name or service not known", dns_err
+            if "aiostreams:3000" in url:
+                return True, 200, 1.5, "HTTP 200", None
+            return False, None, 1.0, "unexpected", conn_refused
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=True), \
+             patch("tools.reachability._probe_http", side_effect=probe_warn_fallback):
+            rep_warn = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertTrue(rep_warn["ok"])
+        self.assertEqual(rep_warn["checks"][0]["status"], "warn")
+        self.assertIn("stremio-net", rep_warn["checks"][0]["detail"])
+
+        # 3. Inside container: host.docker.internal:3001 refuses connection, aiostreams:3000 up -> warn
+        def probe_host_alias_refused(url, timeout=2.5, follow_redirects=False):
+            if "host.docker.internal:3001" in url:
+                return False, None, 1.0, "URLError: Connection refused", conn_refused
+            if "aiostreams:3000" in url:
+                return True, 200, 1.5, "HTTP 200", None
+            return False, None, 1.0, "unexpected", conn_refused
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=True), \
+             patch("tools.reachability._probe_http", side_effect=probe_host_alias_refused):
+            rep_alias = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                origin_url="http://host.docker.internal:3001",
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertTrue(rep_alias["ok"])
+        self.assertEqual(rep_alias["checks"][0]["status"], "warn")
+
+        # 4. Inside container: AIOStreams is NOT running (aiostreams:3000 also fails) -> MUST fail
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=True), \
+             patch("tools.reachability._probe_http", return_value=(False, None, 1.0, "URLError: Connection refused", conn_refused)):
+            rep_down = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertFalse(rep_down["ok"])
+        self.assertEqual(rep_down["checks"][0]["status"], "fail")
+
+        # 5. Inside container: HTTP 502 from target MUST NOT be masked by aiostreams:3000 -> MUST fail
+        http_502 = HTTPError("http://127.0.0.1:3001/api/v1/status", 502, "Bad Gateway", {}, None)
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=True), \
+             patch("tools.reachability._probe_http", return_value=(False, 502, 2.0, "HTTP 502", http_502)):
+            rep_502 = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertFalse(rep_502["ok"])
+        self.assertEqual(rep_502["checks"][0]["status"], "fail")
+
+        # 6. Outside container: 127.0.0.1:3001 refuses connection -> MUST fail (no container fallback)
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._in_container", return_value=False), \
+             patch("tools.reachability._probe_http", return_value=(False, None, 1.0, "URLError: Connection refused", conn_refused)):
+            rep_host = reachability.run_reachability_checks(
+                env_vars={"COMPOSE_PROFILES": "core"},
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+            )
+        self.assertFalse(rep_host["ok"])
+        self.assertEqual(rep_host["checks"][0]["status"], "fail")
+
 
 class TestCheckStackModes(unittest.TestCase):
 
