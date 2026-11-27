@@ -1945,7 +1945,19 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
         proxy_creds = existing_proxy.get("credentials") or (f"admin:{ADDON_PASSWORD}" if ADDON_PASSWORD else "admin:admin")
 
     target_proxy_url = BASE_URL or "http://aiostreams:3000"
-    if existing_proxy.get("url") in ("http://localhost:3001", "http://127.0.0.1:3001", "", None) and BASE_URL:
+    stale_proxy_urls = (
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://aiostreams:3000",
+        "",
+        None,
+    )
+    existing_proxy_id = existing_proxy.get("id") or "builtin"
+    if existing_proxy_id == "builtin" and BASE_URL:
+        proxy_url = BASE_URL
+    elif existing_proxy.get("url") in stale_proxy_urls and BASE_URL:
         proxy_url = BASE_URL
     else:
         proxy_url = existing_proxy.get("url") or target_proxy_url

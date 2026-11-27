@@ -19,6 +19,7 @@ from tools.cloudflare_helper import (
     fetch_cloudflare_tunnel_token,
     recommend_cloudflare_origin,
     validate_service_url,
+    build_tunnel_origin_request,
 )
 
 
@@ -553,6 +554,67 @@ class TestCloudflareHelper(unittest.TestCase):
         )
         self.assertFalse(res["success"])
         self.assertIn("without a path", res["error"])
+
+    def test_build_tunnel_origin_request_defaults_and_clamps_unsafe_keepalive(self):
+        defaults = build_tunnel_origin_request()
+        self.assertEqual(defaults["keepAliveTimeout"], 60)
+        self.assertEqual(defaults["connectTimeout"], 30)
+        self.assertEqual(defaults["keepAliveConnections"], 100)
+        self.assertTrue(defaults["noHappyEyeballs"])
+
+        preserved = build_tunnel_origin_request({"keepAliveTimeout": 45, "httpHostHeader": "media.example.dev"})
+        self.assertEqual(preserved["keepAliveTimeout"], 45)
+        self.assertEqual(preserved["httpHostHeader"], "media.example.dev")
+
+        for unsafe in (0, -5, 120, 300, True):
+            clamped = build_tunnel_origin_request({"keepAliveTimeout": unsafe})
+            self.assertEqual(clamped["keepAliveTimeout"], 60)
+
+    @patch("urllib.request.urlopen")
+    def test_push_cloudflare_dns_sets_origin_request_and_repairs_unsafe_keepalive(self, mock_urlopen):
+        dns_existing = json.dumps({"success": True, "result": [{"id": "rec-1", "name": "media.example.dev", "type": "CNAME"}]}).encode()
+        dns_updated = json.dumps({"success": True, "result": {"id": "rec-1", "name": "media.example.dev"}}).encode()
+        tunnel_cfg_get = json.dumps({
+            "success": True,
+            "result": {
+                "config": {
+                    "originRequest": {"keepAliveTimeout": 180},
+                    "ingress": [
+                        {"hostname": "media.example.dev", "service": "http://host.docker.internal:3001"},
+                        {"service": "http_status:404"},
+                    ],
+                }
+            }
+        }).encode()
+        tunnel_cfg_put = json.dumps({"success": True, "result": {}}).encode()
+
+        captured = []
+
+        def fake_urlopen(req, timeout=10):
+            captured.append((req.get_method(), req.full_url, req.data))
+            payload = [dns_existing, dns_updated, tunnel_cfg_get, tunnel_cfg_put][len(captured) - 1]
+            ctx = MagicMock()
+            ctx.__enter__.return_value.read.return_value = payload
+            return ctx
+
+        mock_urlopen.side_effect = fake_urlopen
+        res = push_cloudflare_dns(
+            "valid_token",
+            "media.example.dev",
+            "tun123.cfargotunnel.com",
+            account_id="acc-1",
+            tunnel_id="tun-1",
+            zone_id="zone-1",
+            service_url="http://host.docker.internal:3001",
+        )
+        self.assertTrue(res["success"])
+        self.assertTrue(res["repaired"])
+        put_method, _, put_body = captured[-1]
+        self.assertEqual(put_method, "PUT")
+        cfg = json.loads(put_body.decode())["config"]
+        self.assertEqual(cfg["originRequest"]["keepAliveTimeout"], 60)
+        self.assertEqual(cfg["originRequest"]["connectTimeout"], 30)
+        self.assertTrue(cfg["originRequest"]["noHappyEyeballs"])
 
 
 if __name__ == "__main__":
