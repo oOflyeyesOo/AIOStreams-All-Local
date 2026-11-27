@@ -2409,6 +2409,129 @@ class PortalTests(unittest.TestCase):
             mock_run.assert_called_once()
             self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "--profile", "tunnel"])
 
+    def test_cloudflare_status_includes_topology_and_recommended_origin(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [{"id": "abc12345", "name": "docktun-cf", "status": "Up 2 hours", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "active_external_connectors": [{"id": "abc12345", "name": "docktun-cf", "status": "Up 2 hours", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "has_external": True,
+        }
+        with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com", "PORT_AIOSTREAMS": "3001"}):
+            status, body, _ = self.request("/api/cloudflare/status", "GET", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual(data["connector_mode"], "external_bridge")
+        self.assertEqual(data["recommended_origin"], "http://host.docker.internal:3001")
+        self.assertEqual(data["aiostreams_port"], 3001)
+        self.assertEqual(data["aiometadata_port"], 4005)
+        self.assertEqual(data["aiometadata_origin"], "http://host.docker.internal:4005")
+        self.assertIn("aiostreams:3000", data["origin_warning"])
+        self.assertTrue(any(c["url"] == "http://127.0.0.1:3001" for c in data["origin_candidates"]))
+
+    def test_cloudflare_push_dns_forwards_service_url_and_skips_duplicate_local_tunnel_for_external(self):
+        before = (self.root / ".env").read_bytes()
+        try:
+            mock_containers = {
+                "available": True,
+                "local_tunnel": {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True},
+                "external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "active_external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "has_external": True,
+            }
+            mock_push = {
+                "success": True,
+                "action": "updated",
+                "hostname": "watch.example.com",
+                "cname_target": "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com",
+                "zone_name": "example.com",
+                "record_id": "rec-1",
+                "service_url": "http://127.0.0.1:3001",
+                "ingress_configured": True,
+                "ingress_action": "repaired",
+                "repaired": True,
+                "previous_service_url": "http://aiostreams:3000",
+                "message": "Repaired ingress",
+            }
+            with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+                 patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=mock_push) as push_mock, \
+                 patch("tools.cloudflare_helper.manage_local_tunnel") as manage_mock:
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "cname_target": "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com",
+                    "service_url": "http://127.0.0.1:3001",
+                }, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["repaired"])
+            self.assertEqual(data["service_url"], "http://127.0.0.1:3001")
+            self.assertTrue(data["external_connector_active"])
+            self.assertFalse(data["tunnel_started"])
+            self.assertEqual(push_mock.call_args[1]["service_url"], "http://127.0.0.1:3001")
+            manage_mock.assert_not_called()
+
+            # Invalid service_url -> 400
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                "api_token": "valid_token",
+                "hostname": "watch.example.com",
+                "cname_target": "tun123.cfargotunnel.com",
+                "service_url": "http://127.0.0.1:3001/bad-path",
+            }, auth=True)
+            self.assertEqual(status, 400)
+        finally:
+            (self.root / ".env").write_bytes(before)
+
+    def test_proxy_config_cloudflare_respects_origin_url(self):
+        status, body, _ = self.request(
+            "/api/proxy-config?format=cloudflare&base_url=https%3A%2F%2Fwatch.example.test&origin_url=http%3A%2F%2F127.0.0.1%3A3001",
+            auth=True,
+        )
+        self.assertEqual(status, 200)
+        text = body.decode("utf-8")
+        self.assertIn("service: http://127.0.0.1:3001", text)
+        self.assertIn("service: http://127.0.0.1:4005", text)
+
+    def test_reachability_endpoint_auth_validation_and_execution(self):
+        self.assertEqual(self.request("/api/reachability", "GET", auth=False)[0], 401)
+        self.assertEqual(self.request("/api/reachability", "POST", {}, auth=False)[0], 401)
+        self.assertEqual(
+            self.request("/api/reachability", "POST", {}, auth=True, headers={"Origin": "https://untrusted.example"})[0],
+            403,
+        )
+
+        mock_report = {
+            "success": True,
+            "ok": True,
+            "status": "ok",
+            "checked_at": "2026-11-27T06:35:00+00:00",
+            "recommended_origin": "http://host.docker.internal:3001",
+            "connector_mode": "external_bridge",
+            "summary": {"total": 1, "passed": 1, "failed": 0, "warnings": 0, "skipped": 0},
+            "checks": [{"id": "cloudflare:origin", "name": "Cloudflare Tunnel Origin Target", "category": "cloudflare", "target": "http://host.docker.internal:3001", "ok": True, "status": "ok", "required": True, "latency_ms": 2.1, "detail": "Reachable", "remediation": None}],
+        }
+        with patch("tools.reachability.run_reachability_checks", return_value=mock_report) as run_mock:
+            status, body, _ = self.request("/api/reachability?origin_url=http%3A%2F%2F127.0.0.1%3A3001&include_remote=false", "GET", auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["ok"])
+            self.assertEqual(run_mock.call_args[1]["origin_url"], "http://127.0.0.1:3001")
+            self.assertFalse(run_mock.call_args[1]["include_remote"])
+
+            status, body, _ = self.request("/api/reachability", "POST", {"service_url": "http://host.docker.internal:3001", "include_remote": True}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(run_mock.call_args[1]["origin_url"], "http://host.docker.internal:3001")
+            self.assertTrue(run_mock.call_args[1]["include_remote"])
+
+        status, _, _ = self.request("/api/reachability", "POST", {"origin_url": "ftp://bad"}, auth=True)
+        self.assertEqual(status, 400)
+
+        leak = "C:\\secret\\reachability_leak.txt"
+        with patch("tools.reachability.run_reachability_checks", side_effect=RuntimeError(leak)):
+            status, body, _ = self.request("/api/reachability", "GET", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak.encode(), body)
+
 
 if __name__ == "__main__":
     unittest.main()
