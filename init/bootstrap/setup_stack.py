@@ -200,7 +200,7 @@ AIOSTREAMS_URL = os.environ.get("AIOSTREAMS_URL", "http://aiostreams:3000").rstr
 AIOMETADATA_URL = os.environ.get("AIOMETADATA_URL", "http://aiometadata:4005").rstrip("/")
 POSTERSPLUS_URL = os.environ.get("POSTERSPLUS_URL", "http://postersplus:8000").rstrip("/")
 STREMTHRU_URL = os.environ.get("STREMTHRU_URL", "http://stremthru:8080").rstrip("/")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000").rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:3001").rstrip("/")
 
 AIOMETADATA_HOST = os.environ.get("AIOMETADATA_HOST", "").rstrip("/")
 
@@ -1651,7 +1651,12 @@ def build_default_config(aiometadata_manifest=None, *, probe_services=True, base
             })
 
     subtitle_config = {"languages": ["eng"]}
-    for env_key, config_key in (("SUBDL_API_KEY", "subdlApiKey"), ("SUBSOURCE_API_KEY", "subsourceApiKey"), ("WYZIE_API_KEY", "wyzieApiKey")):
+    for env_key, config_key in (
+        ("SUBDL_API_KEY", "subdlApiKey"),
+        ("SUBSOURCE_API_KEY", "subsourceApiKey"),
+        ("WYZIE_API_KEY", "wyzieApiKey"),
+        ("OPENSUBTITLES_API_KEY", "openSubtitlesApiKey"),
+    ):
         if os.environ.get(env_key):
             subtitle_config[config_key] = os.environ[env_key]
     # SubSense serves subtitle resources only beneath a configuration segment.

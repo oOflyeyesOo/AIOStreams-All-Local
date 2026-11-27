@@ -42,6 +42,14 @@
   </div>
   <div id="ready-actions" class="ready-banner-bar" hidden>
     <div class="stack-actions playback-actions">
+      <div class="playback-test-inputs">
+        <select id="playback-test-kind" aria-label="Playback test media type">
+          <option value="movie" selected>Movie</option>
+          <option value="series">Series</option>
+          <option value="anime">Anime</option>
+        </select>
+        <input id="playback-test-id" type="text" aria-label="Playback test content ID" placeholder="IMDb ID (default tt1375666)" spellcheck="false">
+      </div>
       <button type="button" id="btn-test-playback" disabled aria-describedby="startup-message" class="primary-button test-playback-btn"><span>Test my setup</span><span>▶</span></button>
       <div id="deployment-players" class="player-showcase-bar">
         <a id="aiostreams-player-action" class="light-button player-action-btn player-action-btn-highlight" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Web Player ▶</a>
@@ -265,6 +273,18 @@
     </div>
   </div>
 
+  <div class="optional-setup" style="margin-top:14px;">
+    <label class="field-label" for="compose-profiles">Service Profile <span>COMPOSE_PROFILES</span></label>
+    <select id="compose-profiles" name="COMPOSE_PROFILES" aria-label="Docker Compose service profiles">
+      <option value="core" selected>Core Stack (Recommended — Streams, Indexers, Metadata)</option>
+      <option value="core,anime">Core + Anime Stack (Adds Anime Kitsu &amp; Jikan API)</option>
+      <option value="core,tunnel">Core + Built-in Cloudflare Tunnel</option>
+      <option value="core,anime,tunnel">Core + Anime + Built-in Cloudflare Tunnel</option>
+      <option value="all">All Services</option>
+    </select>
+    <p class="field-help">Select which Docker Compose service profiles run on your host.</p>
+  </div>
+
   <div id="remote-access-guide" class="remote-access-guide-card" style="display:none;">
     <div class="guide-header-badge-row">
       <div class="guide-header-badge">
@@ -395,19 +415,39 @@
             <input id="cf-api-token" type="password" autocomplete="new-password" placeholder="Cloudflare API Token with Zone.DNS:Edit permissions">
             <span class="field-help-inline">Leave blank if creating the CNAME record manually using the 1-click target above.</span>
           </label>
+          <label style="grid-column:1 / -1;">
+            <span class="field-label">Cloudflare Origin Target <span>INGRESS SERVICE URL</span></span>
+            <div class="cf-origin-controls">
+              <select id="cf-origin-preset" aria-label="Preset Cloudflare origin target">
+                <option value="">Auto (Recommended by topology)</option>
+                <option value="http://host.docker.internal:3001">http://host.docker.internal:3001 (External Bridge / DinD)</option>
+                <option value="http://127.0.0.1:3001">http://127.0.0.1:3001 (Host-Network Connector)</option>
+                <option value="http://aiostreams:3000">http://aiostreams:3000 (Built-in aio-tunnel only)</option>
+                <option value="custom">Custom origin URL…</option>
+              </select>
+              <input id="cf-origin-target" type="url" list="cf-origin-candidates" autocomplete="off" placeholder="http://host.docker.internal:3001" spellcheck="false">
+            </div>
+            <datalist id="cf-origin-candidates"></datalist>
+            <span class="field-help-inline">Sent as <code>service_url</code> when pushing DNS to repair stale <code>aiostreams:3000</code> rules. External connectors must target port <code>:3001</code>.</span>
+            <div id="cf-origin-warning" class="cf-origin-warning" style="display:none;" role="status" aria-live="polite"></div>
+          </label>
         </div>
 
         <div id="cf-token-meta-preview" style="display:none;margin-top:8px;">
           <span class="cf-dns-meta-badge" id="cf-token-meta-text"></span>
         </div>
 
-        <div class="integrated-proxy-actions" style="margin-top:14px;margin-bottom:0;">
+        <div class="integrated-proxy-actions" style="margin-top:14px;margin-bottom:0;flex-wrap:wrap;">
           <button type="button" id="btn-save-cf-token" class="light-button">Save Tunnel Token 💾</button>
           <button type="button" id="btn-start-cf-tunnel" class="light-button">Start Local Tunnel ▶</button>
+          <button type="button" id="btn-stop-cf-tunnel" class="light-button">Stop Tunnel ■</button>
+          <button type="button" id="btn-restart-cf-tunnel" class="light-button">Restart Tunnel ↻</button>
           <button type="button" id="btn-push-cf-dns" class="light-button" style="border-color:rgba(56,189,248,0.4);color:#38bdf8;">Push DNS to Cloudflare 🚀</button>
+          <button type="button" id="btn-test-cf-reachability" class="light-button">Test Reachability 🌐</button>
         </div>
 
         <div id="cf-dns-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--radius-xs);font-size:12px;background:rgba(255,255,255,0.03);border:1px solid var(--line);"></div>
+        <div id="cf-reachability-results" class="reachability-results-panel reachability-results" style="display:none;" aria-live="polite"></div>
       </div>
 
       <!-- External Reverse Proxy Snippet Panel -->
@@ -533,6 +573,15 @@
       <p class="field-help" style="margin-top:10px">Streams are fetched on-demand natively via multi-threaded NNTP downloads and proxied via AIOStreams BuiltinProxy. No debrid subscription is needed.</p>
     </div>
   </div>
+
+  <div class="optional-setup" id="easynews-setup" style="margin-top:14px;">
+    <h3>EasyNews Direct Streaming · optional</h3>
+    <p>Optional EasyNews credentials for direct Usenet web search &amp; streaming in AIOStreams.</p>
+    <div class="field-grid">
+      <label><span class="field-label">EasyNews Username <span>EASYNEWS_USER</span></span><input id="easynews-user" name="EASYNEWS_USER" type="text" autocomplete="off" placeholder="Easynews username"></label>
+      <label><span class="field-label"><span class="field-title">EasyNews Password <span>EASYNEWS_PASSWORD</span></span><small id="easynews-pass-saved" class="saved-indicator"></small><button type="button" id="easynews-pass-remove" class="clear-key" hidden aria-label="Clear saved EasyNews password">×</button></span><input id="easynews-pass" name="EASYNEWS_PASSWORD" type="password" autocomplete="new-password" placeholder="Easynews password"></label>
+    </div>
+  </div>
 </div>
 
 <!-- STEP 3: Addon Enhancements & Catalogs -->
@@ -612,7 +661,13 @@
     </div>
 
     <div class="optional-setup"><h3>Watch tracking &amp; scrobbling (Trakt · Simkl · AniList · MAL) · optional</h3><p>AIOMetadata automatically syncs your watch history, progress, and personal lists in real time across Trakt, Simkl, AniList, and MyAnimeList. 1-click OAuth sign-in is built-in; you can also specify your own custom developer app keys below if preferred.</p><div style="margin:12px 0 16px"><a id="setup-connect-tracking" class="light-button disabled" href="#" target="_blank" rel="noopener noreferrer"><span>Sign in &amp; link tracking accounts in AIOMetadata</span><span>↗</span></a></div><div id="tracking-fields" class="field-grid"></div><div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><label class="field-label" for="discord-webhook-url">Simulcast airing alert webhook (Discord / Apprise) <span>OPTIONAL</span></label><div style="display:flex;gap:8px;margin-top:6px"><input id="discord-webhook-url" name="DISCORD_WEBHOOK_URL" type="url" placeholder="https://discord.com/api/webhooks/..." style="flex:1" autocomplete="off"><button type="button" id="test-webhook-btn" class="mini-action-btn" style="white-space:nowrap">Test Webhook ↗</button></div><p class="field-help">Dispatches instant notifications the moment new seasonal anime episodes air with verified debrid streams.</p></div></div>
-    <div class="optional-setup" style="border-bottom:none"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div>
+    <div class="optional-setup"><h3>Subtitles &amp; extra accounts · optional</h3><p>Configure OpenSubtitles, SubDL, SubSource, or Wyzie for subtitle fetching, or off-cloud storage providers.</p><div id="extra-fields" class="field-grid"></div></div>
+    <div class="optional-setup" style="border-bottom:none"><h3>Playback, media server &amp; caching · optional</h3>
+      <label class="optional-service"><input id="aio-precache-next-episode" type="checkbox"> Pre-cache next episode streams in AIOStreams (<code>AIO_PRECACHE_NEXT_EPISODE</code>)</label>
+      <p>Prefetches the next episode stream in the background for instant binge-watching transitions (increases background provider API calls).</p>
+      <label class="optional-service" style="margin-top:10px;"><input id="jellyfin-enabled" type="checkbox" checked> Enable embedded Jellyfin server &amp; Web Player bridge (<code>JELLYFIN_ENABLED</code>)</label>
+      <p>Exposes the built-in Jellyfin-compatible server endpoint for external TV apps and the embedded Web Player.</p>
+    </div>
   </details>
 </div>
 <div class="save-note"><span>⌁</span> Keys stay on your server. They are sent to the providers and local services you configure.</div>
@@ -637,7 +692,10 @@
 <section class="operations-section panel" id="maintenance">
 <div class="integrations-heading">
   <div><div class="eyebrow">STACK READINESS &amp; STORAGE</div><h2>Readiness and maintenance.</h2></div>
-  <button id="refresh-maintenance" class="light-button">Refresh status ↻</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button id="refresh-maintenance" class="light-button">Refresh status ↻</button>
+    <button type="button" id="btn-restart-stack" class="light-button" style="border-color:rgba(251,191,36,0.4);color:#fbbf24;">Safe Stack Restart ↻</button>
+  </div>
 </div>
 <p class="section-description">Configured keys and reachable services are separate from authorization and playback checks.</p>
 <div class="operations-grid">
@@ -656,7 +714,7 @@
     </div>
   </div>
 
-  <div class="op-card">
+  <div class="op-card op-card-wide">
     <div class="op-card-header">
       <div class="op-card-title-group">
         <span class="op-badge">STORAGE</span>
@@ -664,10 +722,25 @@
       </div>
       <span class="op-status-dot"></span>
     </div>
-    <p class="op-card-desc">Generates a complete standalone archive of your configs, databases, and keys.</p>
-    <div class="op-card-actions">
-      <a class="light-button" href="/api/backup" download style="text-decoration:none;">Download fresh backup ⤓</a>
+    <p class="op-card-desc">Generates a complete standalone archive of your configs, databases, and keys, or restores from a saved snapshot.</p>
+    <div class="op-card-actions" style="flex-wrap:wrap;justify-content:space-between;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <a class="light-button" href="/api/backup" download style="text-decoration:none;">Download fresh backup ⤓</a>
+        <button type="button" id="btn-refresh-backups" class="light-button">Refresh archives ↻</button>
+      </div>
+      <div class="backup-retention-bar">
+        <label class="field-label" for="backup-keep-last" style="margin:0;white-space:nowrap;">Keep last</label>
+        <select id="backup-keep-last" aria-label="Number of backup archives to keep">
+          <option value="3">3 archives</option>
+          <option value="5" selected>5 archives</option>
+          <option value="10">10 archives</option>
+          <option value="15">15 archives</option>
+          <option value="30">30 archives</option>
+        </select>
+        <button type="button" id="btn-maintenance-prune-backups" class="light-button">Prune old backups ⤓</button>
+      </div>
     </div>
+    <div id="backup-archives-list" class="backup-archives-list" aria-live="polite">Loading backup archives…</div>
     <div class="op-console">
       <div class="op-console-header"><span>backup · release</span><span class="code-dot">● ● ●</span></div>
       <pre id="maintenance-output" aria-live="polite">Checking saved release…</pre>
@@ -786,7 +859,9 @@
       <span class="op-status-dot"></span>
     </div>
     <p class="op-card-desc">Clears transient scrapers and search caches while preserving credentials and DBs.</p>
-    <div class="op-card-actions">
+    <label class="optional-service" style="margin:0;font-size:13px;"><input type="checkbox" id="clean-cache-posters"> Include Posters+ Image Cache</label>
+    <div class="op-card-actions op-actions-split" style="flex-wrap:wrap;">
+      <button type="button" id="preview-cache" class="light-button">Preview Cache 🔍</button>
       <button id="clean-cache" class="light-button">Clear temporary cache 🧹</button>
     </div>
     <div class="op-console">
@@ -842,6 +917,22 @@
     </div>
   </div>
 
+  <div class="op-card op-card-wide" id="card-reachability">
+    <div class="op-card-header">
+      <div class="op-card-title-group">
+        <span class="op-badge">NETWORK</span>
+        <h3>Service &amp; Tunnel Reachability</h3>
+      </div>
+      <span class="op-status-dot" id="reachability-status-dot"></span>
+    </div>
+    <p class="op-card-desc">Verifies internal Docker services, published host ports (:3001, :4005, :8088), portal routes, Cloudflare origin target, and public domain reachability.</p>
+    <div class="op-card-actions">
+      <button type="button" id="btn-test-reachability" class="light-button">Test Reachability 🌐</button>
+    </div>
+    <div id="reachability-summary" class="reachability-summary" aria-live="polite">Not tested yet.</div>
+    <div id="reachability-results" class="reachability-results" aria-live="polite"></div>
+  </div>
+
   <div class="op-card">
     <div class="op-card-header">
       <div class="op-card-title-group">
@@ -854,7 +945,7 @@
     <div class="op-card-inputs">
       <div class="op-input-group">
         <label class="field-label" for="smoke-kind">Type</label>
-        <select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option></select>
+        <select id="smoke-kind"><option value="movie">Movie</option><option value="series">Episode/series</option><option value="anime">Anime</option></select>
       </div>
       <div class="op-input-group">
         <label class="field-label" for="smoke-id">ID</label>
@@ -882,7 +973,7 @@
     <div class="op-card-inputs">
       <div class="op-input-group">
         <label class="field-label" for="provider-check">Provider</label>
-        <select id="provider-check" aria-label="Provider service to validate"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option></select>
+        <select id="provider-check" aria-label="Provider service to validate"><option value="tmdb">TMDB</option><option value="realdebrid">Real-Debrid</option><option value="premiumize">Premiumize</option><option value="torbox">TorBox</option><option value="alldebrid">AllDebrid</option><option value="debridlink">Debrid-Link</option><option value="easydebrid">EasyDebrid</option><option value="usenet">Usenet (Saved NNTP)</option><option value="nzb">NZB Indexer</option></select>
       </div>
       <div class="op-input-group">
         <label class="field-label" for="provider-key">Key</label>
@@ -990,7 +1081,7 @@
   </div>
   <div class="log-dialog-toolbar">
     <label for="logs-container-select">Service</label>
-    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
+    <select id="logs-container-select" aria-label="Select container service to inspect"><option value="aiostreams" selected>AIOStreams (Aggregator)</option><option value="prowlarr">Prowlarr (Indexers)</option><option value="flaresolverr">FlareSolverr (Antibot Bypass)</option><option value="zilean">Zilean (DMM Indexer)</option><option value="aiometadata">AIOMetadata (Metadata)</option><option value="anime-kitsu">Anime Kitsu (Metadata)</option><option value="jikan-api">Jikan API (MAL Metadata)</option><option value="postersplus">Posters+ (Metadata)</option><option value="subsense">SubSense (Subtitles)</option><option value="stremthru">StremThru (Proxy &amp; Store)</option><option value="lumiere-db">LumiereDB (IMDb Search)</option><option value="shared-postgres">Shared PostgreSQL (Database)</option><option value="shared-redis">Shared Redis (Cache)</option><option value="portal">Portal Server</option><option value="controller">Controller &amp; Watchdog</option><option value="setup">Stack Setup (Provisioner)</option></select>
     <button type="button" id="btn-fetch-logs" class="text-button">Refresh</button>
     <button type="button" id="copy-service-logs" class="text-button" disabled>Copy logs</button>
   </div>

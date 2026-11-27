@@ -42,12 +42,13 @@ function form(saved){
       if(path==='/api/env')return saved;
       calls.push({path,payload:options.body?JSON.parse(options.body):null});return {success:true};
     }});
+  const validation=source.slice(source.indexOf('const SUPPORTED_VALIDATION_PROVIDERS ='),source.indexOf('function renderFields('));
   const load=source.match(/async function loadSettings\(options\) \{[\s\S]*?\n\}/)[0];
   const submit=source.slice(source.indexOf("document.getElementById('setup-form').addEventListener('submit'"),source.indexOf("document.getElementById('refresh-services').addEventListener"));
   vm.runInContext(source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0],context);
   const state=source.slice(source.indexOf('let settingsEditRevision ='),source.indexOf('async function loadSettings('));
   const dirty=source.match(/function setFormDirty\(dirty\) \{[\s\S]*?\n\}/)[0];
-  vm.runInContext(state+'\n'+dirty+'\n'+load+'\n'+submit,context);
+  vm.runInContext(validation+'\n'+state+'\n'+dirty+'\n'+load+'\n'+submit,context);
   return {context,nodes,calls,document};
 }
 
@@ -177,11 +178,71 @@ test('native anime switch reloads and is saved with the selected account',async(
 });
 
 test('saved keys reveal test button for validating credentials without re-entering them',async()=>{
-  const env=form({configuredKeys:['PROVIDER_KEY']});
+  const env=form({configuredKeys:['REALDEBRID_API_KEY']});
+  env.context.fields.push(['REALDEBRID_API_KEY']);
   await vm.runInContext('loadSettings()',env.context);
-  assert.equal(env.nodes.get('PROVIDER_KEY-saved').textContent,'SAVED');
-  assert.equal(env.nodes.get('PROVIDER_KEY-test').hidden,false);
-  assert.equal(env.nodes.get('PROVIDER_KEY-remove').hidden,false);
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-saved').textContent,'SAVED');
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-test').hidden,false);
+  assert.equal(env.nodes.get('REALDEBRID_API_KEY-remove').hidden,false);
+});
+
+test('unsupported saved keys like OPENSUBTITLES_API_KEY keep -test hidden while supported provider keys reveal it',async()=>{
+  const supportedKeys=[
+    'TMDB_API_KEY',
+    'REALDEBRID_API_KEY',
+    'PREMIUMIZE_API_KEY',
+    'TORBOX_API_KEY',
+    'ALLDEBRID_API_KEY',
+    'DEBRIDLINK_API_KEY',
+    'EASYDEBRID_API_KEY',
+    'NZB_INDEXER_API_KEY'
+  ];
+  const env=form({configuredKeys:[...supportedKeys,'OPENSUBTITLES_API_KEY']});
+  for(const key of [...supportedKeys,'OPENSUBTITLES_API_KEY']){
+    if(!env.context.fields.some(([existing])=>existing===key))env.context.fields.push([key]);
+  }
+  await vm.runInContext('loadSettings()',env.context);
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-saved').textContent,'SAVED');
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-remove').hidden,false);
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY-test').hidden,true);
+  for(const key of supportedKeys){
+    assert.equal(env.nodes.get(`${key}-test`).hidden,false,`${key}-test should be visible when saved`);
+  }
+
+  const createdIds=[];
+  const makeNode=(tag)=>({
+    tagName:tag,
+    children:[],
+    style:{},
+    setAttribute(){},
+    addEventListener(){},
+    append(...kids){
+      for(const kid of kids){
+        if(kid&&typeof kid==='object'){
+          this.children.push(kid);
+          if(kid.id)createdIds.push(kid.id);
+        }
+      }
+    }
+  });
+  const target=makeNode('div');
+  const renderCtx=vm.createContext({
+    document:{
+      getElementById:id=>(id==='test-fields'?target:null),
+      createElement:tag=>makeNode(tag),
+      createTextNode:text=>({text})
+    },
+    savedKeys:new Set(),
+    api:async()=>({}),
+    notify:()=>{},
+    setFormDirty:()=>{}
+  });
+  const validation=source.slice(source.indexOf('const SUPPORTED_VALIDATION_PROVIDERS ='),source.indexOf('function renderFields('));
+  const renderFn=source.slice(source.indexOf('function renderFields('),source.indexOf("renderFields('provider-fields'"));
+  vm.runInContext(validation+'\n'+renderFn,renderCtx);
+  renderCtx.renderFields('test-fields',[['REALDEBRID_API_KEY','Real-Debrid','R'],['OPENSUBTITLES_API_KEY','OpenSubtitles subtitles','OS']]);
+  assert.equal(createdIds.includes('REALDEBRID_API_KEY-test'),true);
+  assert.equal(createdIds.includes('OPENSUBTITLES_API_KEY-test'),false);
 });
 
 test('local access scope configures direct host and port endpoints',async()=>{
@@ -854,4 +915,344 @@ test('Cloudflare preview escapes raw, encoded and saved tunnel metadata',()=>{
   vm.runInContext('updateClientTokenPreview()',context);
   assert.ok(!nodes.get('cf-token-meta-text').innerHTML.includes('<img'));
   assert.equal(nodes.get('cf-cname-target').textContent,malicious);
+});
+
+test('setup-form loads and saves COMPOSE_PROFILES, OpenSubtitles, EasyNews, precache, and Jellyfin without blank-overwriting secrets',async()=>{
+  assert.match(source,/\['OPENSUBTITLES_API_KEY'/,'OPENSUBTITLES_API_KEY should be in extras/fields');
+  const env=form({
+    COMPOSE_PROFILES:'scrapers,anime-db',
+    configuredKeys:['PROVIDER_KEY','OPENSUBTITLES_API_KEY'],
+    OPENSUBTITLES_API_KEY_SAVED:true,
+    EASYNEWS_USER:'en-user',
+    EASYNEWS_PASSWORD_SAVED:true,
+    AIO_PRECACHE_NEXT_EPISODE:'true',
+    JELLYFIN_ENABLED:'false'
+  });
+  env.context.fields.push(['OPENSUBTITLES_API_KEY']);
+  await vm.runInContext('loadSettings()',env.context);
+
+  assert.equal(env.nodes.get('compose-profiles').value,'core,anime');
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY').value,'');
+  assert.equal(env.nodes.get('OPENSUBTITLES_API_KEY').placeholder,'Saved · enter to replace');
+  assert.equal(env.nodes.get('easynews-user').value,'en-user');
+  assert.equal(env.nodes.get('easynews-pass').value,'');
+  assert.equal(env.nodes.get('easynews-pass').placeholder,'Saved · enter to replace');
+  assert.equal(env.nodes.get('aio-precache-next-episode').checked,true);
+  assert.equal(env.nodes.get('jellyfin-enabled').checked,false);
+
+  // Submit with blank secrets: must preserve OPENSUBTITLES_API_KEY and EASYNEWS_PASSWORD
+  await env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
+  const save1=env.calls.find(c=>c.path==='/api/save-env').payload;
+  assert.equal(save1.COMPOSE_PROFILES,'core,anime');
+  assert.equal(save1.EASYNEWS_USER,'en-user');
+  assert.equal(save1.AIO_PRECACHE_NEXT_EPISODE,'true');
+  assert.equal(save1.JELLYFIN_ENABLED,'false');
+  assert.equal('OPENSUBTITLES_API_KEY' in save1,false);
+  assert.equal('EASYNEWS_PASSWORD' in save1,false);
+
+  // Submit with newly entered secrets and toggled controls
+  env.calls.length=0;
+  env.nodes.get('OPENSUBTITLES_API_KEY').value='os-new-key';
+  env.nodes.get('easynews-pass').value='en-new-pass';
+  env.nodes.get('aio-precache-next-episode').checked=false;
+  env.nodes.get('jellyfin-enabled').checked=true;
+  env.nodes.get('compose-profiles').value='core,tunnel';
+  await env.nodes.get('setup-form').handlers.submit({preventDefault(){}});
+  const save2=env.calls.find(c=>c.path==='/api/save-env').payload;
+  assert.equal(save2.OPENSUBTITLES_API_KEY,'os-new-key');
+  assert.equal(save2.EASYNEWS_PASSWORD,'en-new-pass');
+  assert.equal(save2.AIO_PRECACHE_NEXT_EPISODE,'false');
+  assert.equal(save2.JELLYFIN_ENABLED,'true');
+  assert.equal(save2.COMPOSE_PROFILES,'core,tunnel');
+});
+
+test('btn-stop-cf-tunnel and btn-restart-cf-tunnel call /api/cloudflare/tunnel and refresh status',async()=>{
+  const notices=[];
+  const env=form({USENET_ENABLED:'false',configuredKeys:['PROVIDER_KEY']});
+  env.context.notify=(msg,isErr)=>notices.push({msg,isErr});
+  const cfBlock=source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'),source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock,env.context);
+
+  let statusRefreshes=0;
+  const origApi=env.context.api;
+  env.context.api=async(path,opts)=>{
+    if(path==='/api/cloudflare/status'){statusRefreshes++;return {local_tunnel:{state:'exited'}};}
+    return origApi(path,opts);
+  };
+
+  const stopBtn=env.nodes.get('btn-stop-cf-tunnel');
+  await stopBtn.handlers.click({currentTarget:stopBtn});
+  assert.equal(env.calls.some(c=>c.path==='/api/cloudflare/tunnel'&&c.payload.action==='stop'),true);
+  assert.equal(stopBtn.disabled,false);
+
+  const restartBtn=env.nodes.get('btn-restart-cf-tunnel');
+  await restartBtn.handlers.click({currentTarget:restartBtn});
+  assert.equal(env.calls.some(c=>c.path==='/api/cloudflare/tunnel'&&c.payload.action==='restart'),true);
+  assert.equal(restartBtn.disabled,false);
+  assert.equal(statusRefreshes,2);
+  assert.ok(notices.some(n=>/stopped/i.test(n.msg)));
+  assert.ok(notices.some(n=>/restarted/i.test(n.msg)));
+});
+
+test('playback test forwards selected kind and content_id',async()=>{
+  const env=form({});
+  const fnPlayback=source.match(/async function runPlaybackTest\(\) \{[\s\S]*?\n\}/)[0];
+  env.context.notify=()=>{};
+  vm.runInContext(fnPlayback,env.context);
+  env.document.getElementById('playback-test-kind').value='anime';
+  env.document.getElementById('playback-test-id').value='tt9335498';
+  await vm.runInContext('runPlaybackTest()',env.context);
+  const call=env.calls.find(c=>c.path==='/api/test-playback');
+  assert.equal(call.payload.kind,'anime');
+  assert.equal(call.payload.content_id,'tt9335498');
+});
+
+test('index.html exposes required diagnostics, log containers, playback inputs, and maintenance controls',()=>{
+  const html=fs.readFileSync('index.html','utf8');
+  for(const val of ['alldebrid','debridlink','easydebrid','usenet','nzb']){
+    assert.match(html,new RegExp(`id="provider-check"[\\s\\S]*?value="${val}"`));
+  }
+  for(const val of ['shared-postgres','shared-redis','jikan-api']){
+    assert.match(html,new RegExp(`id="logs-container-select"[\\s\\S]*?value="${val}"`));
+  }
+  assert.match(html,/id="smoke-kind"[\s\S]*?value="anime"/);
+  for(const id of ['playback-test-kind','playback-test-id','compose-profiles','easynews-user','easynews-pass','aio-precache-next-episode','jellyfin-enabled','backup-keep-last','backup-archives-list','btn-maintenance-prune-backups','preview-cache','clean-cache-posters','btn-stop-cf-tunnel','btn-restart-cf-tunnel','btn-restart-stack','cf-origin-preset','cf-origin-target','cf-origin-candidates','cf-origin-warning','btn-test-cf-reachability','cf-reachability-results','card-reachability','btn-test-reachability','reachability-summary','reachability-results']){
+    assert.match(html,new RegExp(`id="${id}"`));
+  }
+});
+
+test('refreshCloudflareStatus prefills :3001 recommended_origin for external connectors, warns on :3000, and submits service_url on btn-push-cf-dns', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-ext',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: 'ext-tunnel-id',
+      cname_target: 'ext-tunnel-id.cfargotunnel.com'
+    }
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/cloudflare/status') {
+      return {
+        has_external: true,
+        connector_mode: 'external_bridge',
+        recommended_origin: 'http://host.docker.internal:3001',
+        detected_origin: 'http://aiostreams:3000',
+        origin_warning: 'External connector cannot reach aiostreams:3000 on stremio-net',
+        origin_candidates: [
+          { label: 'External Bridge / DinD (:3001)', url: 'http://host.docker.internal:3001' },
+          { label: 'Host-Network Connector (:3001)', url: 'http://127.0.0.1:3001' }
+        ],
+        external_connectors: [{ name: 'cloudflared-host', image: 'cloudflare/cloudflared', status: 'Up 2 hours' }],
+        token_configured: true
+      };
+    }
+    if (path === '/api/cloudflare/push-dns') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        message: 'DNS and ingress updated',
+        hostname: payload.hostname,
+        cname_target: payload.cname_target,
+        zone_name: 'customdomain.org',
+        service_url: payload.service_url,
+        repaired: true,
+        ingress_action: 'repaired',
+        previous_service_url: 'http://aiostreams:3000',
+        tunnel_started: false
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+  await vm.runInContext('loadSettings()', env.context);
+  await vm.runInContext('refreshCloudflareStatus()', env.context);
+
+  const originInput = env.nodes.get('cf-origin-target');
+  const warnBox = env.nodes.get('cf-origin-warning');
+  assert.equal(originInput.value, 'http://host.docker.internal:3001');
+  assert.equal(warnBox.style.display, 'block');
+  assert.match(warnBox.innerHTML, /Stale :3000 Origin Detected/i);
+  assert.match(warnBox.innerHTML, /http:\/\/aiostreams:3000/);
+
+  // Typing :3000 manually triggers immediate unreachable-origin warning
+  originInput.value = 'http://aiostreams:3000';
+  await originInput.handlers.input({ currentTarget: originInput });
+  assert.match(warnBox.innerHTML, /Unreachable Origin \(:3000\)/i);
+
+  // Restore :3001 via preset selector "Auto"
+  env.nodes.get('cf-origin-preset').value = '';
+  await env.nodes.get('cf-origin-preset').handlers.change({ currentTarget: env.nodes.get('cf-origin-preset') });
+  assert.equal(originInput.value, 'http://host.docker.internal:3001');
+
+  // Push DNS forwards service_url and renders repaired ingress banner
+  env.calls.length = 0;
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+  const pushCall = env.calls.find(c => c.path === '/api/cloudflare/push-dns');
+  assert.ok(pushCall);
+  assert.equal(pushCall.payload.service_url, 'http://host.docker.internal:3001');
+  const dnsHtml = env.nodes.get('cf-dns-result').innerHTML;
+  assert.match(dnsHtml, /Repaired stale Cloudflare ingress rule/i);
+  assert.match(dnsHtml, /http:\/\/host\.docker\.internal:3001/);
+  assert.match(lastNotification, /Cloudflare DNS CNAME pushed/i);
+});
+
+test('Test Reachability renders checks, highlights unreachable targets, and escapes untrusted output', async () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const env = form({ USENET_ENABLED: 'false', configuredKeys: ['PROVIDER_KEY'] });
+  env.context.notify = () => {};
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/reachability') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        ok: false,
+        status: 'fail',
+        recommended_origin: 'http://host.docker.internal:3001',
+        connector_mode: 'external_bridge',
+        summary: { total: 3, passed: 1, failed: 1, warnings: 1, skipped: 0 },
+        checks: [
+          {
+            id: 'host_3001',
+            name: 'AIOStreams Host Port',
+            category: 'host_port',
+            target: 'http://127.0.0.1:3001/health',
+            ok: true,
+            status: 'ok',
+            latency_ms: 4.5,
+            detail: 'HTTP 200 OK',
+            remediation: null
+          },
+          {
+            id: 'cf_origin',
+            name: `Cloudflare Origin ${evil}`,
+            category: 'cloudflare',
+            target: `http://aiostreams:3000/${evil}`,
+            ok: false,
+            status: 'fail',
+            latency_ms: 12.2,
+            detail: `Connection refused ${evil}`,
+            remediation: `Point Cloudflare tunnel to http://host.docker.internal:3001 ${evil}`
+          },
+          {
+            id: 'remote_base',
+            name: 'Public BASE_URL',
+            category: 'remote',
+            target: 'https://watch.example.com',
+            ok: false,
+            status: 'warn',
+            latency_ms: 88.0,
+            detail: 'Returned 502 Bad Gateway',
+            remediation: 'Verify tunnel ingress rule points to :3001'
+          }
+        ]
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  const opsFn = source.match(/async function runOperations\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(cfBlock + '\n' + opsFn, env.context);
+  await vm.runInContext('runOperations()', env.context);
+
+  env.nodes.get('cf-origin-target').value = 'http://host.docker.internal:3001';
+  const btn = env.nodes.get('btn-test-reachability');
+  await btn.handlers.click({ currentTarget: btn });
+
+  const reachCall = env.calls.find(c => c.path === '/api/reachability');
+  assert.ok(reachCall);
+  assert.equal(reachCall.payload.origin_url, 'http://host.docker.internal:3001');
+  assert.equal(reachCall.payload.include_remote, true);
+
+  const summaryHtml = env.nodes.get('reachability-summary').innerHTML;
+  const resultsHtml = env.nodes.get('reachability-results').innerHTML;
+  assert.match(summaryHtml, /1 unreachable target/i);
+  assert.match(summaryHtml, /1\/3 passed/);
+  assert.match(resultsHtml, /reachability-item reachability-ok/);
+  assert.match(resultsHtml, /reachability-item reachability-fail/);
+  assert.match(resultsHtml, /reachability-item reachability-warn/);
+  assert.match(resultsHtml, /✗ Unreachable/);
+  assert.match(resultsHtml, /4\.5 ms/);
+  assert.match(resultsHtml, /Remediation:/);
+  assert.ok(!resultsHtml.includes('<img'), 'Untrusted HTML must be escaped');
+  assert.ok(resultsHtml.includes('&lt;img'), 'Escaped tag text should be preserved');
+
+  // Remote Access quick Reachability button also works
+  const cfBtn = env.nodes.get('btn-test-cf-reachability');
+  await cfBtn.handlers.click({ currentTarget: cfBtn });
+  assert.equal(env.nodes.get('cf-reachability-results').style.display, 'grid');
+  assert.match(env.nodes.get('cf-reachability-results').innerHTML, /reachability-item reachability-fail/);
+});
+
+test('btn-push-cf-dns confirms external connector without Start Local Tunnel warning when external_connector_active is true', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-ext',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: 'ext-tunnel-id',
+      cname_target: 'ext-tunnel-id.cfargotunnel.com'
+    }
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/cloudflare/status') {
+      return {
+        has_external: true,
+        connector_mode: 'external_host',
+        recommended_origin: 'http://127.0.0.1:3001',
+        external_connectors: [{ name: 'host-cf', image: 'cloudflare/cloudflared', status: 'Up 2 hours' }],
+        token_configured: true
+      };
+    }
+    if (path === '/api/cloudflare/push-dns') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        message: 'DNS and ingress updated',
+        hostname: payload.hostname,
+        cname_target: payload.cname_target,
+        zone_name: 'customdomain.org',
+        service_url: payload.service_url,
+        tunnel_started: false,
+        external_connector_active: true
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+  await vm.runInContext('loadSettings()', env.context);
+  await vm.runInContext('refreshCloudflareStatus()', env.context);
+
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+
+  const dnsHtml = env.nodes.get('cf-dns-result').innerHTML;
+  assert.doesNotMatch(dnsHtml, /502 Bad Gateway Prevention/i);
+  assert.doesNotMatch(dnsHtml, /Start Local Tunnel/i);
+  assert.match(dnsHtml, /external connector/i);
+  assert.match(dnsHtml, /without starting a duplicate <code>aio-tunnel<\/code>/i);
+  assert.match(lastNotification, /external connector/i);
 });

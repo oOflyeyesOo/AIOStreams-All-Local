@@ -2301,6 +2301,296 @@ class PortalTests(unittest.TestCase):
             data = json.loads(body)
             self.assertFalse(data.get("success"))
 
+    def test_backups_restore_endpoint_validation_and_execution(self):
+        self.assertEqual(self.request("/api/backups/restore", "POST", {"filename": "a.tar.gz"}, auth=False)[0], 401)
+        self.assertEqual(self.request("/api/backups/restore", "POST", {"filename": "a.tar.gz"}, auth=True, headers={"Origin": "https://untrusted.example"})[0], 403)
+
+        for bad in ("", "../escape.tar.gz", "sub/a.tar.gz", "not-an-archive.zip", ".hidden.tar.gz"):
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": bad}, auth=True)
+            self.assertEqual(status, 400, f"Expected 400 for filename={bad!r}")
+            self.assertFalse(json.loads(body)["success"])
+
+        backup_dir = self.root / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        status, _, _ = self.request("/api/backups/restore", "POST", {"filename": "missing-backup.tar.gz"}, auth=True)
+        self.assertEqual(status, 404)
+
+        archive = backup_dir / "aio-backup-20261125-000000-abcdef123456.tar.gz"
+        archive.write_bytes(b"fixture-tar")
+        with patch("tools.backup.restore_backup", return_value=True) as mock_restore:
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": archive.name}, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["filename"], archive.name)
+            mock_restore.assert_called_once()
+
+        with patch("tools.backup.restore_backup", return_value=False):
+            status, body, _ = self.request("/api/backups/restore", "POST", {"filename": archive.name}, auth=True)
+            self.assertEqual(status, 500)
+            self.assertFalse(json.loads(body)["success"])
+
+        with tempfile.TemporaryDirectory() as outside:
+            ext = Path(outside) / "outside.tar.gz"
+            ext.write_bytes(b"outside")
+            link_path = backup_dir / "symlink-backup.tar.gz"
+            try:
+                link_path.symlink_to(ext)
+            except OSError:
+                return
+            with patch("tools.backup.restore_backup") as mock_restore:
+                status, _, _ = self.request("/api/backups/restore", "POST", {"filename": link_path.name}, auth=True)
+                self.assertEqual(status, 400)
+                mock_restore.assert_not_called()
+
+    def test_clean_cache_endpoint_options_and_defaults(self):
+        with patch("tools.clean_cache.clean_stack_cache", return_value={"success": True, "dry_run": False, "total_bytes": 0, "freed_mb": 0.0, "freed_gb": 0.0, "total_files": 0, "details": [], "errors": []}) as clean:
+            status, body, _ = self.request("/api/clean-cache", "POST", b"", auth=True, headers={"Content-Length": "0"})
+            self.assertEqual(status, 200)
+            clean.assert_called_once_with(Path(portal.WEB_ROOT), include_poster_cache=False, dry_run=False)
+
+        with patch("tools.clean_cache.clean_stack_cache", return_value={"success": True, "dry_run": True, "total_bytes": 1024, "freed_mb": 0.0, "freed_gb": 0.0, "total_files": 1, "details": [], "errors": []}) as clean:
+            status, body, _ = self.request("/api/clean-cache", "POST", {"dry_run": True, "include_poster_cache": True}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["dry_run"])
+            clean.assert_called_once_with(Path(portal.WEB_ROOT), include_poster_cache=True, dry_run=True)
+
+        status, _, _ = self.request("/api/clean-cache", "POST", {"dry_run": "yes"}, auth=True)
+        self.assertEqual(status, 400)
+
+    def test_setup_env_keys_masked_preserved_and_exposed(self):
+        status, _, _ = self.request("/api/save-env", "POST", {
+            "COMPOSE_PROFILES": "core,anime",
+            "OPENSUBTITLES_API_KEY": "os-secret-value",
+            "EASYNEWS_USER": "easyuser",
+            "EASYNEWS_PASSWORD": "easypass-secret",
+            "AIO_PRECACHE_NEXT_EPISODE": "true",
+            "JELLYFIN_ENABLED": "false",
+        }, auth=True)
+        self.assertEqual(status, 200)
+
+        status, body, _ = self.request("/api/env", auth=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn(b"os-secret-value", body)
+        self.assertNotIn(b"easypass-secret", body)
+        data = json.loads(body)
+        self.assertEqual(data["COMPOSE_PROFILES"], "core,anime")
+        self.assertEqual(data["EASYNEWS_USER"], "easyuser")
+        self.assertTrue(data["EASYNEWS_PASSWORD_SAVED"])
+        self.assertTrue(data["OPENSUBTITLES_API_KEY_SAVED"])
+        self.assertIn("OPENSUBTITLES_API_KEY", data["configuredKeys"])
+        self.assertIn("EASYNEWS_PASSWORD", data["configuredKeys"])
+        self.assertEqual(data["AIO_PRECACHE_NEXT_EPISODE"], "true")
+        self.assertEqual(data["JELLYFIN_ENABLED"], "false")
+
+        # Omitting masked secrets on subsequent save preserves them
+        status, _, _ = self.request("/api/save", "POST", {"EASYNEWS_USER": "easyuser2"}, auth=True)
+        self.assertEqual(status, 200)
+        saved = portal.read_saved_env()
+        self.assertEqual(saved.get("OPENSUBTITLES_API_KEY"), "os-secret-value")
+        self.assertEqual(saved.get("EASYNEWS_PASSWORD"), "easypass-secret")
+        self.assertEqual(saved.get("EASYNEWS_USER"), "easyuser2")
+
+        status, _, _ = self.request("/api/save-env", "POST", {"AIO_PRECACHE_NEXT_EPISODE": "invalid"}, auth=True)
+        self.assertEqual(status, 400)
+
+    def test_smoke_test_and_playback_support_anime_and_safe_logs(self):
+        response = type("Response", (), {
+            "__enter__": lambda self: self,
+            "__exit__": lambda self, *args: None,
+            "read": lambda self: json.dumps({"streams": [{"url": "https://cdn.example.test/anime.mp4"}]}).encode(),
+        })()
+        with patch("urllib.request.urlopen", return_value=response) as mock_open:
+            status, body, _ = self.request(
+                "/api/smoke-test", "POST", {"kind": "anime", "id": "kitsu:12:1"}, auth=True,
+                headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(status, 200)
+            payload = json.loads(body)
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["kind"], "anime")
+            self.assertIn("/stream/anime/kitsu:12:1.json", mock_open.call_args[0][0])
+
+        status, body, _ = self.request("/api/smoke-test", "POST", {"kind": "anime", "id": "bad id/.."}, auth=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["status"], "invalid")
+
+        with patch.object(portal, "playback_readiness", return_value={"ready": True}), \
+             patch.object(portal, "validate_provider", return_value={"status": "valid", "detail": "ok"}), \
+             patch.object(portal, "read_saved_env", return_value={"REALDEBRID_API_KEY": "rd-key"}):
+            pb = portal.run_playback_test(mode="debrid", content_id="kitsu:12:1", kind="anime")
+            self.assertEqual(pb["kind"], "anime")
+            self.assertEqual(pb["content_id"], "kitsu:12:1")
+
+        for svc in ("shared-postgres", "shared-redis", "jikan-api"):
+            with patch.dict(os.environ, {"HOSTNAME": "portal-cid"}), \
+                 patch.object(portal.subprocess, "run", side_effect=[
+                     MagicMock(returncode=0, stdout="testproj\n"),
+                     MagicMock(returncode=0, stdout="a1b2c3d4e5f6\n"),
+                     MagicMock(returncode=0, stdout=f"{svc} log line\n"),
+                 ]):
+                status, body, _ = self.request(f"/api/logs?container={svc}", auth=True)
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body)["container"], svc)
+
+    def test_cloudflare_helper_resolve_compose_project_fallback(self):
+        from tools import cloudflare_helper
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=(
+                    "portal-cid\taiometadata-portal\tghcr.io/example/portal:latest\tUp\trunning\tpython portal.py\tcom.docker.compose.project=mgr-proj,com.docker.compose.service=portal\n"
+                    "cid1\tmgr-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=mgr-proj,com.docker.compose.service=cloudflared\n"
+                    "cid2\tother-cloudflared\tcloudflare/cloudflared:latest\tUp\trunning\ttunnel run\tcom.docker.compose.project=other-proj,com.docker.compose.service=cloudflared\n"
+                ),
+                stderr="",
+            )
+            res = cloudflare_helper.check_cloudflare_containers()
+            mock_run.assert_called_once()
+            self.assertEqual(res["local_tunnel"]["name"], "mgr-cloudflared")
+            self.assertEqual(len(res["external_connectors"]), 1)
+            self.assertEqual(res["external_connectors"][0]["name"], "other-cloudflared")
+
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "mgr-proj", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch("subprocess.run", side_effect=[MagicMock(returncode=0, stdout="", stderr="")]) as mock_run:
+            status_res = cloudflare_helper.manage_local_tunnel("status")
+            self.assertTrue(status_res["success"])
+            self.assertEqual(status_res["status"], "not_created")
+            mock_run.assert_called_once()
+            self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "-p", "mgr-proj"])
+
+        with patch.dict(os.environ, {"AIO_PROJECT_NAME": "", "COMPOSE_PROJECT_NAME": "", "HOSTNAME": "portal-cid"}), \
+             patch("subprocess.run", side_effect=[MagicMock(returncode=0, stdout="", stderr="")]) as mock_run:
+            status_res = cloudflare_helper.manage_local_tunnel("status")
+            self.assertTrue(status_res["success"])
+            self.assertEqual(status_res["status"], "not_created")
+            mock_run.assert_called_once()
+            self.assertEqual(mock_run.call_args[0][0][:4], ["docker", "compose", "--profile", "tunnel"])
+
+    def test_cloudflare_status_includes_topology_and_recommended_origin(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [{"id": "abc12345", "name": "docktun-cf", "status": "Up 2 hours", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "active_external_connectors": [{"id": "abc12345", "name": "docktun-cf", "status": "Up 2 hours", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "has_external": True,
+        }
+        with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+             patch.object(portal, "read_saved_env", return_value={"BASE_URL": "https://watch.example.com", "PORT_AIOSTREAMS": "3001"}):
+            status, body, _ = self.request("/api/cloudflare/status", "GET", auth=True)
+        self.assertEqual(status, 200)
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual(data["connector_mode"], "external_bridge")
+        self.assertEqual(data["recommended_origin"], "http://host.docker.internal:3001")
+        self.assertEqual(data["aiostreams_port"], 3001)
+        self.assertEqual(data["aiometadata_port"], 4005)
+        self.assertEqual(data["aiometadata_origin"], "http://host.docker.internal:4005")
+        self.assertIn("aiostreams:3000", data["origin_warning"])
+        self.assertTrue(any(c["url"] == "http://127.0.0.1:3001" for c in data["origin_candidates"]))
+
+    def test_cloudflare_push_dns_forwards_service_url_and_skips_duplicate_local_tunnel_for_external(self):
+        before = (self.root / ".env").read_bytes()
+        try:
+            mock_containers = {
+                "available": True,
+                "local_tunnel": {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True},
+                "external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "active_external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "has_external": True,
+            }
+            mock_push = {
+                "success": True,
+                "action": "updated",
+                "hostname": "watch.example.com",
+                "cname_target": "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com",
+                "zone_name": "example.com",
+                "record_id": "rec-1",
+                "service_url": "http://127.0.0.1:3001",
+                "ingress_configured": True,
+                "ingress_action": "repaired",
+                "repaired": True,
+                "previous_service_url": "http://aiostreams:3000",
+                "message": "Repaired ingress",
+            }
+            with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+                 patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=mock_push) as push_mock, \
+                 patch("tools.cloudflare_helper.manage_local_tunnel") as manage_mock:
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "cname_target": "c7b74447-4951-4d37-882f-2d4e73b22cf1.cfargotunnel.com",
+                    "service_url": "http://127.0.0.1:3001",
+                }, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["repaired"])
+            self.assertEqual(data["service_url"], "http://127.0.0.1:3001")
+            self.assertTrue(data["external_connector_active"])
+            self.assertFalse(data["tunnel_started"])
+            self.assertEqual(push_mock.call_args[1]["service_url"], "http://127.0.0.1:3001")
+            manage_mock.assert_not_called()
+
+            # Invalid service_url -> 400
+            status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                "api_token": "valid_token",
+                "hostname": "watch.example.com",
+                "cname_target": "tun123.cfargotunnel.com",
+                "service_url": "http://127.0.0.1:3001/bad-path",
+            }, auth=True)
+            self.assertEqual(status, 400)
+        finally:
+            (self.root / ".env").write_bytes(before)
+
+    def test_proxy_config_cloudflare_respects_origin_url(self):
+        status, body, _ = self.request(
+            "/api/proxy-config?format=cloudflare&base_url=https%3A%2F%2Fwatch.example.test&origin_url=http%3A%2F%2F127.0.0.1%3A3001",
+            auth=True,
+        )
+        self.assertEqual(status, 200)
+        text = body.decode("utf-8")
+        self.assertIn("service: http://127.0.0.1:3001", text)
+        self.assertIn("service: http://127.0.0.1:4005", text)
+
+    def test_reachability_endpoint_auth_validation_and_execution(self):
+        self.assertEqual(self.request("/api/reachability", "GET", auth=False)[0], 401)
+        self.assertEqual(self.request("/api/reachability", "POST", {}, auth=False)[0], 401)
+        self.assertEqual(
+            self.request("/api/reachability", "POST", {}, auth=True, headers={"Origin": "https://untrusted.example"})[0],
+            403,
+        )
+
+        mock_report = {
+            "success": True,
+            "ok": True,
+            "status": "ok",
+            "checked_at": "2026-11-27T06:35:00+00:00",
+            "recommended_origin": "http://host.docker.internal:3001",
+            "connector_mode": "external_bridge",
+            "summary": {"total": 1, "passed": 1, "failed": 0, "warnings": 0, "skipped": 0},
+            "checks": [{"id": "cloudflare:origin", "name": "Cloudflare Tunnel Origin Target", "category": "cloudflare", "target": "http://host.docker.internal:3001", "ok": True, "status": "ok", "required": True, "latency_ms": 2.1, "detail": "Reachable", "remediation": None}],
+        }
+        with patch("tools.reachability.run_reachability_checks", return_value=mock_report) as run_mock:
+            status, body, _ = self.request("/api/reachability?origin_url=http%3A%2F%2F127.0.0.1%3A3001&include_remote=false", "GET", auth=True)
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["ok"])
+            self.assertEqual(run_mock.call_args[1]["origin_url"], "http://127.0.0.1:3001")
+            self.assertFalse(run_mock.call_args[1]["include_remote"])
+
+            status, body, _ = self.request("/api/reachability", "POST", {"service_url": "http://host.docker.internal:3001", "include_remote": True}, auth=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(run_mock.call_args[1]["origin_url"], "http://host.docker.internal:3001")
+            self.assertTrue(run_mock.call_args[1]["include_remote"])
+
+        status, _, _ = self.request("/api/reachability", "POST", {"origin_url": "ftp://bad"}, auth=True)
+        self.assertEqual(status, 400)
+
+        leak = "C:\\secret\\reachability_leak.txt"
+        with patch("tools.reachability.run_reachability_checks", side_effect=RuntimeError(leak)):
+            status, body, _ = self.request("/api/reachability", "GET", auth=True)
+            self.assertEqual(status, 500)
+            self.assertNotIn(leak.encode(), body)
+
 
 if __name__ == "__main__":
     unittest.main()

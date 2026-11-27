@@ -16,7 +16,9 @@ from tools.cloudflare_helper import (
     check_cloudflare_containers,
     push_cloudflare_dns,
     manage_local_tunnel,
-    fetch_cloudflare_tunnel_token
+    fetch_cloudflare_tunnel_token,
+    recommend_cloudflare_origin,
+    validate_service_url,
 )
 
 
@@ -125,6 +127,37 @@ class TestCloudflareHelper(unittest.TestCase):
         self.assertIsNotNone(res["local_tunnel"])
         self.assertEqual(res["local_tunnel"]["name"], "aio-tunnel")
         self.assertTrue(res["local_tunnel"]["is_local"])
+
+    @patch("subprocess.run")
+    def test_check_cloudflare_containers_derives_project_passively_from_hostname(self, mock_run):
+        mock_output = (
+            "cfother999999\taio-tunnel\tcloudflare/cloudflared:latest\tUp 2 hours\trunning\ttunnel run\t"
+            "com.docker.compose.project=other-stack,com.docker.compose.service=cloudflared\n"
+            "cflocal123456\taio-tunnel\tcloudflare/cloudflared:latest\tUp 1 hour\trunning\ttunnel run\t"
+            "com.docker.compose.project=my-stack,com.docker.compose.service=cloudflared\n"
+            "portalabcdef1\taio-portal\tghcr.io/example/portal:latest\tUp 1 hour\trunning\tpython portal.py\t"
+            "com.docker.compose.project=my-stack,com.docker.compose.service=portal\n"
+        )
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_output, stderr="")
+
+        with patch.dict(
+            os.environ,
+            {
+                "AIO_PROJECT_NAME": "",
+                "COMPOSE_PROJECT_NAME": "",
+                "HOSTNAME": "portalabcdef1234567890",
+            },
+        ):
+            res = check_cloudflare_containers()
+
+        mock_run.assert_called_once()
+        self.assertTrue(res["available"])
+        self.assertEqual(res["local_tunnel"]["id"], "cflocal123456")
+        self.assertTrue(res["local_tunnel"]["is_local"])
+        self.assertTrue(res["has_external"])
+        self.assertEqual(len(res["external_connectors"]), 1)
+        self.assertEqual(res["external_connectors"][0]["id"], "cfother999999")
+        self.assertFalse(res["external_connectors"][0]["is_local"])
 
     def test_push_cloudflare_dns_missing_args(self):
         res1 = push_cloudflare_dns("", "watch.example.com", "target.cfargotunnel.com")
@@ -330,6 +363,196 @@ class TestCloudflareHelper(unittest.TestCase):
         result = manage_local_tunnel("start", token="fixture-token")
         self.assertFalse(result["success"])
         self.assertEqual(result["status"], "failed")
+
+    @patch("tools.cloudflare_helper.time.sleep")
+    @patch("subprocess.run")
+    def test_manage_local_tunnel_ignores_hostname_without_project_env(self, mock_run, _sleep):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "compose.manager.yml").write_text("services: {}")
+            with patch.dict(
+                os.environ,
+                {
+                    "AIO_PROJECT_NAME": "",
+                    "COMPOSE_PROJECT_NAME": "",
+                    "HOSTNAME": "cddbf58da603",
+                },
+            ):
+                result = manage_local_tunnel("start", cwd=directory, token="fixture-token")
+            self.assertFalse(result["success"])
+            mock_run.assert_not_called()
+
+    def test_validate_service_url(self):
+        self.assertEqual(validate_service_url("http://host.docker.internal:3001/"), "http://host.docker.internal:3001")
+        self.assertEqual(validate_service_url("127.0.0.1:3001"), "http://127.0.0.1:3001")
+        self.assertEqual(validate_service_url("https://[::1]:3001"), "https://[::1]:3001")
+        for bad in (
+            "",
+            "   ",
+            "ftp://aiostreams:3000",
+            "http://user:pass@127.0.0.1:3001",
+            "http://127.0.0.1:3001/configure",
+            "http://127.0.0.1:99999",
+            "http://127.0.0.1:3001?a=1",
+            "http://bad$var:3001",
+            "http://bad'host:3001",
+            'http://bad"host:3001',
+            "http://bad`cmd`:3001",
+            "http://bad\\host:3001",
+            "http://bad\x07host:3001",
+            "http://bad\x7fhost:3001",
+            "http://bad\nhost:3001",
+        ):
+            with self.assertRaises(ValueError, msg=f"Expected ValueError for {bad!r}"):
+                validate_service_url(bad)
+
+    @patch("subprocess.run")
+    def test_check_cloudflare_containers_topology_and_origin_recommendation(self, mock_run):
+        # 1. External bridge connector -> host.docker.internal:3001
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="cid2\tdocktun-cf\tcloudflare/cloudflared:latest\tUp 2 hours\trunning\ttunnel run\tdocktun.provider=cloudflare\tdocktun_net\n",
+            stderr="",
+        )
+        containers = check_cloudflare_containers()
+        self.assertEqual(containers["external_connectors"][0]["network_mode"], "bridge")
+        topo = recommend_cloudflare_origin(containers, env_vars={"PORT_AIOSTREAMS": "3001"})
+        self.assertEqual(topo["connector_mode"], "external_bridge")
+        self.assertEqual(topo["recommended_origin"], "http://host.docker.internal:3001")
+        self.assertEqual(topo["aiometadata_origin"], "http://host.docker.internal:4005")
+        self.assertIn("aiostreams:3000", topo["origin_warning"])
+
+        # 2. External host-network connector -> 127.0.0.1:{PORT_AIOSTREAMS}
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="cid3\thost-cf\tcloudflare/cloudflared:latest\tUp 1 day\trunning\ttunnel run\t\thost\n",
+            stderr="",
+        )
+        containers = check_cloudflare_containers()
+        self.assertEqual(containers["external_connectors"][0]["network_mode"], "host")
+        topo = recommend_cloudflare_origin(containers, env_vars={"PORT_AIOSTREAMS": "13001"})
+        self.assertEqual(topo["connector_mode"], "external_host")
+        self.assertEqual(topo["recommended_origin"], "http://127.0.0.1:13001")
+        self.assertEqual(topo["aiometadata_origin"], "http://127.0.0.1:4005")
+
+        # 3. Local aio-tunnel running on stremio-net -> aiostreams:3000
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="cid1\taio-tunnel\tcloudflare/cloudflared:latest\tUp 10 mins\trunning\ttunnel run\tcom.docker.compose.service=cloudflared\taio_stremio-net\n",
+            stderr="",
+        )
+        containers = check_cloudflare_containers()
+        self.assertEqual(containers["local_tunnel"]["network_mode"], "stremio-net")
+        topo = recommend_cloudflare_origin(containers)
+        self.assertEqual(topo["connector_mode"], "local_tunnel")
+        self.assertEqual(topo["recommended_origin"], "http://aiostreams:3000")
+        self.assertIsNone(topo["origin_warning"])
+
+        # 4. No running connector / AIO DinD default -> host.docker.internal:3001
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        containers = check_cloudflare_containers()
+        topo = recommend_cloudflare_origin(containers, env_vars={"CLOUDFLARE_ORIGIN_URL": "http://aiostreams:3000"})
+        self.assertEqual(topo["connector_mode"], "none")
+        self.assertEqual(topo["recommended_origin"], "http://host.docker.internal:3001")
+        self.assertIn("aiostreams:3000", topo["origin_warning"])
+
+    @patch("urllib.request.urlopen")
+    def test_push_cloudflare_dns_repairs_stale_3000_rule_and_honors_service_url(self, mock_urlopen):
+        zones_resp = json.dumps({"success": True, "result": [{"id": "zone-1", "name": "example.com"}]}).encode()
+        dns_existing = json.dumps({"success": True, "result": [{"id": "rec-1", "name": "watch.example.com", "type": "CNAME"}]}).encode()
+        dns_updated = json.dumps({"success": True, "result": {"id": "rec-1", "name": "watch.example.com"}}).encode()
+        tunnel_cfg_get = json.dumps({
+            "success": True,
+            "result": {
+                "config": {
+                    "ingress": [
+                        {"hostname": "watch.example.com", "service": "http://aiostreams:3000"},
+                        {"service": "http_status:404"},
+                    ]
+                }
+            }
+        }).encode()
+        tunnel_cfg_put = json.dumps({"success": True, "result": {}}).encode()
+
+        captured_requests = []
+
+        def fake_urlopen(req, timeout=10):
+            captured_requests.append((req.get_method(), req.full_url, req.data))
+            payload = [zones_resp, dns_existing, dns_updated, tunnel_cfg_get, tunnel_cfg_put][len(captured_requests) - 1]
+            ctx = MagicMock()
+            ctx.__enter__.return_value.read.return_value = payload
+            return ctx
+
+        mock_urlopen.side_effect = fake_urlopen
+
+        res = push_cloudflare_dns(
+            "valid_token",
+            "watch.example.com",
+            "tun123.cfargotunnel.com",
+            account_id="acc-1",
+            tunnel_id="tun-1",
+            service_url="http://host.docker.internal:3001",
+            aiometadata_hostname="aiometa.example.com",
+        )
+        self.assertTrue(res["success"])
+        self.assertTrue(res["ingress_configured"])
+        self.assertTrue(res["repaired"])
+        self.assertEqual(res["ingress_action"], "repaired")
+        self.assertEqual(res["previous_service_url"], "http://aiostreams:3000")
+        self.assertEqual(res["service_url"], "http://host.docker.internal:3001")
+        self.assertIn("http://host.docker.internal:3001", res["message"])
+
+        put_method, put_url, put_body = captured_requests[-1]
+        self.assertEqual(put_method, "PUT")
+        self.assertIn("/cfd_tunnel/tun-1/configurations", put_url)
+        ingress = json.loads(put_body.decode())["config"]["ingress"]
+        self.assertEqual(ingress[0], {"hostname": "watch.example.com", "service": "http://host.docker.internal:3001"})
+        self.assertEqual(ingress[1], {"hostname": "aiometa.example.com", "service": "http://host.docker.internal:4005"})
+        self.assertEqual(ingress[2], {"service": "http_status:404"})
+
+    @patch("urllib.request.urlopen")
+    def test_push_cloudflare_dns_skips_put_when_ingress_already_matches(self, mock_urlopen):
+        dns_existing = json.dumps({"success": True, "result": [{"id": "rec-1", "name": "watch.example.com", "type": "CNAME"}]}).encode()
+        dns_updated = json.dumps({"success": True, "result": {"id": "rec-1", "name": "watch.example.com"}}).encode()
+        tunnel_cfg_get = json.dumps({
+            "success": True,
+            "result": {
+                "config": {
+                    "ingress": [
+                        {"hostname": "watch.example.com", "service": "http://127.0.0.1:3001"},
+                        {"service": "http_status:404"},
+                    ]
+                }
+            }
+        }).encode()
+        responses = [dns_existing, dns_updated, tunnel_cfg_get]
+        ctx = MagicMock()
+        ctx.__enter__.side_effect = lambda: MagicMock(read=lambda: responses.pop(0))
+        mock_urlopen.return_value = ctx
+
+        res = push_cloudflare_dns(
+            "valid_token",
+            "watch.example.com",
+            "tun123.cfargotunnel.com",
+            account_id="acc-1",
+            tunnel_id="tun-1",
+            zone_id="zone-1",
+            service_url="http://127.0.0.1:3001",
+        )
+        self.assertTrue(res["success"])
+        self.assertTrue(res["ingress_configured"])
+        self.assertFalse(res["repaired"])
+        self.assertEqual(res["ingress_action"], "unchanged")
+        self.assertEqual(mock_urlopen.call_count, 3)
+
+    def test_push_cloudflare_dns_rejects_invalid_service_url(self):
+        res = push_cloudflare_dns(
+            "valid_token",
+            "watch.example.com",
+            "tun123.cfargotunnel.com",
+            service_url="http://host.docker.internal:3001/bad-path",
+        )
+        self.assertFalse(res["success"])
+        self.assertIn("without a path", res["error"])
 
 
 if __name__ == "__main__":
