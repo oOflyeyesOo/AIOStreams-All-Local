@@ -19,6 +19,7 @@ let stage = 'fixture validation';
   const stream = data.streams.find(item => item.url === 'http://media-fixture:8099/media/fixture.webm');
   assert(stream, 'Generated stream missing from AIOStreams');
   const browser = await chromium.launch({headless: true});
+  let page;
   try {
     const context = await browser.newContext();
     await context.route('**/*', route => {
@@ -26,7 +27,7 @@ let stage = 'fixture validation';
       if (['aiostreams', 'media-fixture'].includes(u.hostname)) return route.continue();
       return route.abort();
     });
-    const page = await context.newPage();
+    page = await context.newPage();
     stage = 'native player document';
     const native = await page.goto(`http://aiostreams:3000/jellyfin/${encodeURIComponent(profile.uuid)}/${encodeURIComponent(token)}/web/`, {waitUntil:'domcontentloaded', timeout:30000});
     assert.equal(native.status(), 200);
@@ -34,14 +35,20 @@ let stage = 'fixture validation';
     await page.getByRole('button', {name:/Post-setup acceptance fixture/}).click();
     await page.locator('input[type=password]').fill('package-test-only-password');
     await page.getByRole('button', {name:'Sign in', exact:true}).click();
-    stage = 'native catalog and stream selection';
+    stage = 'native catalog item';
     await page.getByText('Generated acceptance video', {exact:true}).first().click();
-    await page.getByRole('button', {name:'Play', exact:true}).click();
-    await page.getByRole('button', {name:/Local fixture/}).click();
+    stage = 'native item Play button';
+    await page.getByRole('button', {name:/^(Play|Resume from\b)/}).click();
+    stage = 'native fixture stream selection';
+    const streamChoice = page.getByRole('button', {name:/Local fixture/});
+    // Newer players auto-play a single result; older versions show a picker.
+    // Wait for an actual visible video or picker, then keep the decode checks.
+    await page.locator('video:visible').or(streamChoice).first().waitFor({state:'visible'});
+    if (await streamChoice.isVisible()) await streamChoice.click();
     stage = 'native browser media decode';
     await page.waitForFunction(() => {
       const v = document.querySelector('video');
-      return v.currentTime > 2 && v.getVideoPlaybackQuality().totalVideoFrames > 10 && !v.error;
+      return v && v.currentTime > 2 && v.getVideoPlaybackQuality().totalVideoFrames > 10 && !v.error;
     }, null, {timeout:20000});
     const before = await page.evaluate(() => { const v=document.querySelector('video');v.pause();return v.currentTime; });
     await page.waitForTimeout(300);
@@ -53,5 +60,15 @@ let stage = 'fixture validation';
     const stats = await page.evaluate(() => {const v=document.querySelector('video');return {seconds: Math.round(v.currentTime*10)/10, frames:v.getVideoPlaybackQuality().totalVideoFrames,error:!!v.error};});
     assert(!stats.error);
     console.log(JSON.stringify({check:'Native AIOStreams player: sign-in, catalog, play, decode, pause, seek, resume',passed:true,...stats}));
+  } catch (error) {
+    if (page && !page.isClosed()) {
+      console.error(JSON.stringify({stage, errorType:error.name,
+        playButtons:await page.getByRole('button',{name:'Play',exact:true}).count(),
+        streamButtons:await page.getByRole('button',{name:/Local fixture/}).count(),
+        dialogs:await page.getByRole('dialog').count(),
+        videos:await page.locator('video').evaluateAll(es=>es.map(v=>({time:v.currentTime,frames:v.getVideoPlaybackQuality().totalVideoFrames,ready:v.readyState,error:v.error?.code}))),
+        movieTitles:await page.getByText('Generated acceptance video',{exact:true}).count()}));
+    }
+    throw error;
   } finally { await browser.close(); }
 })().catch(() => { console.error('FAIL: browser playback acceptance at ' + stage + '; credential-bearing details suppressed'); process.exitCode=1; });

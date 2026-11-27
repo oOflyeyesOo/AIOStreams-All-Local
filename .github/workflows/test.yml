@@ -39,7 +39,8 @@ jobs:
       - name: Isolated portal persistence and player acceptance
         timeout-minutes: 10
         run: |
-          docker compose -p aio-fresh-install -f compose.acceptance.yml up -d --build --wait --wait-timeout 180
+          docker compose -p aio-fresh-install -f compose.acceptance.yml --profile browser build --pull
+          docker compose -p aio-fresh-install -f compose.acceptance.yml up -d --no-build --wait --wait-timeout 180
           docker compose -p aio-fresh-install -f compose.acceptance.yml exec -T portal python3 /tests/seed_install_fixture.py
           docker compose -p aio-fresh-install -f compose.acceptance.yml restart aiostreams
           docker compose -p aio-fresh-install -f compose.acceptance.yml up -d --wait --wait-timeout 120
@@ -47,7 +48,7 @@ jobs:
           docker compose -p aio-fresh-install -f compose.acceptance.yml restart portal
           docker compose -p aio-fresh-install -f compose.acceptance.yml up -d --no-deps --wait --wait-timeout 120 portal
           docker compose -p aio-fresh-install -f compose.acceptance.yml exec -T portal python3 /tests/check_fresh_install_live.py --phase verify
-          docker compose -p aio-fresh-install -f compose.acceptance.yml --profile browser run --build --rm browser-check
+          docker compose -p aio-fresh-install -f compose.acceptance.yml --profile browser run --rm browser-check
       - name: PostgreSQL first and repeat initialization
         run: docker compose -p aio-tests -f compose.test.yml run --rm database-test
       - name: Portal browser regression tests

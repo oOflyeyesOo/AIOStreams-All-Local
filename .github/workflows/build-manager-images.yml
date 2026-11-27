@@ -134,6 +134,9 @@ jobs:
             echo "::endgroup::"
           }
 
+          run_step "bootstrap completion" python3 tests/check_bootstrap_completion.py --project aio-release --env-file fixture.env --compose release-bundle/compose.release.yml --timeout 600
+          run_step "hydrate provisioned alias" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml restart aiostreams
+          run_step "wait for provisioned aggregator" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml up -d --no-deps --wait --wait-timeout 120 aiostreams
           run_step "stack-check" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
           run_step "fresh-install prepare" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_FRESH_INSTALL_TEST=true -e AIO_FRESH_INSTALL_TEST_PROJECT=aio-release portal python3 - --phase prepare < tests/check_fresh_install_live.py
           run_step "restart portal" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml restart portal
