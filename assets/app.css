@@ -4119,4 +4119,170 @@ a.disabled, button.disabled {
   border-color: rgba(148, 163, 184, 0.25);
 }
 
+/* Cloudflare Origin Target & Reachability Checks */
+.cf-origin-controls {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.9fr) minmax(240px, 1.3fr);
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .cf-origin-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cf-origin-warning {
+  margin-top: 8px;
+  padding: 8px 11px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}
+
+.cf-origin-warning.cf-origin-warning-danger {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.cf-origin-warning.cf-origin-warning-info {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: rgba(56, 189, 248, 0.09);
+  color: #bae6fd;
+}
+
+.reachability-results-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid var(--line);
+}
+
+.reachability-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.reachability-summary strong {
+  color: var(--text-main);
+}
+
+.reachability-results {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 8px;
+}
+
+.reachability-item {
+  padding: 9px 11px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reachability-item.reachability-ok {
+  border-color: rgba(52, 211, 153, 0.32);
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.reachability-item.reachability-fail {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(239, 68, 68, 0.11);
+}
+
+.reachability-item.reachability-warn {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.reachability-item.reachability-skipped {
+  border-color: rgba(148, 163, 184, 0.25);
+  opacity: 0.8;
+}
+
+.reachability-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.reachability-name {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.reachability-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.reachability-badge-ok {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.reachability-badge-fail {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.16);
+}
+
+.reachability-badge-warn {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.16);
+}
+
+.reachability-badge-skipped {
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.reachability-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.reachability-meta code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-cyan);
+  word-break: break-all;
+}
+
+.reachability-detail {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  word-break: break-word;
+}
+
+.reachability-remediation {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fde68a;
+  font-size: 11px;
+}
+
+
 

@@ -2008,6 +2008,7 @@ if (typeof window !== 'undefined') window.generateProxySnippet = generateProxySn
 
 // Cloudflare Tunnel & Automated DNS Management
 let cachedCloudflareStatus = null;
+let cfOriginUserEdited = false;
 
 function parseClientTunnelToken(token) {
   if (!token || typeof token !== 'string') return null;
@@ -2130,14 +2131,126 @@ function updateClientTokenPreview() {
 }
 if (typeof window !== 'undefined') window.updateClientTokenPreview = updateClientTokenPreview;
 
+function isUnreachablePort3000Origin(url) {
+  if (!url || typeof url !== 'string') return false;
+  return /:3000(\/|$)/i.test(url.trim()) || /\baiostreams:3000\b/i.test(url.trim());
+}
+
+function syncOriginPresetFromValue(value) {
+  const presetEl = document.getElementById('cf-origin-preset');
+  if (!presetEl) return;
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    presetEl.value = '';
+    return;
+  }
+  const options = Array.isArray(presetEl.options)
+    ? presetEl.options
+    : (presetEl.options ? Array.from(presetEl.options) : []);
+  const match = options.find(opt => opt && opt.value === trimmed);
+  presetEl.value = match ? trimmed : 'custom';
+}
+
+function updateCloudflareOriginWarning(statusRes) {
+  const warnBox = document.getElementById('cf-origin-warning');
+  const originInput = document.getElementById('cf-origin-target');
+  if (!warnBox) return;
+
+  const status = statusRes || cachedCloudflareStatus || {};
+  const recommended = status.recommended_origin || 'http://host.docker.internal:3001';
+  const detected = status.detected_origin || '';
+  const currentVal = (originInput && originInput.value ? originInput.value.trim() : '') || '';
+  const connectorMode = status.connector_mode || '';
+  const isExternal = Boolean(status.has_external || connectorMode === 'external_host' || connectorMode === 'external_bridge');
+  const currentIs3000 = isUnreachablePort3000Origin(currentVal);
+  const detectedIs3000 = isUnreachablePort3000Origin(detected);
+  const recommendedIs3001 = /:3001(\/|$)/.test(recommended);
+
+  let html = '';
+  let level = 'info';
+
+  if (currentIs3000 && (isExternal || recommendedIs3001)) {
+    level = 'danger';
+    html = `<strong>⚠️ Unreachable Origin (:3000):</strong> <code>${escapeHtml(currentVal)}</code> is only reachable inside the private <code>stremio-net</code> Docker network. External Cloudflare connectors cannot reach <code>aiostreams:3000</code> and will return HTTP 502. Use <code>${escapeHtml(recommended)}</code> (port <code>:3001</code>) instead.`;
+  } else if (detectedIs3000 && recommendedIs3001) {
+    level = 'warn';
+    html = `<strong>⚠️ Stale :3000 Origin Detected:</strong> Existing origin <code>${escapeHtml(detected)}</code> is unreachable from external connectors. Origin target is pre-filled with <code>${escapeHtml(recommended)}</code> — click <strong>Push DNS to Cloudflare 🚀</strong> to repair ingress rules to <code>:3001</code>.`;
+  } else if (status.origin_warning) {
+    level = 'warn';
+    html = `<strong>⚠️ Origin Notice:</strong> ${escapeHtml(status.origin_warning)}`;
+  } else if (isExternal) {
+    level = 'info';
+    html = `<strong>☁️ External Connector Active (${escapeHtml(connectorMode || 'external')}):</strong> Route Cloudflare Zero Trust Public Hostname to <code>${escapeHtml(recommended)}</code> (port <code>:3001</code>), never <code>aiostreams:3000</code>.`;
+  }
+
+  if (html) {
+    warnBox.innerHTML = html;
+    warnBox.style.display = 'block';
+    if (warnBox.classList && typeof warnBox.classList.remove === 'function' && typeof warnBox.classList.add === 'function') {
+      warnBox.classList.remove('cf-origin-warning-danger', 'cf-origin-warning-info');
+      if (level === 'danger') warnBox.classList.add('cf-origin-warning-danger');
+      else if (level === 'info') warnBox.classList.add('cf-origin-warning-info');
+    }
+  } else {
+    warnBox.innerHTML = '';
+    warnBox.style.display = 'none';
+  }
+}
+
+function populateCloudflareOriginControls(statusRes) {
+  const originInput = document.getElementById('cf-origin-target');
+  const datalist = document.getElementById('cf-origin-candidates');
+  const presetEl = document.getElementById('cf-origin-preset');
+  const candidates = Array.isArray(statusRes?.origin_candidates) && statusRes.origin_candidates.length > 0
+    ? statusRes.origin_candidates
+    : [
+        { label: 'External Bridge / DinD (:3001)', url: 'http://host.docker.internal:3001' },
+        { label: 'Host-Network Connector (:3001)', url: 'http://127.0.0.1:3001' },
+        { label: 'Built-in aio-tunnel (:3000)', url: 'http://aiostreams:3000' }
+      ];
+
+  if (datalist) {
+    datalist.innerHTML = candidates
+      .filter(c => c && c.url)
+      .map(c => `<option value="${escapeHtml(c.url)}" label="${escapeHtml(c.label || c.url)}"></option>`)
+      .join('');
+  }
+
+  if (presetEl && typeof presetEl.innerHTML === 'string') {
+    const prevVal = presetEl.value;
+    const seen = new Set();
+    const optionHtml = ['<option value="">Auto (Recommended by topology)</option>'];
+    candidates.forEach(c => {
+      if (!c || !c.url || seen.has(c.url)) return;
+      seen.add(c.url);
+      optionHtml.push(`<option value="${escapeHtml(c.url)}">${escapeHtml(c.url)}${c.label ? ` (${escapeHtml(c.label)})` : ''}</option>`);
+    });
+    optionHtml.push('<option value="custom">Custom origin URL…</option>');
+    presetEl.innerHTML = optionHtml.join('');
+    if (prevVal) presetEl.value = prevVal;
+  }
+
+  if (originInput) {
+    const recommended = statusRes?.recommended_origin || '';
+    if (recommended && (!cfOriginUserEdited || !originInput.value || !originInput.value.trim())) {
+      originInput.value = recommended;
+    }
+    if (recommended) {
+      originInput.placeholder = recommended;
+    }
+    syncOriginPresetFromValue(originInput.value);
+  }
+
+  updateCloudflareOriginWarning(statusRes);
+}
+
 async function refreshCloudflareStatus() {
   const banner = document.getElementById('cf-connectors-banner');
   const body = document.getElementById('cf-connectors-body');
-  if (!body) return;
 
   try {
-    body.innerHTML = '<em>Scanning Docker for Cloudflare connectors…</em>';
-    if (banner) banner.style.display = 'block';
+    if (body) body.innerHTML = '<em>Scanning Docker for Cloudflare connectors…</em>';
+    if (banner && body) banner.style.display = 'block';
 
     const res = await api('/api/cloudflare/status');
     cachedCloudflareStatus = res;
@@ -2151,10 +2264,14 @@ async function refreshCloudflareStatus() {
       }
     }
 
+    populateCloudflareOriginControls(res);
     updateClientTokenPreview();
+
+    if (!body) return;
 
     const hostBadge = document.getElementById('cf-host-badge');
     const hintBox = document.getElementById('cf-detected-hint');
+    const recommendedOrigin = res.recommended_origin || `http://${res.current_host || '127.0.0.1'}:3001`;
 
     let html = '';
     if (res.has_external && res.external_connectors && res.external_connectors.length > 0) {
@@ -2165,7 +2282,7 @@ async function refreshCloudflareStatus() {
         hostBadge.title = `Detected running host connector: ${primary}`;
       }
       if (hintBox) {
-        hintBox.innerHTML = `💡 Detected running Cloudflare connector <strong>${escapeHtml(primary)}</strong> on this Docker host. Switch to <strong>Remote Access</strong> to route or auto-push DNS.`;
+        hintBox.innerHTML = `💡 Detected running Cloudflare connector <strong>${escapeHtml(primary)}</strong> on this Docker host. Recommended origin: <code>${escapeHtml(recommendedOrigin)}</code>. Switch to <strong>Remote Access</strong> to route or repair DNS.`;
         hintBox.style.display = 'block';
       }
 
@@ -2177,25 +2294,29 @@ async function refreshCloudflareStatus() {
         </div>`;
       });
       html += `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.4;">
-        💡 <strong>Host Connector Advice:</strong> Since an existing Cloudflare Tunnel is running on this Docker host, you can route directly through it in your Cloudflare Zero Trust dashboard (point Public Hostname to <code>http://host.docker.internal:3001</code> or <code>http://${escapeHtml(res.current_host || '127.0.0.1')}:3001</code>), OR run the isolated local <code>aio-tunnel</code> container below.
+        💡 <strong>Host Connector Advice:</strong> Point your Cloudflare Public Hostname to <code>${escapeHtml(recommendedOrigin)}</code> (AIOStreams published port <code>:3001</code> — <code>aiostreams:3000</code> is unreachable from external connectors), OR click <strong>Push DNS to Cloudflare 🚀</strong> below to apply/repair the ingress rule automatically.
       </div>`;
     } else {
       if (hostBadge) hostBadge.style.display = 'none';
       if (hintBox) hintBox.style.display = 'none';
       if (res.local_tunnel && (res.local_tunnel.state === 'running' || res.local_tunnel.status?.toLowerCase().includes('up'))) {
-        html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is running. Remote connectivity is not verified.</div>
+        html += `<div style="color:#34d399;font-weight:700;">✓ Local aio-tunnel container is running (Origin: <code>${escapeHtml(recommendedOrigin)}</code>). Remote connectivity is not verified.</div>
                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Status: ${escapeHtml(res.local_tunnel.status)}</div>`;
       } else if (res.token_configured) {
         html += `<div style="color:#fbbf24;font-weight:600;">⚠️ Tunnel token is saved, but local container aio-tunnel is stopped. Click 'Start Local Tunnel ▶' below to route traffic.</div>`;
       } else {
-        html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No running Cloudflare connectors detected. Enter your Tunnel Token below and click 'Start Local Tunnel ▶'.</div>`;
+        html += `<div style="color:var(--text-muted);font-size:12px;">ℹ️ No running Cloudflare connectors detected. Enter your Tunnel Token below and click 'Start Local Tunnel ▶'. Recommended origin: <code>${escapeHtml(recommendedOrigin)}</code>.</div>`;
       }
+    }
+
+    if (res.origin_warning) {
+      html += `<div style="margin-top:6px;color:#fbbf24;font-size:11.5px;">⚠️ ${escapeHtml(res.origin_warning)}</div>`;
     }
 
     body.innerHTML = html;
     if (banner) banner.style.display = 'block';
   } catch (err) {
-    body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${escapeHtml(err.message)}</span>`;
+    if (body) body.innerHTML = `<span style="color:#f87171;">⚠️ Could not scan Docker host: ${escapeHtml(err.message)}</span>`;
   }
 }
 if (typeof window !== 'undefined') window.refreshCloudflareStatus = refreshCloudflareStatus;
@@ -2285,6 +2406,28 @@ document.getElementById('btn-scan-cf-connectors')?.addEventListener('click', () 
 
 document.getElementById('cf-tunnel-token')?.addEventListener('input', () => {
   updateClientTokenPreview();
+});
+
+document.getElementById('cf-origin-target')?.addEventListener('input', (e) => {
+  cfOriginUserEdited = true;
+  syncOriginPresetFromValue(e.currentTarget?.value ?? e.target?.value ?? '');
+  updateCloudflareOriginWarning(cachedCloudflareStatus);
+});
+
+document.getElementById('cf-origin-preset')?.addEventListener('change', (e) => {
+  const selected = e.currentTarget?.value ?? e.target?.value ?? '';
+  const originInput = document.getElementById('cf-origin-target');
+  if (!originInput) return;
+  if (selected === '') {
+    cfOriginUserEdited = false;
+    originInput.value = cachedCloudflareStatus?.recommended_origin || 'http://host.docker.internal:3001';
+  } else if (selected !== 'custom') {
+    cfOriginUserEdited = true;
+    originInput.value = selected;
+  } else if (typeof originInput.focus === 'function') {
+    originInput.focus();
+  }
+  updateCloudflareOriginWarning(cachedCloudflareStatus);
 });
 
 document.getElementById('btn-save-cf-token')?.addEventListener('click', async () => {
@@ -2523,6 +2666,8 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
   }
 
   const zoneId = (zoneIdInput ? zoneIdInput.value.trim() : '') || (cachedEnv?.CLOUDFLARE_ZONE_ID || '');
+  const originInput = document.getElementById('cf-origin-target');
+  const serviceUrl = (originInput && originInput.value ? originInput.value.trim() : '') || (cachedCloudflareStatus?.recommended_origin || '');
 
   btn.disabled = true;
   btn.textContent = 'Pushing DNS…';
@@ -2541,6 +2686,9 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     if (cnameTarget) {
       payload.cname_target = cnameTarget;
     }
+    if (serviceUrl) {
+      payload.service_url = serviceUrl;
+    }
 
     const res = await api('/api/cloudflare/push-dns', {
       method: 'POST',
@@ -2557,10 +2705,21 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
       await refreshCloudflareStatus();
       if (resultBox) {
         resultBox.style.display = 'block';
+        const appliedOrigin = res.service_url || serviceUrl;
         let statusHtml = `<span style="color:#34d399;font-weight:700;">✓ ${escapeHtml(res.message)}</span>
           <div style="margin-top:4px;color:var(--text-muted);font-size:11.5px;">
-            Hostname: <code>${escapeHtml(res.hostname)}</code> &rarr; Target: <code>${escapeHtml(res.cname_target)}</code> (Zone: <code>${escapeHtml(res.zone_name)}</code>, Proxied: ON)
+            Hostname: <code>${escapeHtml(res.hostname)}</code> &rarr; Target: <code>${escapeHtml(res.cname_target)}</code> (Zone: <code>${escapeHtml(res.zone_name)}</code>, Proxied: ON)${appliedOrigin ? ` · Origin: <code>${escapeHtml(appliedOrigin)}</code>` : ''}
           </div>`;
+        if (res.repaired || res.ingress_action === 'repaired') {
+          statusHtml += `<div style="margin-top:6px;padding:6px 10px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:6px;font-size:11.5px;color:#34d399;">
+            ✓ Repaired stale Cloudflare ingress rule${res.previous_service_url ? ` from <code>${escapeHtml(res.previous_service_url)}</code>` : ''} to <code>${escapeHtml(appliedOrigin)}</code>.
+          </div>`;
+        }
+        if (res.ingress_error) {
+          statusHtml += `<div style="margin-top:6px;padding:6px 10px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);border-radius:6px;font-size:11.5px;color:#fecaca;">
+            ⚠️ Ingress update note: ${escapeHtml(res.ingress_error)}
+          </div>`;
+        }
         if (!res.tunnel_started) {
           statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:12px;color:#fbbf24;">
             <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but local connector startup was not confirmed. Check its status and logs, then use <strong>Start Local Tunnel ▶</strong> if needed. A running connector alone does not verify the origin service.
@@ -2581,6 +2740,140 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     btn.disabled = false;
     btn.textContent = orig;
   }
+});
+
+function renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl) {
+  const checks = Array.isArray(res?.checks) ? res.checks : [];
+  const summary = res?.summary || {};
+  const passed = Number.isFinite(Number(summary.passed)) ? Number(summary.passed) : checks.filter(c => c.status === 'ok' || c.ok === true).length;
+  const failed = Number.isFinite(Number(summary.failed)) ? Number(summary.failed) : checks.filter(c => c.status === 'fail' || c.ok === false).length;
+  const warnings = Number.isFinite(Number(summary.warnings)) ? Number(summary.warnings) : checks.filter(c => c.status === 'warn').length;
+  const skipped = Number.isFinite(Number(summary.skipped)) ? Number(summary.skipped) : checks.filter(c => c.status === 'skipped').length;
+  const total = Number.isFinite(Number(summary.total)) ? Number(summary.total) : checks.length;
+
+  const categoryLabels = {
+    internal: 'Internal',
+    host_port: 'Host Port',
+    portal: 'Portal Route',
+    cloudflare: 'Cloudflare Origin',
+    remote: 'Public URL'
+  };
+  const statusLabels = {
+    ok: '✓ Reachable',
+    fail: '✗ Unreachable',
+    warn: '⚠ Warning',
+    skipped: '– Skipped'
+  };
+
+  if (summaryEl) {
+    const overallOk = res?.ok !== false && failed === 0;
+    const headline = overallOk
+      ? `<span style="color:#34d399;font-weight:700;">✓ All required targets reachable</span>`
+      : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`;
+    const metaParts = [`${passed}/${total} passed`];
+    if (warnings > 0) metaParts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
+    if (skipped > 0) metaParts.push(`${skipped} skipped`);
+    if (res?.recommended_origin) metaParts.push(`Recommended origin: <code>${escapeHtml(res.recommended_origin)}</code>`);
+    if (res?.connector_mode) metaParts.push(`Connector: <code>${escapeHtml(res.connector_mode)}</code>`);
+    summaryEl.innerHTML = `${headline} · ${metaParts.join(' · ')}`;
+  }
+
+  if (statusDotEl && statusDotEl.classList) {
+    statusDotEl.classList.remove('ok', 'error', 'warn');
+    statusDotEl.classList.add(failed > 0 ? 'error' : (warnings > 0 ? 'warn' : 'ok'));
+  }
+
+  if (resultsEl) {
+    if (resultsEl.style) resultsEl.style.display = 'grid';
+    if (checks.length === 0) {
+      resultsEl.innerHTML = '<div class="reachability-item">No reachability checks returned.</div>';
+      return;
+    }
+    resultsEl.innerHTML = checks.map(check => {
+      const rawStatus = String(check?.status || (check?.ok === true ? 'ok' : (check?.ok === false ? 'fail' : 'warn'))).toLowerCase();
+      const statusKey = ['ok', 'fail', 'warn', 'skipped'].includes(rawStatus) ? rawStatus : (check?.ok === false ? 'fail' : 'warn');
+      const badgeLabel = statusLabels[statusKey];
+      const categoryKey = String(check?.category || '').toLowerCase();
+      const categoryText = categoryLabels[categoryKey] || escapeHtml(String(check?.category || 'Check'));
+      const latencyText = (typeof check?.latency_ms === 'number' && Number.isFinite(check.latency_ms))
+        ? `${check.latency_ms.toFixed(1)} ms`
+        : (check?.latency_ms != null && check.latency_ms !== '' ? `${escapeHtml(String(check.latency_ms))} ms` : '');
+      const targetHtml = check?.target ? `<code>${escapeHtml(String(check.target))}</code>` : '';
+      const detailHtml = check?.detail ? `<div class="reachability-detail">${escapeHtml(String(check.detail))}</div>` : '';
+      const remediationHtml = check?.remediation
+        ? `<div class="reachability-remediation"><strong>Remediation:</strong> ${escapeHtml(String(check.remediation))}</div>`
+        : '';
+
+      return `<div class="reachability-item reachability-${statusKey}" data-reachability-status="${statusKey}">
+        <div class="reachability-item-head">
+          <span class="reachability-name">${escapeHtml(String(check?.name || check?.id || 'Check'))}</span>
+          <span class="reachability-badge reachability-badge-${statusKey}">${badgeLabel}</span>
+        </div>
+        <div class="reachability-meta">
+          <span>${categoryText}</span>${targetHtml}${latencyText ? `<span>${latencyText}</span>` : ''}
+        </div>
+        ${detailHtml}
+        ${remediationHtml}
+      </div>`;
+    }).join('');
+  }
+}
+
+async function runReachabilityCheck(options = {}) {
+  const btn = options.button || null;
+  const resultsEl = document.getElementById(options.resultsId || 'reachability-results');
+  const summaryEl = options.summaryId ? document.getElementById(options.summaryId) : null;
+  const statusDotEl = options.statusDotId ? document.getElementById(options.statusDotId) : null;
+  const originInput = document.getElementById('cf-origin-target');
+  const originUrl = (originInput && originInput.value ? originInput.value.trim() : '')
+    || (typeof cachedCloudflareStatus !== 'undefined' && cachedCloudflareStatus?.recommended_origin ? cachedCloudflareStatus.recommended_origin : '');
+
+  const origText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Testing Reachability…';
+  }
+  if (summaryEl) {
+    summaryEl.textContent = 'Checking internal services, host ports (:3001, :4005, :8088), Cloudflare origin, and public URLs…';
+  }
+  if (resultsEl) {
+    if (resultsEl.style) resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<em>Running reachability probes…</em>';
+  }
+
+  try {
+    const payload = { include_remote: true };
+    if (originUrl) payload.origin_url = originUrl;
+    const res = await api('/api/reachability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl);
+    if (!summaryEl && resultsEl) {
+      const failed = Number(res?.summary?.failed ?? (Array.isArray(res?.checks) ? res.checks.filter(c => c.status === 'fail' || c.ok === false).length : 0));
+      const summaryBanner = `<div class="reachability-summary" style="grid-column:1 / -1;margin-top:0;">${failed === 0 && res?.ok !== false ? '<span style="color:#34d399;font-weight:700;">✓ All checked targets reachable</span>' : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`}${res?.recommended_origin ? ` · Recommended origin: <code>${escapeHtml(String(res.recommended_origin))}</code>` : ''}</div>`;
+      resultsEl.innerHTML = summaryBanner + resultsEl.innerHTML;
+    }
+    return res;
+  } catch (err) {
+    if (summaryEl) summaryEl.innerHTML = `<span style="color:#f87171;">✗ Reachability check failed: ${escapeHtml(err.message)}</span>`;
+    if (resultsEl) resultsEl.innerHTML = `<div class="reachability-item reachability-fail"><strong>✗ Reachability check failed:</strong> ${escapeHtml(err.message)}</div>`;
+    if (typeof notify === 'function') notify(`Reachability check failed: ${err.message}`, true);
+    return null;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+}
+
+document.getElementById('btn-test-cf-reachability')?.addEventListener('click', (e) => {
+  return runReachabilityCheck({
+    button: e.currentTarget,
+    resultsId: 'cf-reachability-results'
+  });
 });
 
 document.querySelectorAll('.streaming-mode-section .mode-pill').forEach(btn => {
@@ -3046,6 +3339,16 @@ async function runOperations() {
   document.getElementById('preview-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, true));
   document.getElementById('clean-cache')?.addEventListener('click', event => runCacheAction(event.currentTarget, false));
   const output = id => document.getElementById(id);
+  document.getElementById('btn-test-reachability')?.addEventListener('click', event => {
+    if (typeof runReachabilityCheck === 'function') {
+      return runReachabilityCheck({
+        button: event.currentTarget,
+        resultsId: 'reachability-results',
+        summaryId: 'reachability-summary',
+        statusDotId: 'reachability-status-dot'
+      });
+    }
+  });
   document.getElementById('run-diagnostics')?.addEventListener('click', async () => {
     try {
       const result = await api('/api/diagnostics');

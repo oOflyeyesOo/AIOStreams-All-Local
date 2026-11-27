@@ -1016,7 +1016,184 @@ test('index.html exposes required diagnostics, log containers, playback inputs, 
     assert.match(html,new RegExp(`id="logs-container-select"[\\s\\S]*?value="${val}"`));
   }
   assert.match(html,/id="smoke-kind"[\s\S]*?value="anime"/);
-  for(const id of ['playback-test-kind','playback-test-id','compose-profiles','easynews-user','easynews-pass','aio-precache-next-episode','jellyfin-enabled','backup-keep-last','backup-archives-list','btn-maintenance-prune-backups','preview-cache','clean-cache-posters','btn-stop-cf-tunnel','btn-restart-cf-tunnel','btn-restart-stack']){
+  for(const id of ['playback-test-kind','playback-test-id','compose-profiles','easynews-user','easynews-pass','aio-precache-next-episode','jellyfin-enabled','backup-keep-last','backup-archives-list','btn-maintenance-prune-backups','preview-cache','clean-cache-posters','btn-stop-cf-tunnel','btn-restart-cf-tunnel','btn-restart-stack','cf-origin-preset','cf-origin-target','cf-origin-candidates','cf-origin-warning','btn-test-cf-reachability','cf-reachability-results','card-reachability','btn-test-reachability','reachability-summary','reachability-results']){
     assert.match(html,new RegExp(`id="${id}"`));
   }
+});
+
+test('refreshCloudflareStatus prefills :3001 recommended_origin for external connectors, warns on :3000, and submits service_url on btn-push-cf-dns', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-ext',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: 'ext-tunnel-id',
+      cname_target: 'ext-tunnel-id.cfargotunnel.com'
+    }
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/cloudflare/status') {
+      return {
+        has_external: true,
+        connector_mode: 'external_bridge',
+        recommended_origin: 'http://host.docker.internal:3001',
+        detected_origin: 'http://aiostreams:3000',
+        origin_warning: 'External connector cannot reach aiostreams:3000 on stremio-net',
+        origin_candidates: [
+          { label: 'External Bridge / DinD (:3001)', url: 'http://host.docker.internal:3001' },
+          { label: 'Host-Network Connector (:3001)', url: 'http://127.0.0.1:3001' }
+        ],
+        external_connectors: [{ name: 'cloudflared-host', image: 'cloudflare/cloudflared', status: 'Up 2 hours' }],
+        token_configured: true
+      };
+    }
+    if (path === '/api/cloudflare/push-dns') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        message: 'DNS and ingress updated',
+        hostname: payload.hostname,
+        cname_target: payload.cname_target,
+        zone_name: 'customdomain.org',
+        service_url: payload.service_url,
+        repaired: true,
+        ingress_action: 'repaired',
+        previous_service_url: 'http://aiostreams:3000',
+        tunnel_started: false
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+  await vm.runInContext('loadSettings()', env.context);
+  await vm.runInContext('refreshCloudflareStatus()', env.context);
+
+  const originInput = env.nodes.get('cf-origin-target');
+  const warnBox = env.nodes.get('cf-origin-warning');
+  assert.equal(originInput.value, 'http://host.docker.internal:3001');
+  assert.equal(warnBox.style.display, 'block');
+  assert.match(warnBox.innerHTML, /Stale :3000 Origin Detected/i);
+  assert.match(warnBox.innerHTML, /http:\/\/aiostreams:3000/);
+
+  // Typing :3000 manually triggers immediate unreachable-origin warning
+  originInput.value = 'http://aiostreams:3000';
+  await originInput.handlers.input({ currentTarget: originInput });
+  assert.match(warnBox.innerHTML, /Unreachable Origin \(:3000\)/i);
+
+  // Restore :3001 via preset selector "Auto"
+  env.nodes.get('cf-origin-preset').value = '';
+  await env.nodes.get('cf-origin-preset').handlers.change({ currentTarget: env.nodes.get('cf-origin-preset') });
+  assert.equal(originInput.value, 'http://host.docker.internal:3001');
+
+  // Push DNS forwards service_url and renders repaired ingress banner
+  env.calls.length = 0;
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+  const pushCall = env.calls.find(c => c.path === '/api/cloudflare/push-dns');
+  assert.ok(pushCall);
+  assert.equal(pushCall.payload.service_url, 'http://host.docker.internal:3001');
+  const dnsHtml = env.nodes.get('cf-dns-result').innerHTML;
+  assert.match(dnsHtml, /Repaired stale Cloudflare ingress rule/i);
+  assert.match(dnsHtml, /http:\/\/host\.docker\.internal:3001/);
+  assert.match(lastNotification, /Cloudflare DNS CNAME pushed/i);
+});
+
+test('Test Reachability renders checks, highlights unreachable targets, and escapes untrusted output', async () => {
+  const evil = '<img src=x onerror=alert(1)>';
+  const env = form({ USENET_ENABLED: 'false', configuredKeys: ['PROVIDER_KEY'] });
+  env.context.notify = () => {};
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/reachability') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        ok: false,
+        status: 'fail',
+        recommended_origin: 'http://host.docker.internal:3001',
+        connector_mode: 'external_bridge',
+        summary: { total: 3, passed: 1, failed: 1, warnings: 1, skipped: 0 },
+        checks: [
+          {
+            id: 'host_3001',
+            name: 'AIOStreams Host Port',
+            category: 'host_port',
+            target: 'http://127.0.0.1:3001/health',
+            ok: true,
+            status: 'ok',
+            latency_ms: 4.5,
+            detail: 'HTTP 200 OK',
+            remediation: null
+          },
+          {
+            id: 'cf_origin',
+            name: `Cloudflare Origin ${evil}`,
+            category: 'cloudflare',
+            target: `http://aiostreams:3000/${evil}`,
+            ok: false,
+            status: 'fail',
+            latency_ms: 12.2,
+            detail: `Connection refused ${evil}`,
+            remediation: `Point Cloudflare tunnel to http://host.docker.internal:3001 ${evil}`
+          },
+          {
+            id: 'remote_base',
+            name: 'Public BASE_URL',
+            category: 'remote',
+            target: 'https://watch.example.com',
+            ok: false,
+            status: 'warn',
+            latency_ms: 88.0,
+            detail: 'Returned 502 Bad Gateway',
+            remediation: 'Verify tunnel ingress rule points to :3001'
+          }
+        ]
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  const opsFn = source.match(/async function runOperations\(\) \{[\s\S]*?\n\}/)[0];
+  vm.runInContext(cfBlock + '\n' + opsFn, env.context);
+  await vm.runInContext('runOperations()', env.context);
+
+  env.nodes.get('cf-origin-target').value = 'http://host.docker.internal:3001';
+  const btn = env.nodes.get('btn-test-reachability');
+  await btn.handlers.click({ currentTarget: btn });
+
+  const reachCall = env.calls.find(c => c.path === '/api/reachability');
+  assert.ok(reachCall);
+  assert.equal(reachCall.payload.origin_url, 'http://host.docker.internal:3001');
+  assert.equal(reachCall.payload.include_remote, true);
+
+  const summaryHtml = env.nodes.get('reachability-summary').innerHTML;
+  const resultsHtml = env.nodes.get('reachability-results').innerHTML;
+  assert.match(summaryHtml, /1 unreachable target/i);
+  assert.match(summaryHtml, /1\/3 passed/);
+  assert.match(resultsHtml, /reachability-item reachability-ok/);
+  assert.match(resultsHtml, /reachability-item reachability-fail/);
+  assert.match(resultsHtml, /reachability-item reachability-warn/);
+  assert.match(resultsHtml, /✗ Unreachable/);
+  assert.match(resultsHtml, /4\.5 ms/);
+  assert.match(resultsHtml, /Remediation:/);
+  assert.ok(!resultsHtml.includes('<img'), 'Untrusted HTML must be escaped');
+  assert.ok(resultsHtml.includes('&lt;img'), 'Escaped tag text should be preserved');
+
+  // Remote Access quick Reachability button also works
+  const cfBtn = env.nodes.get('btn-test-cf-reachability');
+  await cfBtn.handlers.click({ currentTarget: cfBtn });
+  assert.equal(env.nodes.get('cf-reachability-results').style.display, 'grid');
+  assert.match(env.nodes.get('cf-reachability-results').innerHTML, /reachability-item reachability-fail/);
 });
