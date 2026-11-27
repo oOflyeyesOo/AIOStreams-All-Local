@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import time
 import urllib.error
@@ -165,15 +166,119 @@ def fetch_cloudflare_tunnel_token(api_token: str, account_id: str, tunnel_id: st
         return {"success": False, "error": f"Failed to connect to Cloudflare API: {str(e)}"}
 
 
+def _parse_port(value, default: int) -> int:
+    try:
+        port = int(value)
+        return port if 1 <= port <= 65535 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _detect_lan_ip() -> str:
+    """Best-effort local LAN IPv4 address discovery without external network traffic."""
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(0.2)
+        sock.connect(("10.255.255.255", 1))
+        ip = sock.getsockname()[0]
+        if ip and not ip.startswith("127.") and not ip.startswith("169.254."):
+            return ip
+    except Exception:
+        pass
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+    return ""
+
+
+def _classify_networks(raw_networks: str, cid: str = "") -> tuple[list[str], str]:
+    """Return (networks_list, network_mode) from docker ps {{.Networks}} output."""
+    networks = [n.strip() for n in (raw_networks or "").split(",") if n.strip()]
+    if not networks and cid:
+        try:
+            insp = subprocess.run(
+                ["docker", "inspect", "-f", "{{.HostConfig.NetworkMode}}", cid],
+                capture_output=True, text=True, timeout=4
+            )
+            mode = (insp.stdout or "").strip()
+            if insp.returncode == 0 and mode:
+                networks = [mode]
+        except Exception:
+            pass
+
+    lowered = [n.lower() for n in networks]
+    if any(n == "host" for n in lowered):
+        return networks, "host"
+    if any(n == "stremio-net" or n.endswith("_stremio-net") or n.endswith("-stremio-net") for n in lowered):
+        return networks, "stremio-net"
+    if any(n == "none" for n in lowered):
+        return networks, "none"
+    if networks:
+        return networks, "bridge"
+    return [], "unknown"
+
+
+def validate_service_url(service_url: str) -> str:
+    """Validate and normalize a Cloudflare tunnel ingress origin URL (scheme://host[:port])."""
+    if not isinstance(service_url, str) or not service_url.strip():
+        raise ValueError("Origin service URL cannot be empty.")
+    raw = service_url.strip()
+    if any(c in raw for c in "\r\n\x00 \t"):
+        raise ValueError("Origin service URL must not contain whitespace or control characters.")
+    if "://" not in raw:
+        raw = "http://" + raw
+    parsed = urllib.parse.urlsplit(raw)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise ValueError("Origin service URL must use http:// or https://.")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError("Origin service URL must not include credentials, query strings, or fragments.")
+    if parsed.path not in ("", "/"):
+        raise ValueError("Origin service URL must be a base host:port URL without a path.")
+    host = (parsed.hostname or "").strip()
+    if not host:
+        raise ValueError("Origin service URL is missing a hostname or IP.")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Origin service URL has an invalid port number.") from exc
+    if port is not None and not (1 <= port <= 65535):
+        raise ValueError("Origin service URL port must be between 1 and 65535.")
+    host_fmt = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    netloc = f"{host_fmt}:{port}" if port is not None else host_fmt
+    return f"{scheme}://{netloc}"
+
+
+def _derive_aiometadata_origin(aio_origin: str, aiom_port: int = 4005) -> str:
+    """Derive the corresponding AIOMetadata origin URL for a given AIOStreams origin URL."""
+    aiom_port = _parse_port(aiom_port, 4005)
+    try:
+        parsed = urllib.parse.urlsplit(aio_origin)
+        host = (parsed.hostname or "").lower()
+        scheme = parsed.scheme or "http"
+        if host == "aiostreams":
+            return f"{scheme}://aiometadata:{aiom_port}"
+        if host:
+            host_fmt = f"[{host}]" if ":" in host and not host.startswith("[") else host
+            return f"{scheme}://{host_fmt}:{aiom_port}"
+    except Exception:
+        pass
+    return f"http://host.docker.internal:{aiom_port}"
+
+
 def check_cloudflare_containers() -> dict:
     """
     Scans the Docker daemon for Cloudflare Tunnel / connector containers.
     Distinguishes between this stack's own tunnel container and external/other
-    Cloudflare connector containers running on the host.
+    Cloudflare connector containers running on the host, including network topology.
     """
     try:
         res = subprocess.run(
-            ["docker", "ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}\t{{.Command}}\t{{.Labels}}"],
+            ["docker", "ps", "-a", "--format", "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}\t{{.Command}}\t{{.Labels}}\t{{.Networks}}"],
             capture_output=True, text=True, timeout=8
         )
         if res.returncode != 0:
@@ -209,6 +314,7 @@ def check_cloudflare_containers() -> dict:
         cid, name, image, status, state = parts[0], parts[1], parts[2], parts[3], parts[4]
         cmd = parts[5] if len(parts) > 5 else ""
         labels = parts[6] if len(parts) > 6 else ""
+        raw_networks = parts[7] if len(parts) > 7 else ""
 
         name_l = name.lower()
         image_l = image.lower()
@@ -240,13 +346,20 @@ def check_cloudflare_containers() -> dict:
             or "com.docker.compose.service=cloudflared" in labels_l
         )
 
+        has_networks_col = len(parts) >= 8
+        networks, network_mode = _classify_networks(raw_networks, cid if has_networks_col and not raw_networks.strip() else "")
+        if network_mode == "unknown" and is_local:
+            network_mode = "stremio-net"
+
         entry = {
             "id": cid,
             "name": name,
             "image": image,
             "status": status,
             "state": state,
-            "is_local": is_local
+            "is_local": is_local,
+            "networks": networks,
+            "network_mode": network_mode,
         }
 
         if is_local:
@@ -259,28 +372,203 @@ def check_cloudflare_containers() -> dict:
     active_external = [c for c in external_connectors if c.get("is_active", True)]
     return {
         "available": True,
-        "local_tunnel": local_tunnel or {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True},
+        "local_tunnel": local_tunnel or {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True, "networks": [], "network_mode": "stremio-net"},
         "external_connectors": external_connectors,
         "active_external_connectors": active_external,
         "has_external": len(active_external) > 0
     }
 
 
-def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, account_id: str = None, tunnel_id: str = None, zone_id: str = None) -> dict:
+def recommend_cloudflare_origin(
+    containers_info: dict = None,
+    aio_port: int = None,
+    aiom_port: int = None,
+    env_vars: dict = None,
+) -> dict:
+    """
+    Determine the recommended Cloudflare Tunnel origin URL and connector topology.
+
+    - In-network `aio-tunnel` (or external connector attached to `stremio-net`):
+      `http://aiostreams:3000`
+    - External host-network connector:
+      `http://127.0.0.1:{PORT_AIOSTREAMS}` (default 3001)
+    - External bridge/non-`stremio-net` connector or AIO DinD / unconfigured external:
+      `http://host.docker.internal:{PORT_AIOSTREAMS}` (default 3001)
+    """
+    env_map = env_vars if isinstance(env_vars, dict) else {}
+    resolved_aio_port = _parse_port(
+        aio_port or env_map.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"),
+        3001,
+    )
+    resolved_aiom_port = _parse_port(
+        aiom_port or env_map.get("PORT_AIOMETADATA") or os.environ.get("PORT_AIOMETADATA"),
+        4005,
+    )
+
+    if containers_info is None:
+        containers_info = check_cloudflare_containers()
+
+    local_tunnel = (containers_info or {}).get("local_tunnel") or {}
+    local_state = str(local_tunnel.get("state") or "").lower()
+    local_status = str(local_tunnel.get("status") or "").lower()
+    local_running = local_state in ("running", "restarting") or local_status.startswith("up")
+    local_net_mode = str(local_tunnel.get("network_mode") or "stremio-net").lower()
+
+    active_external = (containers_info or {}).get("active_external_connectors")
+    if active_external is None:
+        active_external = [
+            c for c in ((containers_info or {}).get("external_connectors") or [])
+            if c.get("is_active", True)
+        ]
+
+    saved_origin = (env_map.get("CLOUDFLARE_ORIGIN_URL") or os.environ.get("CLOUDFLARE_ORIGIN_URL") or "").strip() or None
+    saved_token = (env_map.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or "").strip()
+    token_meta = parse_tunnel_token(saved_token) if saved_token else {"valid": False}
+    has_run_token = bool(token_meta.get("is_run_token"))
+
+    origin_warning = None
+    if active_external:
+        primary = active_external[0]
+        primary_name = primary.get("name") or "external-cloudflared"
+        ext_mode = str(primary.get("network_mode") or "bridge").lower()
+        if ext_mode == "host":
+            connector_mode = "external_host"
+            recommended_origin = f"http://127.0.0.1:{resolved_aio_port}"
+            origin_warning = (
+                f"External host-network connector '{primary_name}' cannot resolve Docker DNS 'aiostreams:3000'. "
+                f"Use {recommended_origin}."
+            )
+        elif ext_mode == "stremio-net":
+            connector_mode = "external_stremio_net"
+            recommended_origin = "http://aiostreams:3000"
+        else:
+            connector_mode = "external_bridge"
+            recommended_origin = f"http://host.docker.internal:{resolved_aio_port}"
+            origin_warning = (
+                f"External Cloudflare connector '{primary_name}' is outside stremio-net and cannot reach 'aiostreams:3000'. "
+                f"Use {recommended_origin} (or http://127.0.0.1:{resolved_aio_port} for host-network connectors)."
+            )
+    elif local_running:
+        if local_net_mode == "host":
+            connector_mode = "external_host"
+            recommended_origin = f"http://127.0.0.1:{resolved_aio_port}"
+        else:
+            connector_mode = "local_tunnel"
+            recommended_origin = "http://aiostreams:3000"
+    elif has_run_token:
+        connector_mode = "local_tunnel"
+        recommended_origin = "http://aiostreams:3000"
+    else:
+        connector_mode = "none"
+        recommended_origin = f"http://host.docker.internal:{resolved_aio_port}"
+
+    if saved_origin:
+        try:
+            saved_parsed = urllib.parse.urlsplit(validate_service_url(saved_origin))
+            saved_host = (saved_parsed.hostname or "").lower()
+            saved_port = saved_parsed.port or (443 if saved_parsed.scheme == "https" else 80)
+            if saved_host == "aiostreams" and saved_port == 3000 and connector_mode in ("external_host", "external_bridge", "none"):
+                origin_warning = (
+                    f"Saved Cloudflare origin '{saved_origin}' targets aiostreams:3000, which is unreachable from "
+                    f"external connectors. Update to {recommended_origin}."
+                )
+            elif saved_host in ("localhost", "127.0.0.1", "host.docker.internal") and saved_port == 3000 and resolved_aio_port != 3000:
+                origin_warning = (
+                    f"Saved Cloudflare origin '{saved_origin}' targets port 3000, but AIOStreams is mapped to host port "
+                    f"{resolved_aio_port}. Update to {recommended_origin}."
+                )
+        except ValueError:
+            pass
+
+    candidates = [
+        {
+            "label": f"Docker Host Bridge (External container / AIO DinD) — :{resolved_aio_port}",
+            "url": f"http://host.docker.internal:{resolved_aio_port}",
+        },
+        {
+            "label": f"Host Loopback (Host-network / bare-metal cloudflared) — :{resolved_aio_port}",
+            "url": f"http://127.0.0.1:{resolved_aio_port}",
+        },
+    ]
+    lan_ip = _detect_lan_ip()
+    if lan_ip:
+        candidates.append({
+            "label": f"Host LAN ({lan_ip}) — :{resolved_aio_port}",
+            "url": f"http://{lan_ip}:{resolved_aio_port}",
+        })
+    candidates.append({
+        "label": "Internal Docker Network (built-in aio-tunnel on stremio-net only) — :3000",
+        "url": "http://aiostreams:3000",
+    })
+
+    return {
+        "recommended_origin": recommended_origin,
+        "detected_origin": saved_origin,
+        "connector_mode": connector_mode,
+        "origin_warning": origin_warning,
+        "origin_candidates": candidates,
+        "aiostreams_port": resolved_aio_port,
+        "aiometadata_port": resolved_aiom_port,
+        "aiometadata_origin": _derive_aiometadata_origin(recommended_origin, resolved_aiom_port),
+    }
+
+
+def _upsert_ingress_rule(ingress_rules: list, hostname: str, service_url: str) -> tuple[str, str | None]:
+    """Insert or update a hostname ingress rule in place; return (action, previous_service)."""
+    clean_host = hostname.strip().lower()
+    target = service_url.strip().rstrip("/")
+    existing_idx = next(
+        (i for i, r in enumerate(ingress_rules) if isinstance(r, dict) and (r.get("hostname") or "").strip().lower() == clean_host),
+        None,
+    )
+    if existing_idx is not None:
+        previous = ingress_rules[existing_idx].get("service")
+        prev_norm = (previous or "").strip().rstrip("/")
+        if prev_norm == target:
+            return "unchanged", previous
+        ingress_rules[existing_idx] = {**ingress_rules[existing_idx], "hostname": clean_host, "service": target}
+        return "repaired", previous
+
+    new_rule = {"hostname": clean_host, "service": target}
+    if ingress_rules and isinstance(ingress_rules[-1], dict) and not ingress_rules[-1].get("hostname"):
+        ingress_rules.insert(len(ingress_rules) - 1, new_rule)
+    else:
+        ingress_rules.append(new_rule)
+        if not any(isinstance(r, dict) and not r.get("hostname") for r in ingress_rules):
+            ingress_rules.append({"service": "http_status:404"})
+    return "created", None
+
+
+def _clean_public_hostname(hostname: str) -> str:
+    clean_host = (hostname or "").strip().lower()
+    if "://" in clean_host:
+        parsed = urllib.parse.urlsplit(clean_host)
+        clean_host = parsed.netloc or parsed.path
+    return clean_host.split(":")[0].strip().rstrip(".")
+
+
+def push_cloudflare_dns(
+    api_token: str,
+    hostname: str,
+    cname_target: str,
+    account_id: str = None,
+    tunnel_id: str = None,
+    zone_id: str = None,
+    service_url: str = None,
+    aiometadata_hostname: str = None,
+    aiometadata_service_url: str = None,
+) -> dict:
     """
     Creates or updates a DNS CNAME record in Cloudflare pointing hostname to cname_target (proxied).
-    Optionally configures public hostname ingress rules if tunnel credentials and permissions exist.
+    Configures or repairs public hostname ingress rules to the resolved origin URL when tunnel
+    credentials and permissions exist.
     """
     api_token = (api_token or "").strip()
     if not api_token:
         return {"success": False, "error": "Cloudflare API Token is required. Generate one in Cloudflare Dashboard -> My Profile -> API Tokens."}
 
     # Clean hostname (remove http(s):// scheme and trailing slashes)
-    clean_host = hostname.strip().lower()
-    if "://" in clean_host:
-        parsed = urllib.parse.urlsplit(clean_host)
-        clean_host = parsed.netloc or parsed.path
-    clean_host = clean_host.split(":")[0].strip().rstrip(".")
+    clean_host = _clean_public_hostname(hostname)
 
     is_ip = False
     try:
@@ -303,6 +591,26 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
     clean_target = cname_target.strip().lower().rstrip(".")
     if not clean_target:
         return {"success": False, "error": "CNAME target is required (e.g. <tunnel_id>.cfargotunnel.com). Enter a valid Tunnel Token first."}
+
+    # Validate or recommend origin service_url
+    if service_url and str(service_url).strip():
+        try:
+            target_service_url = validate_service_url(str(service_url))
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+    else:
+        target_service_url = recommend_cloudflare_origin()["recommended_origin"]
+
+    clean_aiom_host = _clean_public_hostname(aiometadata_hostname) if aiometadata_hostname else ""
+    if clean_aiom_host and "." not in clean_aiom_host:
+        return {"success": False, "error": f"Enter a valid AIOMetadata domain or subdomain (received '{clean_aiom_host}')."}
+    if aiometadata_service_url and str(aiometadata_service_url).strip():
+        try:
+            target_aiom_url = validate_service_url(str(aiometadata_service_url))
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+    else:
+        target_aiom_url = _derive_aiometadata_origin(target_service_url)
 
     headers = {
         "Authorization": f"Bearer {api_token}",
@@ -420,9 +728,12 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
 
     record_info = save_result.get("result", {})
 
-    # 3. Optional: Configure public hostname ingress rule if account_id and tunnel_id are available
+    # 3. Optional: Configure or repair public hostname ingress rule if account_id and tunnel_id are available
     ingress_configured = False
     ingress_error = None
+    ingress_action = "skipped"
+    repaired = False
+    previous_service_url = None
     if account_id and tunnel_id:
         cfg_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations"
         try:
@@ -432,40 +743,56 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
             if cfg_data.get("success"):
                 current_cfg = cfg_data.get("result", {}).get("config", {}) or {}
                 ingress_rules = list(current_cfg.get("ingress", []))
-                
-                # Check if rule for clean_host already exists
-                has_rule = any(r.get("hostname", "").lower() == clean_host for r in ingress_rules)
-                if not has_rule:
-                    new_rule = {
-                        "hostname": clean_host,
-                        "service": "http://aiostreams:3000"
-                    }
-                    # Insert before catch-all
-                    if ingress_rules and not ingress_rules[-1].get("hostname"):
-                        ingress_rules.insert(len(ingress_rules) - 1, new_rule)
-                    else:
-                        ingress_rules.append(new_rule)
-                        if not any(not r.get("hostname") for r in ingress_rules):
-                            ingress_rules.append({"service": "http_status:404"})
 
+                ingress_action, previous_service_url = _upsert_ingress_rule(
+                    ingress_rules, clean_host, target_service_url
+                )
+                aiom_action = "unchanged"
+                if clean_aiom_host and clean_aiom_host != clean_host:
+                    aiom_action, _ = _upsert_ingress_rule(
+                        ingress_rules, clean_aiom_host, target_aiom_url
+                    )
+
+                if ingress_action in ("created", "repaired") or aiom_action in ("created", "repaired"):
                     update_payload = {"config": {**current_cfg, "ingress": ingress_rules}}
-                    put_req = urllib.request.Request(cfg_url, data=json.dumps(update_payload).encode("utf-8"), headers=headers, method="PUT")
+                    put_req = urllib.request.Request(
+                        cfg_url,
+                        data=json.dumps(update_payload).encode("utf-8"),
+                        headers=headers,
+                        method="PUT",
+                    )
                     with urllib.request.urlopen(put_req, timeout=10) as p_resp:
                         p_data = json.loads(p_resp.read().decode("utf-8"))
                         if p_data.get("success"):
                             ingress_configured = True
+                            repaired = (ingress_action == "repaired")
+                        else:
+                            ingress_action = "failed"
+                            errs = p_data.get("errors") or []
+                            ingress_error = "; ".join(e.get("message", "") for e in errs if isinstance(e, dict)) or "Cloudflare rejected tunnel ingress update"
                 else:
                     ingress_configured = True
+            else:
+                ingress_action = "failed"
+                errs = cfg_data.get("errors") or []
+                ingress_error = "; ".join(e.get("message", "") for e in errs if isinstance(e, dict)) or "Failed to read tunnel configuration"
         except urllib.error.HTTPError as he:
+            ingress_action = "failed"
             ingress_error = f"HTTP {he.code}"
         except Exception as ex:
+            ingress_action = "failed"
             ingress_error = str(ex)
 
     msg = f"✓ Successfully {action} Cloudflare CNAME: {clean_host} ➜ {clean_target} (Proxied: ON) in zone '{zone_name}'."
     if ingress_configured:
-        msg += " Ingress route to http://aiostreams:3000 configured automatically!"
+        if repaired and previous_service_url:
+            msg += f" Repaired stale ingress route ({previous_service_url} ➜ {target_service_url})!"
+        elif ingress_action == "unchanged":
+            msg += f" Ingress route already points to {target_service_url}."
+        else:
+            msg += f" Ingress route to {target_service_url} configured automatically!"
     elif ingress_error:
-        msg += f" Note: Cloudflare Ingress rule could not be auto-updated ({ingress_error}). Ensure Public Hostname points to http://aiostreams:3000 in Zero Trust dashboard."
+        msg += f" Note: Cloudflare Ingress rule could not be auto-updated ({ingress_error}). Ensure Public Hostname points to {target_service_url} in Zero Trust dashboard."
 
     return {
         "success": True,
@@ -478,7 +805,12 @@ def push_cloudflare_dns(api_token: str, hostname: str, cname_target: str, accoun
         "tunnel_id": tunnel_id,
         "record_id": record_info.get("id"),
         "proxied": True,
+        "service_url": target_service_url,
         "ingress_configured": ingress_configured,
+        "ingress_action": ingress_action,
+        "repaired": repaired,
+        "previous_service_url": previous_service_url,
+        "ingress_error": ingress_error,
         "message": msg
     }
 

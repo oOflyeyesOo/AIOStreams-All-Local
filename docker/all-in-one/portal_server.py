@@ -901,7 +901,7 @@ def optimized_profile_export():
         ),
         "config": live_config if live_config is not None else module.build_default_config(probe_services=False),
     }
-def proxy_config(kind, base_url):
+def proxy_config(kind, base_url, origin_url=None):
     base_url = normalize_base_url(base_url or "https://aio.yourdomain.com")
     aiometa = derive_aiometadata_host(base_url)
     hostname = urllib.parse.urlsplit(base_url).hostname or "aio.yourdomain.com"
@@ -968,6 +968,14 @@ def proxy_config(kind, base_url):
     if kind == "cloudflare":
         subdomain = aio_host.split('.')[0] if '.' in aio_host else 'watch'
         domain_part = '.'.join(aio_host.split('.')[1:]) if '.' in aio_host else aio_host
+        from tools.cloudflare_helper import recommend_cloudflare_origin, validate_service_url, _derive_aiometadata_origin
+        env_vars = read_saved_env()
+        topo = recommend_cloudflare_origin(env_vars=env_vars)
+        resolved_origin = topo["recommended_origin"]
+        if origin_url and str(origin_url).strip():
+            resolved_origin = validate_service_url(str(origin_url))
+        resolved_aiom_origin = _derive_aiometadata_origin(resolved_origin, topo["aiometadata_port"])
+        aio_port = topo["aiostreams_port"]
         return (
             f"# ==============================================================================\n"
             f"# Cloudflare Zero Trust Tunnel Setup (Recommended — Zero Open Router Ports!)\n"
@@ -983,7 +991,7 @@ def proxy_config(kind, base_url):
             f"#    • Subdomain: {subdomain}\n"
             f"#    • Domain: {domain_part}\n"
             f"#    • Type: HTTP\n"
-            f"#    • URL: aiostreams:3000 (or http://localhost:3001)\n"
+            f"#    • URL: {resolved_origin} (External connector: port {aio_port}; built-in aio-tunnel only: http://aiostreams:3000)\n"
             f"#\n"
             f"# 5. Access your Web Player anywhere:\n"
             f"#    https://{aio_host}/jellyfin/web/\n"
@@ -996,10 +1004,10 @@ def proxy_config(kind, base_url):
             f"ingress:\n"
             f"  # Web Player & AIOStreams Ingress (Single Host)\n"
             f"  - hostname: {aio_host}\n"
-            f"    service: http://aiostreams:3000\n"
+            f"    service: {resolved_origin}\n"
             f"  # Optional: only if using native Stremio app remotely outside your home network\n"
             f"  - hostname: {meta_slug}\n"
-            f"    service: http://aiometadata:4005\n"
+            f"    service: {resolved_aiom_origin}\n"
             f"  - service: http_status:404"
         )
     raise ValueError("Unsupported proxy format")
@@ -1328,7 +1336,7 @@ PORTAL_API_GET_PATHS = {
     "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
     "/api/aniskip", "/api/health-stream", "/api/player-preferences",
-    "/api/config-bundle-raw", "/api/cloudflare/status",
+    "/api/config-bundle-raw", "/api/cloudflare/status", "/api/reachability",
 }
 
 PORTAL_API_POST_PATHS = {
@@ -1338,7 +1346,7 @@ PORTAL_API_POST_PATHS = {
     "/api/settings", "/api/env", "/api/save", "/api/restart",
     "/api/clean-cache", "/api/watchdog", "/api/backups/prune", "/api/backups/restore",
     "/api/lumiere/rebuild", "/api/aniskip", "/api/player-preferences",
-    "/api/cloudflare/push-dns", "/api/cloudflare/tunnel",
+    "/api/cloudflare/push-dns", "/api/cloudflare/tunnel", "/api/reachability",
 }
 
 _TELEMETRY_CACHE = {"data": None, "timestamp": 0.0, "lock": threading.Lock()}
@@ -2352,7 +2360,11 @@ button:hover {{ background: #0369a1; }}
         if path == "/api/proxy-config":
             query = urllib.parse.parse_qs(url_parts.query)
             try:
-                config = proxy_config(query.get("format", ["caddy"])[0], query.get("base_url", [""])[0])
+                config = proxy_config(
+                    query.get("format", ["caddy"])[0],
+                    query.get("base_url", [""])[0],
+                    origin_url=query.get("origin_url", [None])[0],
+                )
             except ValueError as error:
                 self.json_response({"error": str(error)}, 400)
                 return
@@ -2449,6 +2461,9 @@ button:hover {{ background: #0369a1; }}
             return
         elif path == "/api/cloudflare/status":
             self.handle_api_cloudflare_status()
+            return
+        elif path == "/api/reachability":
+            self.handle_api_reachability(query=url_parts.query)
             return
 
         # Static portal assets — never proxy to backend services
@@ -2705,6 +2720,9 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/cloudflare/tunnel":
             self.handle_api_cloudflare_tunnel_action()
             return
+        elif path == "/api/reachability":
+            self.handle_api_reachability(is_post=True)
+            return
         elif path == "/api/lumiere/rebuild":
             if not self.authorize():
                 return
@@ -2914,6 +2932,7 @@ button:hover {{ background: #0369a1; }}
                 "CLOUDFLARE_TUNNEL_METADATA": cf_meta,
                 "CLOUDFLARE_ZONE_ID": env_vars.get("CLOUDFLARE_ZONE_ID", "") or os.environ.get("CLOUDFLARE_ZONE_ID", ""),
                 "CLOUDFLARE_API_TOKEN_SAVED": bool(env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN")),
+                "CLOUDFLARE_ORIGIN_URL": env_vars.get("CLOUDFLARE_ORIGIN_URL", "") or os.environ.get("CLOUDFLARE_ORIGIN_URL", ""),
                 "configuredKeys": sorted(key for key, value in env_vars.items()
                                          if value and re.search(r"KEY|PASSWORD|TOKEN|SECRET|CLIENT_ID|_ID|MANIFEST_URL", key))
             }
@@ -3301,6 +3320,9 @@ button:hover {{ background: #0369a1; }}
                 t_url = urllib.parse.urlsplit(keys_to_update['TORRENTIO_URL'])
                 if t_url.scheme not in ('http', 'https') or not t_url.hostname or t_url.username or t_url.password:
                     raise ValueError('Enter a valid HTTP(S) URL for Torrentio endpoint')
+            if keys_to_update.get('CLOUDFLARE_ORIGIN_URL'):
+                from tools.cloudflare_helper import validate_service_url
+                keys_to_update['CLOUDFLARE_ORIGIN_URL'] = validate_service_url(keys_to_update['CLOUDFLARE_ORIGIN_URL'])
             if keys_to_update.get('AIOMETADATA_TEMPLATE'):
                 tmpl = keys_to_update['AIOMETADATA_TEMPLATE']
                 if not tmpl or tmpl.startswith(".") or ".." in tmpl or not re.fullmatch(r"[A-Za-z0-9_.-]+", tmpl):
@@ -3741,9 +3763,14 @@ button:hover {{ background: #0369a1; }}
     def handle_api_cloudflare_status(self):
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import check_cloudflare_containers, parse_tunnel_token
+            from tools.cloudflare_helper import (
+                check_cloudflare_containers,
+                parse_tunnel_token,
+                recommend_cloudflare_origin,
+            )
             containers = check_cloudflare_containers()
             env_vars = read_saved_env()
+            topology = recommend_cloudflare_origin(containers, env_vars=env_vars)
             token = env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or ""
             meta = parse_tunnel_token(token) if token else {"valid": False}
             base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL") or ""
@@ -3765,7 +3792,8 @@ button:hover {{ background: #0369a1; }}
                 "zone_id": env_vars.get("CLOUDFLARE_ZONE_ID") or os.environ.get("CLOUDFLARE_ZONE_ID") or "",
                 "is_run_token": meta.get("is_run_token", False),
                 "tunnel_metadata": meta,
-                "current_host": parsed_host
+                "current_host": parsed_host,
+                **topology,
             })
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while checking Cloudflare status."}, 500)
@@ -3775,7 +3803,16 @@ button:hover {{ background: #0369a1; }}
             return
         try:
             sys.path.insert(0, str(WEB_ROOT))
-            from tools.cloudflare_helper import push_cloudflare_dns, parse_tunnel_token, fetch_cloudflare_tunnel_token, manage_local_tunnel, normalize_tunnel_token
+            from tools.cloudflare_helper import (
+                check_cloudflare_containers,
+                fetch_cloudflare_tunnel_token,
+                manage_local_tunnel,
+                normalize_tunnel_token,
+                parse_tunnel_token,
+                push_cloudflare_dns,
+                recommend_cloudflare_origin,
+                validate_service_url,
+            )
             payload = self.read_json_body()
             env_vars = read_saved_env()
             api_token = (payload.get("api_token") or env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
@@ -3794,6 +3831,10 @@ button:hover {{ background: #0369a1; }}
             if not hostname:
                 self.json_response({"success": False, "error": "Enter a hostname or set your external Base URL first."}, 400)
                 return
+
+            raw_service_url = (payload.get("service_url") or "").strip()
+            service_url = validate_service_url(raw_service_url) if raw_service_url else None
+            aiometadata_hostname = (payload.get("aiometadata_hostname") or "").strip() or None
 
             # Resolve target and metadata
             req_tunnel_token = (payload.get("tunnel_token") or "").strip()
@@ -3830,12 +3871,20 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)
                 return
 
+            # Determine connector topology before pushing so default origin matches host/external vs local aio-tunnel
+            containers = check_cloudflare_containers()
+            if not service_url:
+                topology = recommend_cloudflare_origin(containers, env_vars=env_vars)
+                service_url = topology["recommended_origin"]
+
             # Persist credentials into .env so they survive restarts
             env_updates = {}
             if api_token:
                 env_updates["CLOUDFLARE_API_TOKEN"] = api_token
             if zone_id:
                 env_updates["CLOUDFLARE_ZONE_ID"] = zone_id
+            if service_url:
+                env_updates["CLOUDFLARE_ORIGIN_URL"] = service_url
 
             # If the user provided a full run token, persist it
             if req_tunnel_token and meta.get("is_run_token"):
@@ -3852,16 +3901,20 @@ button:hover {{ background: #0369a1; }}
             if env_updates:
                 save_env_updates(env_updates)
 
-            res = push_cloudflare_dns(
-                api_token=api_token,
-                hostname=hostname,
-                cname_target=cname_target,
-                account_id=account_id,
-                tunnel_id=tunnel_id,
-                zone_id=zone_id
-            )
+            push_kwargs = {
+                "api_token": api_token,
+                "hostname": hostname,
+                "cname_target": cname_target,
+                "account_id": account_id,
+                "tunnel_id": tunnel_id,
+                "zone_id": zone_id,
+                "service_url": service_url,
+            }
+            if aiometadata_hostname:
+                push_kwargs["aiometadata_hostname"] = aiometadata_hostname
+            res = push_cloudflare_dns(**push_kwargs)
 
-            # If DNS push succeeded, ensure local tunnel is running
+            # If DNS push succeeded, ensure local tunnel is running (unless using an external connector)
             if res.get("success"):
                 resolved_acc = res.get("account_id") or account_id
                 resolved_tun = res.get("tunnel_id") or tunnel_id
@@ -3878,7 +3931,14 @@ button:hover {{ background: #0369a1; }}
                     except Exception:
                         pass
 
-                if curr_token:
+                has_external = bool(containers.get("has_external"))
+                local_state = str((containers.get("local_tunnel") or {}).get("state") or "").lower()
+                local_running = local_state in ("running", "restarting")
+                if has_external and not local_running:
+                    res["tunnel_started"] = False
+                    res["external_connector_active"] = True
+                    res["message"] += f" External Cloudflare connector detected — routing via {res.get('service_url') or service_url}."
+                elif curr_token:
                     t_start = manage_local_tunnel("start", cwd=WEB_ROOT, token=curr_token)
                     if t_start.get("success"):
                         res["tunnel_started"] = True
@@ -3896,6 +3956,46 @@ button:hover {{ background: #0369a1; }}
             self.json_response({"success": False, "error": str(e)}, 400)
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while pushing Cloudflare DNS."}, 500)
+
+    def handle_api_reachability(self, query="", is_post=False):
+        if not self.authorize():
+            return
+        try:
+            sys.path.insert(0, str(WEB_ROOT))
+            from tools.cloudflare_helper import validate_service_url
+            from tools.reachability import run_reachability_checks
+
+            origin_url = None
+            include_remote = True
+            if is_post:
+                payload = self.read_json_body()
+                raw_origin = (payload.get("origin_url") or payload.get("service_url") or "").strip()
+                if raw_origin:
+                    origin_url = validate_service_url(raw_origin)
+                if "include_remote" in payload:
+                    if not isinstance(payload["include_remote"], bool):
+                        raise ValueError("include_remote must be a boolean.")
+                    include_remote = payload["include_remote"]
+            elif query:
+                params = urllib.parse.parse_qs(query)
+                raw_origin = (params.get("origin_url") or params.get("service_url") or [""])[0].strip()
+                if raw_origin:
+                    origin_url = validate_service_url(raw_origin)
+                if "include_remote" in params:
+                    include_remote = params["include_remote"][0].strip().lower() not in ("false", "0", "no")
+
+            env_vars = read_saved_env()
+            report = run_reachability_checks(
+                env_vars=env_vars,
+                origin_url=origin_url,
+                portal_base_url=f"http://127.0.0.1:{PORT}",
+                include_remote=include_remote,
+            )
+            self.json_response(report, 200)
+        except ValueError as e:
+            self.json_response({"success": False, "ok": False, "error": str(e)}, 400)
+        except Exception:
+            self.json_response({"success": False, "ok": False, "error": "Internal server error occurred while running reachability checks."}, 500)
 
     def handle_api_cloudflare_tunnel_action(self):
         if not self.authorize():
