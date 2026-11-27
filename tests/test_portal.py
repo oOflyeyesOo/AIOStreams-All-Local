@@ -2539,8 +2539,120 @@ class PortalTests(unittest.TestCase):
                 "service_url": "http://127.0.0.1:3001/bad-path",
             }, auth=True)
             self.assertEqual(status, 400)
+
+            # SSRF / metadata service_url -> 400
+            status, _, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                "api_token": "valid_token",
+                "hostname": "watch.example.com",
+                "cname_target": "tun123.cfargotunnel.com",
+                "service_url": "http://169.254.169.254",
+            }, auth=True)
+            self.assertEqual(status, 400)
+
+            # Non-string / non-bool payload fields -> 400 (never 500)
+            for bad_payload in (
+                {"api_token": "valid_token", "hostname": ["watch.example.com"], "cname_target": "tun123.cfargotunnel.com"},
+                {"api_token": "valid_token", "hostname": "watch.example.com", "cname_target": "tun123.cfargotunnel.com", "sync_base_url": "true"},
+            ):
+                status, _, _ = self.request("/api/cloudflare/push-dns", "POST", bad_payload, auth=True)
+                self.assertEqual(status, 400)
         finally:
             (self.root / ".env").write_bytes(before)
+
+    def test_cloudflare_push_dns_detects_and_syncs_base_url_mismatch(self):
+        before = (self.root / ".env").read_bytes()
+        before_env = dict(os.environ)
+        try:
+            portal.save_env_updates({"BASE_URL": "http://localhost:3001", "AIOMETADATA_HOST": "http://localhost:4005"})
+            mock_containers = {
+                "available": True,
+                "local_tunnel": {"name": "aio-tunnel", "status": "Not created", "state": "none", "is_local": True},
+                "external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "active_external_connectors": [{"id": "ext1", "name": "host-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "host"}],
+                "has_external": True,
+            }
+            mock_push = {
+                "success": True,
+                "action": "created",
+                "hostname": "watch.example.com",
+                "cname_target": "tun123.cfargotunnel.com",
+                "zone_name": "example.com",
+                "record_id": "rec-1",
+                "service_url": "http://127.0.0.1:3001",
+                "ingress_configured": True,
+                "ingress_action": "created",
+                "repaired": False,
+                "message": "Created DNS record.",
+            }
+            with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+                 patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=dict(mock_push)):
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "cname_target": "tun123.cfargotunnel.com",
+                    "service_url": "http://127.0.0.1:3001",
+                }, auth=True)
+            self.assertEqual(status, 200)
+            data = json.loads(body.decode("utf-8"))
+            self.assertTrue(data["base_url_mismatch"])
+            self.assertFalse(data["base_url_synced"])
+            self.assertEqual(data["current_base_url"], "http://localhost:3001")
+            self.assertEqual(data["recommended_base_url"], "https://watch.example.com")
+
+            # Now push with sync_base_url=True -> persists BASE_URL & clears mismatch
+            with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+                 patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=dict(mock_push)):
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "cname_target": "tun123.cfargotunnel.com",
+                    "service_url": "http://127.0.0.1:3001",
+                    "sync_base_url": True,
+                }, auth=True)
+            self.assertEqual(status, 200)
+            synced = json.loads(body.decode("utf-8"))
+            self.assertTrue(synced["base_url_synced"])
+            self.assertFalse(synced["base_url_mismatch"])
+            self.assertEqual(synced["current_base_url"], "https://watch.example.com")
+            self.assertEqual(synced["recommended_base_url"], "https://watch.example.com")
+            self.assertEqual(synced["BASE_URL"], "https://watch.example.com")
+            saved_env = portal.read_saved_env()
+            self.assertEqual(saved_env["BASE_URL"], "https://watch.example.com")
+            self.assertEqual(saved_env["AIOMETADATA_HOST"], "https://aiometa.watch.example.com")
+
+            # Subsequent push with matching BASE_URL -> base_url_mismatch=False
+            with patch("tools.cloudflare_helper.check_cloudflare_containers", return_value=mock_containers), \
+                 patch("tools.cloudflare_helper.push_cloudflare_dns", return_value=dict(mock_push)):
+                status, body, _ = self.request("/api/cloudflare/push-dns", "POST", {
+                    "api_token": "valid_token",
+                    "hostname": "watch.example.com",
+                    "cname_target": "tun123.cfargotunnel.com",
+                    "service_url": "http://127.0.0.1:3001",
+                }, auth=True)
+            self.assertEqual(status, 200)
+            after = json.loads(body.decode("utf-8"))
+            self.assertFalse(after["base_url_mismatch"])
+            self.assertFalse(after["base_url_synced"])
+        finally:
+            (self.root / ".env").write_bytes(before)
+            os.environ.clear()
+            os.environ.update(before_env)
+            portal._ENV_CACHE.update(data={}, mtime=0.0, source="")
+
+    def test_env_scalar_validation_rejects_injection_and_bad_keys(self):
+        for bad_updates in (
+            {"BAD-KEY": "value"},
+            {"BASE_URL": "https://ok.example\nEVIL=1"},
+            {"BASE_URL": "https://ok.example\rEVIL=1"},
+            {"BASE_URL": "https://ok.example\x00"},
+            {"BASE_URL": ["not-scalar"]},
+        ):
+            with self.assertRaises(ValueError):
+                portal.save_env_updates(bad_updates)
+
+        for bad_base in ("https://ok.example$foo", "https://ok.example'bad", 'https://ok.example"bad'):
+            status, _, _ = self.request("/api/save-env", "POST", {"BASE_URL": bad_base}, auth=True)
+            self.assertEqual(status, 400)
 
     def test_proxy_config_cloudflare_respects_origin_url(self):
         status, body, _ = self.request(
@@ -2582,8 +2694,14 @@ class PortalTests(unittest.TestCase):
             self.assertEqual(run_mock.call_args[1]["origin_url"], "http://host.docker.internal:3001")
             self.assertTrue(run_mock.call_args[1]["include_remote"])
 
-        status, _, _ = self.request("/api/reachability", "POST", {"origin_url": "ftp://bad"}, auth=True)
-        self.assertEqual(status, 400)
+        for bad_origin_payload in (
+            {"origin_url": "ftp://bad"},
+            {"origin_url": "http://169.254.169.254"},
+            {"origin_url": ["http://127.0.0.1:3001"]},
+            {"include_streaming": "false"},
+        ):
+            status, _, _ = self.request("/api/reachability", "POST", bad_origin_payload, auth=True)
+            self.assertEqual(status, 400)
 
         leak = "C:\\secret\\reachability_leak.txt"
         with patch("tools.reachability.run_reachability_checks", side_effect=RuntimeError(leak)):

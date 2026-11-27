@@ -707,7 +707,8 @@ def _probe_http_keepalive(target_origin: str, path: str = "/api/v1/health", time
         if r1.status >= 500:
             ms = round((time.monotonic() - t0) * 1000, 1)
             return False, ms, f"First request returned HTTP {r1.status}"
-        if r1.will_close or (r1.getheader("Connection") or "").lower() == "close":
+        conn_tokens = [t.strip() for t in (r1.getheader("Connection") or "").lower().split(",") if t.strip()]
+        if r1.will_close or "close" in conn_tokens:
             ms = round((time.monotonic() - t0) * 1000, 1)
             return False, ms, "Origin closed HTTP/1.1 connection instead of keeping alive"
         conn.request("GET", path, headers=headers)
@@ -736,10 +737,23 @@ def check_streaming_and_cloudflare_health(
     """Verify memory headroom, proxy URL consistency, keep-alive reuse, Jellyfin Web headers, and Usenet stream route."""
     env_map = dict(env_vars) if isinstance(env_vars, dict) else {}
     topology = recommend_cloudflare_origin(env_vars=env_map)
-    if origin_url and str(origin_url).strip():
-        target_origin = validate_service_url(str(origin_url))
-    else:
-        target_origin = topology.get("detected_origin") or topology["recommended_origin"]
+    recommended = topology["recommended_origin"]
+    raw_origin = str(origin_url).strip() if origin_url and str(origin_url).strip() else (topology.get("detected_origin") or recommended)
+    try:
+        target_origin = validate_service_url(str(raw_origin))
+    except ValueError as exc:
+        return [_make_check(
+            "stream:origin",
+            "Streaming Origin URL",
+            "streaming",
+            str(raw_origin),
+            False,
+            "fail",
+            True,
+            None,
+            str(exc),
+            f"Set a valid origin URL such as {recommended}.",
+        )]
 
     checks = []
     usenet_enabled = str(env_map.get("USENET_ENABLED") or os.environ.get("USENET_ENABLED") or "false").strip().lower() == "true"
@@ -839,41 +853,55 @@ def check_streaming_and_cloudflare_health(
         }
         expect_https_origin = (base_parsed.scheme == "https")
 
-    web_ok, web_code, web_ms, _, _, web_detail = _probe_http_details(
-        f"{target_origin.rstrip('/')}/jellyfin/web/", headers=fwd_headers, timeout=timeout
-    )
-    info_ok, _, info_ms, _, info_body, info_detail = _probe_http_details(
-        f"{target_origin.rstrip('/')}/jellyfin/System/Info/Public", headers=fwd_headers, timeout=timeout
-    )
-    jf_ok = bool(web_ok and web_code == 200 and info_ok)
-    jf_detail = f"/jellyfin/web/ {web_detail}, /System/Info/Public {info_detail}"
-    jf_rem = None
-    if jf_ok and expect_https_origin:
-        try:
-            info_json = json.loads(info_body.decode("utf-8", errors="replace"))
-            local_addr = str(info_json.get("LocalAddress") or "")
-            if not local_addr.startswith("https://"):
+    jellyfin_enabled = str(env_map.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED") or "true").strip().lower() != "false"
+    if not jellyfin_enabled:
+        checks.append(_make_check(
+            "cloudflare:jellyfin_web",
+            "Jellyfin Web & Forwarded Headers",
+            "cloudflare",
+            f"{target_origin.rstrip('/')}/jellyfin/web/",
+            True,
+            "skipped",
+            False,
+            None,
+            "Jellyfin Web Player is disabled (JELLYFIN_ENABLED=false)",
+        ))
+    else:
+        web_ok, web_code, web_ms, _, _, web_detail = _probe_http_details(
+            f"{target_origin.rstrip('/')}/jellyfin/web/", headers=fwd_headers, timeout=timeout
+        )
+        info_ok, _, info_ms, _, info_body, info_detail = _probe_http_details(
+            f"{target_origin.rstrip('/')}/jellyfin/System/Info/Public", headers=fwd_headers, timeout=timeout
+        )
+        jf_ok = bool(web_ok and web_code == 200 and info_ok)
+        jf_detail = f"/jellyfin/web/ {web_detail}, /System/Info/Public {info_detail}"
+        jf_rem = None
+        if jf_ok and expect_https_origin:
+            try:
+                info_json = json.loads(info_body.decode("utf-8", errors="replace"))
+                local_addr = str(info_json.get("LocalAddress") or "")
+                if not local_addr.startswith("https://"):
+                    jf_ok = False
+                    jf_detail = f"Expected HTTPS LocalAddress behind X-Forwarded-Proto=https, got '{local_addr}'"
+                    jf_rem = "Ensure TRUSTED_IPS includes your Cloudflare connector (loopback,linklocal,uniquelocal)."
+            except Exception as exc:
                 jf_ok = False
-                jf_detail = f"Expected HTTPS LocalAddress behind X-Forwarded-Proto=https, got '{local_addr}'"
-                jf_rem = "Ensure TRUSTED_IPS includes your Cloudflare connector (loopback,linklocal,uniquelocal)."
-        except Exception as exc:
-            jf_ok = False
-            jf_detail = f"Invalid JSON from /jellyfin/System/Info/Public: {exc}"
-    elif not jf_ok:
-        jf_rem = "Check AIOStreams Jellyfin Web routing and forwarded-header trust settings."
+                jf_detail = f"Invalid JSON from /jellyfin/System/Info/Public: {exc}"
+        elif not jf_ok:
+            jf_rem = "Check AIOStreams Jellyfin Web routing and forwarded-header trust settings."
 
-    checks.append(_make_check(
-        "cloudflare:jellyfin_web",
-        "Jellyfin Web & Forwarded Headers",
-        "cloudflare",
-        f"{target_origin.rstrip('/')}/jellyfin/web/",
-        jf_ok,
-        "ok" if jf_ok else "fail",
-        True,
-        round((web_ms + info_ms) / 2, 1),
-        jf_detail,
-        jf_rem,
-    ))
+        checks.append(_make_check(
+            "cloudflare:jellyfin_web",
+            "Jellyfin Web & Forwarded Headers",
+            "cloudflare",
+            f"{target_origin.rstrip('/')}/jellyfin/web/",
+            jf_ok,
+            "ok" if jf_ok else "fail",
+            True,
+            round((web_ms + info_ms) / 2, 1),
+            jf_detail,
+            jf_rem,
+        ))
 
     if usenet_enabled:
         u_ok, u_code, u_ms, _, _, u_detail = _probe_http_details(
@@ -881,7 +909,7 @@ def check_streaming_and_cloudflare_health(
             headers=fwd_headers,
             timeout=timeout,
         )
-        route_ok = bool(u_ok and u_code is not None and u_code < 500)
+        route_ok = bool(u_ok and u_code is not None and u_code < 500 and u_code != 404)
         checks.append(_make_check(
             "stream:usenet_route",
             "Native Usenet Stream Route",
@@ -907,7 +935,7 @@ def run_reachability_checks(
     include_portal: bool = True,
     include_cloudflare: bool = True,
     include_remote: bool = True,
-    include_streaming: bool = False,
+    include_streaming: bool = True,
     timeout: float = 2.5,
 ) -> dict:
     """Run comprehensive stack and Cloudflare origin reachability checks."""

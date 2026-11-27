@@ -248,6 +248,13 @@ def validate_service_url(service_url: str) -> str:
         raise ValueError("Origin service URL has an invalid port number.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise ValueError("Origin service URL port must be between 1 and 65535.")
+    try:
+        ip_obj = ipaddress.ip_address(host)
+        if ip_obj.is_link_local or ip_obj.is_unspecified or ip_obj.is_multicast:
+            raise ValueError("Origin service URL cannot target link-local, unspecified, or multicast IP addresses.")
+    except ValueError as exc:
+        if "Origin service URL" in str(exc):
+            raise
     host_fmt = f"[{host}]" if ":" in host and not host.startswith("[") else host
     netloc = f"{host_fmt}:{port}" if port is not None else host_fmt
     return f"{scheme}://{netloc}"
