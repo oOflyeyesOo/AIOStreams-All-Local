@@ -101,7 +101,7 @@ jobs:
           set -eo pipefail
           trap 'code=$?; echo "::error title=Failed Command::$BASH_COMMAND (exit code $code)"' ERR
           cp .env.example fixture.env
-          printf '\nADDON_PASSWORD=package-test-only-password\nBASE_URL=http://127.0.0.1:3001\nAIOMETADATA_HOST=http://127.0.0.1:4005\n' >> fixture.env
+          printf '\nADDON_PASSWORD=package-test-only-password\nPORTAL_AUTH_REQUIRED=true\nBASE_URL=http://127.0.0.1:3001\nAIOMETADATA_HOST=http://127.0.0.1:4005\n' >> fixture.env
           echo "Pre-fetching images for release stack..."
           for i in 1 2 3; do
             docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml pull && break || sleep 5
@@ -135,6 +135,10 @@ jobs:
           }
 
           run_step "stack-check" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml --profile test run --rm stack-check
+          run_step "fresh-install prepare" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_FRESH_INSTALL_TEST=true -e AIO_FRESH_INSTALL_TEST_PROJECT=aio-release portal python3 - --phase prepare < tests/check_fresh_install_live.py
+          run_step "restart portal" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml restart portal
+          run_step "wait for restarted portal" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml up -d --no-deps --wait --wait-timeout 120 portal
+          run_step "fresh-install verify" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_FRESH_INSTALL_TEST=true -e AIO_FRESH_INSTALL_TEST_PROJECT=aio-release portal python3 - --phase verify < tests/check_fresh_install_live.py
           run_step "check_optional_live" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T -e AIO_OPTIONAL_TEST_PROJECT=aio-release portal python3 - < tests/check_optional_live.py
           run_step "check_optional_presets_live" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_optional_presets_live.py
           run_step "check_routing_live" docker compose -p aio-release --env-file fixture.env -f release-bundle/compose.release.yml exec -T portal python3 - < tests/check_routing_live.py

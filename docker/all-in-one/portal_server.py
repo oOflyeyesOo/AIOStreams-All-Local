@@ -51,6 +51,7 @@ from tools.usenet_config import EXTRA_SOURCES, extra_sources, form_updates, publ
 from tools.metadata_config import prepare_metadata_template, request_metadata, MetadataRequestError
 ENV_LOCK = threading.RLock()
 SETUP_LOCK = threading.Lock()
+SETUP_TIMEOUT_SECONDS = 300
 SETUP_JOB = {"status": "idle", "step": "Ready to configure", "logs": deque(maxlen=80), "exit_code": None}
 AUTH_FAILURES = {}
 AUTH_FAILURE_WINDOW = 60
@@ -96,24 +97,46 @@ def launch_setup():
     def worker():
         process = None
         try:
-            process = subprocess.Popen(
-                [sys.executable, "-u", os.path.join(WEB_ROOT, "init/bootstrap/setup_stack.py")],
-                cwd=WEB_ROOT, env=dict(os.environ), stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, errors="replace")
-            if process.stdout:
-                for line in process.stdout:
-                    with SETUP_LOCK:
-                        SETUP_JOB["logs"].append(line.rstrip())
-                        for marker, step in (("Prowlarr", "Connecting public indexers"),
-                                             ("AIOMetadata Setup", "Preparing metadata"), ("AIOStreams Setup", "Building your manifest"),
-                                             ("Test ", "Checking the result")):
-                            if marker in line:
-                                SETUP_JOB["step"] = step
-            try:
-                code = process.wait(timeout=300)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                code = -1
+            # Regular files let us poll progress without blocking on a silent
+            # child's stdout. The deadline covers the entire process lifetime.
+            with tempfile.TemporaryDirectory(prefix="aio-setup-") as directory:
+                output_path = os.path.join(directory, "output.log")
+                with open(output_path, "w", encoding="utf-8") as output:
+                    process = subprocess.Popen(
+                        [sys.executable, "-u", os.path.join(WEB_ROOT, "init/bootstrap/setup_stack.py")],
+                        cwd=WEB_ROOT, env=dict(os.environ), stdout=output,
+                        stderr=subprocess.STDOUT, text=True, errors="replace")
+                    deadline = time.monotonic() + SETUP_TIMEOUT_SECONDS
+                    pending = ""
+                    with open(output_path, encoding="utf-8", errors="replace") as reader:
+                        while True:
+                            chunk = reader.read(65536)
+                            lines = (pending + chunk).split("\n")
+                            pending = lines.pop()[-8192:]
+                            with SETUP_LOCK:
+                                for line in lines:
+                                    SETUP_JOB["logs"].append(line.rstrip()[-8192:])
+                                    for marker, step in (("Prowlarr", "Connecting public indexers"),
+                                                         ("AIOMetadata Setup", "Preparing metadata"),
+                                                         ("AIOStreams Setup", "Building your manifest"),
+                                                         ("Test ", "Checking the result")):
+                                        if marker in line:
+                                            SETUP_JOB["step"] = step
+                            code = process.poll()
+                            if code is not None and not chunk:
+                                if pending:
+                                    with SETUP_LOCK:
+                                        SETUP_JOB["logs"].append(pending)
+                                break
+                            if time.monotonic() >= deadline:
+                                if code is None:
+                                    process.kill()
+                                    process.wait(timeout=5)
+                                code = -1
+                                with SETUP_LOCK:
+                                    SETUP_JOB["logs"].append("Setup timed out; check service health and retry.")
+                                break
+                            time.sleep(0.1)
             with SETUP_LOCK:
                 SETUP_JOB.update(status="complete" if code == 0 else "failed", exit_code=code,
                                  step="Your manifest is ready" if code == 0 else "Setup needs attention")
@@ -1908,6 +1931,7 @@ button:hover {{ background: #0369a1; }}
         """Return (uuid, encrypted_password) from install data or env, or (None, None)."""
         install_info = {}
         candidates = [
+            os.path.join(WEB_ROOT, "data", "aiostreams", "aiostreams_install.json"),
             os.path.join(WEB_ROOT, "data", "aiostreams_install.json"),
             "/data/aiostreams/aiostreams_install.json",
             "/data/aiostreams_install.json",
@@ -1934,11 +1958,10 @@ button:hover {{ background: #0369a1; }}
         return uuid, enc
 
     def handle_watch_route(self, subpath, query):
-        """Serve /watch[/...] as a credential-free alias for the Jellyfin web player.
+        """Launch the native player using the currently provisioned profile.
 
-        The browser address bar stays at /watch/... throughout; the uid and
-        encrypted password are resolved internally and never appear in any
-        redirected URL or base-href injected into HTML responses.
+        The portal link stays stable, but the redirect opens AIOStreams' native
+        player URL, which includes the profile identifier and encrypted token.
         """
         jellyfin_enabled = (
             read_saved_env().get("JELLYFIN_ENABLED") or

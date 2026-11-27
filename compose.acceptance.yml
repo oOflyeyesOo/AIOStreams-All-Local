@@ -1,0 +1,122 @@
+# Disposable post-setup acceptance only. No host ports, engine socket, or live data.
+# Use exactly: docker compose -p aio-fresh-install -f compose.acceptance.yml ...
+name: aio-fresh-install
+services:
+  portal:
+    build:
+      context: .
+      dockerfile: docker/packaged/Dockerfile
+      target: portal
+    environment:
+      ADDON_PASSWORD: package-test-only-password
+      PORTAL_AUTH_REQUIRED: 'true'
+      BASE_URL: http://127.0.0.1:3001
+      AIOSTREAMS_URL: http://aiostreams:3000
+      AIO_PROJECT_NAME: aio-fresh-install
+      AIO_FRESH_INSTALL_TEST: 'true'
+      AIO_FRESH_INSTALL_TEST_PROJECT: aio-fresh-install
+      JELLYFIN_ENABLED: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    volumes:
+      - portal-fixture:/app
+      - aiostreams-fixture:/app/data/aiostreams
+      - ./tests:/tests:ro
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/healthz',timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [acceptance]
+
+  aiostreams:
+    build:
+      context: .
+      dockerfile: docker/packaged/Dockerfile
+      target: aiostreams
+    entrypoint: [/bin/sh, /entrypoint.sh]
+    environment:
+      PORT: '3000'
+      BASE_URL: http://127.0.0.1:3001
+      SECRET_KEY: '1111111111111111111111111111111111111111111111111111111111111111'
+      ADDON_PASSWORD: package-test-only-password
+      CONFIG_ACCESS_KEY: package-test-only-password
+      AIOSTREAMS_AUTH: admin:package-test-only-password
+      AIOSTREAMS_AUTH_PERMISSIONS: admin=admin
+      AIOSTREAMS_AUTH_REQUIRED: 'true'
+      ALLOW_PRIVATE_URLS: 'true'
+      DATABASE_URI: sqlite:///data/db.sqlite
+      REDIS_URI: redis://redis:6379/6
+      REDIS_URL: redis://redis:6379/6
+      JELLYFIN_ENABLED: 'true'
+      TEMPLATE_URLS: '[]'
+      WHITELISTED_REGEX_PATTERNS_URLS: '[]'
+      WHITELISTED_SEL_URLS: '[]'
+      REMUXDB_ENABLED: 'false'
+      MEDIA_INFO_PROBE: 'false'
+      AIO_PRECACHE_NEXT_EPISODE: 'false'
+      FETCH_TRAKT_ALIASES: 'false'
+      CACHE_WARMUP_ON_STARTUP: 'false'
+      NODE_OPTIONS: --max-old-space-size=384
+    volumes:
+      - aiostreams-fixture:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, /nodejs/bin/node, /app/scripts/healthcheck.js]
+      interval: 5s
+      timeout: 8s
+      retries: 30
+      start_period: 20s
+    networks: [acceptance]
+
+  media-fixture:
+    build:
+      context: .
+      dockerfile: tests/browser.Dockerfile
+      target: media
+    environment:
+      AIO_FRESH_INSTALL_TEST: 'true'
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks: [acceptance]
+
+  browser-check:
+    profiles: [browser]
+    build:
+      context: .
+      dockerfile: tests/browser.Dockerfile
+      target: browser
+    init: true
+    shm_size: 512m
+    environment:
+      AIO_FRESH_INSTALL_TEST: 'true'
+    volumes:
+      - aiostreams-fixture:/fixture:ro
+    depends_on:
+      media-fixture:
+        condition: service_healthy
+      aiostreams:
+        condition: service_healthy
+    networks: [acceptance]
+
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --save, '', --appendonly, 'no']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks: [acceptance]
+
+networks:
+  acceptance:
+    internal: true
+
+volumes:
+  portal-fixture:
+  aiostreams-fixture:

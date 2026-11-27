@@ -36,6 +36,39 @@ class ApplianceTests(unittest.TestCase):
             prepare_env.prepare(root, data, {})
             self.assertEqual((data / '.env').read_text(), text)
 
+    def test_appliance_restart_preserves_portal_profiles_unless_explicitly_overridden(self):
+        import yaml
+        config = yaml.safe_load((ROOT / 'docker-compose.aio.yml').read_text())
+        environment = config['services']['aio-stack']['environment']
+        self.assertIn('COMPOSE_PROFILES=${COMPOSE_PROFILES:-}', environment)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'app'
+            data = Path(directory) / 'data'
+            root.mkdir()
+            try:
+                (root / 'probe').symlink_to(root / 'missing')
+                (root / 'probe').unlink()
+            except OSError:
+                self.skipTest('Symlink creation requires OS permission')
+            # Use the shipped template so fresh-install defaults are covered too.
+            (root / '.env.example').write_text((ROOT / '.env.example').read_text())
+            default_environment = {'COMPOSE_PROFILES': ''}
+            prepare_env.prepare(root, data, default_environment)
+
+            def saved():
+                return dict(line.split('=', 1) for line in (data / '.env').read_text().splitlines()
+                            if '=' in line and not line.lstrip().startswith('#'))
+
+            self.assertEqual(saved()['COMPOSE_PROFILES'], 'core')
+            # Simulate the portal's saved choice before restarting the appliance.
+            (data / '.env').write_text('COMPOSE_PROFILES=core,anime,tunnel\nPREMIUMIZE_API_KEY=fixture-only\n')
+            prepare_env.prepare(root, data, default_environment)
+            self.assertEqual(saved()['COMPOSE_PROFILES'], 'core,anime,tunnel')
+            self.assertEqual(saved()['PREMIUMIZE_API_KEY'], 'fixture-only')
+            prepare_env.prepare(root, data, {'COMPOSE_PROFILES': 'core'})
+            self.assertEqual(saved()['COMPOSE_PROFILES'], 'core')
+            self.assertEqual(saved()['PREMIUMIZE_API_KEY'], 'fixture-only')
+
     def test_prepare_migrates_legacy_profiles(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'app'

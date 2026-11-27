@@ -252,3 +252,34 @@ Remaining security work: webhook validation rejects literal private addresses bu
 - Validation: 317 Python tests and 43 frontend tests passed in Docker; source, manager, and appliance Compose validation passed; portal structural audit reported zero findings; inventory and generated-manager checks passed; updated portal image built locally.
 - Parallel reviewers were requested but all three failed before review due to account usage limits. This final review was completed by the lead; no independent review is claimed for this round.
 - User approved merge. Live server streaming and storage hardware health remain outside this local regression verification.
+
+### Fresh-install acceptance milestone — November 25, 2026 (in progress)
+
+Priority order: (1) repeatable first-install acceptance, (2) clear readiness and safe test gating, (3) actionable diagnostics. Keep paid playback verification separate from fixture-only checks.
+
+This slice adds a disposable-install portal acceptance check with prepare/verify phases around a portal restart, checks saved settings and profile identity, and exercises manifest download and the player shell. Release CI will run it against pinned images. It must refuse non-fixture deployments and must not report a player shell or media-range read as successful video decoding.
+
+Parallel review identified two regressions to fix in this slice: appliance defaults resetting saved optional profiles on restart, and the legacy playback probe returning exit code zero after an error. Follow-up readiness work will clear stale topbar player/manifest actions when the profile becomes unavailable. Successful metadata preset application and actual browser playback remain separate acceptance work, requiring controlled metadata and media fixtures or explicitly authorized live accounts.
+
+### Fresh-install milestone progress — November 26, 2026
+
+Parallel agents delivered (1) the guarded acceptance harness and isolated fixture, (2) appliance profile persistence fix, and (3) truthful playback-probe failures. Lead integration and real-container testing additionally found and fixed the player credential lookup omitting the standard `data/aiostreams/aiostreams_install.json` path.
+
+Real local acceptance passed using `compose.acceptance.yml`: build and start isolated portal/AIOStreams/Redis, register a local fixture addon/profile, hydrate the alias, save settings through HTTP, download the manifest, validate player redirect and internal HTML, restart the portal, and verify settings/profile identity/manifest/player again. No public ports, Docker socket, external provider credentials, or personal data are mounted; the runtime network is internal. The initial empty profile correctly failed the resource check; a local fixture addon now provides the declared stream resource without searching providers.
+
+CI runs this isolated check on source changes, plus prepare/restart/verify against the full pinned release stack before optional-provider tests. Release fixtures explicitly enable portal authentication. The guard rejects both plain and encoded NNTP credentials. Bootstrap initialization, successful metadata preset application, and actual browser video decoding remain outstanding end-to-end acceptance coverage; these post-setup checks do not imply those stages passed.
+
+Reproduce with the `Isolated portal persistence and player acceptance` commands in `.github/workflows/test.yml`, using only the dedicated `aio-fresh-install` project and fresh fixture volumes. Remove that project's fixture volumes after the run. Do not point this test at an existing installation.
+
+Validation for this slice: 328 Linux Python tests and 43 frontend tests passed; all three installation Compose files and the new acceptance fixture validated; portal structural audit and generated-manager freshness passed. Built affected bootstrap plus fixture portal/AIOStreams images locally. Actual isolated prepare/restart/verify passed. No merge, push, published image, or live-server change performed. Remaining first-install work is the portal-triggered setup/preset lifecycle and browser video decoding; readiness/diagnostics follow next.
+
+### Setup, preset and browser playback acceptance — November 26, 2026
+
+- Add real portal HTTP acceptance against isolated metadata and controller protocol fixtures. Check preset creation/reapply, saved identity/account preservation, stale-version/auth/malformed-response failures, duplicate setup requests, and unavailable controller behavior.
+- Fix the discovered local-bootstrap timeout gap: reading a silent child's stdout previously blocked before timeout enforcement. Poll a file-backed progress log under an elapsed-time deadline and allow retry after timeout.
+- Extend the isolated Compose fixture with a locally generated test-pattern video addon and a pinned Chromium/Playwright runner. Verify the real AIOStreams stream lookup, native player sign-in and click-to-play, video frame/time advancement, pause, seek, and resume.
+- Parallel agents began this slice but hit account limits. Setup/preset test files were recovered and checked by the lead; browser implementation and integration were completed locally. Do not describe unfinished independent reviews as complete.
+
+Native player acceptance is now implemented beyond the initial document smoke check: Chromium signs into the actual AIOStreams player using a fixture-only account, opens the generated catalog item, clicks Play, selects its stream, and asserts video time/frame advancement without media errors. It then verifies pause, seek and resume inside that native player. The media is generated locally at image build time; the runtime network remains internal and no provider account is used.
+
+Validation: 334 Linux Python tests and 43 frontend tests passed. Native Chromium player acceptance passed with 97 decoded frames, playback advancing beyond 7 seconds after seek/resume, and no media error. Isolated portal restart acceptance also passed again. All three installation Compose definitions, fixture YAML, and generated-manager checks passed; portal, AIOStreams, generated-media and browser fixture images built locally. Changes remain on the development branch, unmerged and unpublished. Metadata tests use a protocol fixture rather than the real AIOMetadata service; provider authentication and paid streaming remain outside this run.
