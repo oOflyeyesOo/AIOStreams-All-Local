@@ -878,3 +878,17 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(captured[0]["config"].get("openSubtitlesApiKey"), "os-fixture-key")
         sub = next(p for p in config["presets"] if p["instanceId"] == "subsense-local")
         self.assertEqual(sub["options"]["manifestUrl"], "http://subsense:3100/enc-subsense-token/manifest.json")
+
+    def test_builtin_proxy_updates_stale_base_url_for_public_domain(self):
+        base = {
+            "proxy": {
+                "id": "builtin",
+                "enabled": False,
+                "url": "http://aiostreams:3000",
+                "credentials": "admin:admin",
+            }
+        }
+        with patch.object(bootstrap, "BASE_URL", "https://media.example.dev"):
+            config = bootstrap.build_default_config(probe_services=False, base_config=base)
+        self.assertTrue(config["proxy"]["enabled"])
+        self.assertEqual(config["proxy"]["url"], "https://media.example.dev")

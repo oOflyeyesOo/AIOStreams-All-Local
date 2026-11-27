@@ -141,8 +141,8 @@ services:
       - python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8088/healthz')" || exit 1
       interval: 10s
       timeout: 3s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 60s
     networks:
       stremio-net:
         aliases:
@@ -166,7 +166,7 @@ services:
         max-size: 10m
         max-file: '3'
         compress: 'true'
-    mem_limit: ${AIOSTREAMS_MEM_LIMIT:-512m}
+    mem_limit: ${AIOSTREAMS_MEM_LIMIT:-1024m}
     dns:
     - 1.1.1.1
     - 8.8.8.8
@@ -174,7 +174,14 @@ services:
     - ${PORT_AIOSTREAMS:-3001}:3000
     environment:
     - PORT=3000
-    - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=384
+    - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=512
+    - AIO_KEEPALIVE_TIMEOUT_MS=${AIO_KEEPALIVE_TIMEOUT_MS:-120000}
+    - AIO_HEADERS_TIMEOUT_MS=${AIO_HEADERS_TIMEOUT_MS:-125000}
+    - AIO_REQUEST_TIMEOUT_MS=${AIO_REQUEST_TIMEOUT_MS:-0}
+    - TRUSTED_IPS=${TRUSTED_IPS:-loopback,linklocal,uniquelocal}
+    - USENET_PERFORMANCE_PROFILE=${USENET_PERFORMANCE_PROFILE:-conservative}
+    - LOG_BUFFER_MAX_BYTES=${LOG_BUFFER_MAX_BYTES:-16777216}
+    - LOG_BUFFER_MAX_ENTRIES=${LOG_BUFFER_MAX_ENTRIES:-50000}
     - BASE_URL=${BASE_URL:-http://localhost:3001}
     - SECRET_KEY=${SECRET_KEY:-e2c019d4536f9a039b56f8f1dfba8919634e2c8846bb1999252c79213bc01b09}
     - ADDON_PASSWORD=${ADDON_PASSWORD:-admin}

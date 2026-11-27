@@ -248,6 +248,13 @@ def validate_service_url(service_url: str) -> str:
         raise ValueError("Origin service URL has an invalid port number.") from exc
     if port is not None and not (1 <= port <= 65535):
         raise ValueError("Origin service URL port must be between 1 and 65535.")
+    try:
+        ip_obj = ipaddress.ip_address(host)
+        if ip_obj.is_link_local or ip_obj.is_unspecified or ip_obj.is_multicast:
+            raise ValueError("Origin service URL cannot target link-local, unspecified, or multicast IP addresses.")
+    except ValueError as exc:
+        if "Origin service URL" in str(exc):
+            raise
     host_fmt = f"[{host}]" if ":" in host and not host.startswith("[") else host
     netloc = f"{host_fmt}:{port}" if port is not None else host_fmt
     return f"{scheme}://{netloc}"
@@ -513,6 +520,41 @@ def recommend_cloudflare_origin(
     }
 
 
+DEFAULT_TUNNEL_ORIGIN_REQUEST = {
+    "connectTimeout": 30,
+    "keepAliveTimeout": 60,
+    "keepAliveConnections": 100,
+    "noHappyEyeballs": True,
+}
+
+
+def build_tunnel_origin_request(existing: dict = None) -> dict:
+    """
+    Build Cloudflare Zero Trust tunnel originRequest parameters tuned to prevent
+    502 keep-alive races and IPv6 dial stalls against AIOStreams.
+
+    Keeps keepAliveTimeout <= 90s (default 60s), strictly below AIOStreams'
+    120s Node HTTP keepAliveTimeout so cloudflared closes idle sockets first.
+    """
+    merged = dict(DEFAULT_TUNNEL_ORIGIN_REQUEST)
+    if isinstance(existing, dict):
+        for key, value in existing.items():
+            if value is not None:
+                merged[key] = value
+        # Guard against zero or >= 120s keepAliveTimeout reintroducing the 502 race
+        ka = merged.get("keepAliveTimeout")
+        if not isinstance(ka, (int, float)) or isinstance(ka, bool) or ka <= 0 or ka > 90:
+            merged["keepAliveTimeout"] = DEFAULT_TUNNEL_ORIGIN_REQUEST["keepAliveTimeout"]
+    return merged
+
+
+def _origin_request_needs_tuning(existing: dict) -> bool:
+    if not isinstance(existing, dict):
+        return False
+    ka = existing.get("keepAliveTimeout")
+    return isinstance(ka, (int, float)) and not isinstance(ka, bool) and (ka <= 0 or ka > 90)
+
+
 def _upsert_ingress_rule(ingress_rules: list, hostname: str, service_url: str) -> tuple[str, str | None]:
     """Insert or update a hostname ingress rule in place; return (action, previous_service)."""
     clean_host = hostname.strip().lower()
@@ -753,8 +795,16 @@ def push_cloudflare_dns(
                         ingress_rules, clean_aiom_host, target_aiom_url
                     )
 
-                if ingress_action in ("created", "repaired") or aiom_action in ("created", "repaired"):
-                    update_payload = {"config": {**current_cfg, "ingress": ingress_rules}}
+                origin_needs_tuning = _origin_request_needs_tuning(current_cfg.get("originRequest"))
+                if ingress_action in ("created", "repaired") or aiom_action in ("created", "repaired") or origin_needs_tuning:
+                    tuned_origin_request = build_tunnel_origin_request(current_cfg.get("originRequest"))
+                    update_payload = {
+                        "config": {
+                            **current_cfg,
+                            "originRequest": tuned_origin_request,
+                            "ingress": ingress_rules,
+                        }
+                    }
                     put_req = urllib.request.Request(
                         cfg_url,
                         data=json.dumps(update_payload).encode("utf-8"),
@@ -765,7 +815,9 @@ def push_cloudflare_dns(
                         p_data = json.loads(p_resp.read().decode("utf-8"))
                         if p_data.get("success"):
                             ingress_configured = True
-                            repaired = (ingress_action == "repaired")
+                            repaired = (ingress_action == "repaired") or origin_needs_tuning
+                            if origin_needs_tuning and ingress_action == "unchanged":
+                                ingress_action = "repaired"
                         else:
                             ingress_action = "failed"
                             errs = p_data.get("errors") or []

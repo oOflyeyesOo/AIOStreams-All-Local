@@ -20,6 +20,7 @@ mkdir -p /data/aiostreams \
          /data/postgres \
          /data/aiometadata \
          /data/postersplus \
+         /data/lumiere-db \
          /var/log \
          /etc/docker \
          /etc/containerd \
@@ -102,6 +103,7 @@ start_dockerd ""
 echo "      Waiting for container daemon readiness..."
 retries=0
 max_retries=90
+attempted_fuse_overlayfs=false
 attempted_vfs=false
 daemon_ready=false
 
@@ -117,7 +119,15 @@ while [ $retries -lt $max_retries ]; do
         echo "[!] Container daemon process exited. Last 15 log lines:"
         tail -n 15 /var/log/dockerd.log 2>/dev/null || true
 
-        # If primary driver failed, retry once with vfs driver
+        # Fallback order: auto -> fuse-overlayfs (avoids vfs ZFS copy-up) -> vfs
+        if [ "$attempted_fuse_overlayfs" != "true" ] && command -v fuse-overlayfs >/dev/null 2>&1; then
+            echo "[i] Retrying container engine with fallback fuse-overlayfs storage driver..."
+            attempted_fuse_overlayfs=true
+            start_dockerd "fuse-overlayfs"
+            retries=0
+            sleep 2
+            continue
+        fi
         if [ "$attempted_vfs" != "true" ]; then
             echo "[i] Retrying container engine with fallback vfs storage driver..."
             attempted_vfs=true
@@ -135,41 +145,99 @@ while [ $retries -lt $max_retries ]; do
 done
 
 # 5. Handle stack startup if daemon is ready
+stop_temp_portal() {
+    if [ -n "$PORTAL_PID" ]; then
+        kill "$PORTAL_PID" 2>/dev/null || true
+        local waited=0
+        while kill -0 "$PORTAL_PID" 2>/dev/null && [ $waited -lt 10 ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+        if kill -0 "$PORTAL_PID" 2>/dev/null; then
+            kill -9 "$PORTAL_PID" 2>/dev/null || true
+        fi
+        wait "$PORTAL_PID" 2>/dev/null || true
+        PORTAL_PID=""
+    fi
+}
+
+ensure_fallback_portal() {
+    if ! curl -fsS http://127.0.0.1:8088/healthz >/dev/null 2>&1; then
+        python3 -u /app/docker/all-in-one/portal_server.py > /var/log/portal_server.log 2>&1 &
+        PORTAL_PID=$!
+    fi
+}
+
 if [ "$daemon_ready" = "true" ]; then
     cd /app
     # Preserve portal settings across image replacement; import explicit runtime
     # settings safely, including encoded NNTP credentials.
     python3 /app/docker/all-in-one/prepare_env.py
 
-    # Build the patched services before starting them; do not silently use an
-    # upstream image in place of a service with a local build definition.
-    docker compose build
-
-    # Stop only the temporary host-side portal before binding the real portal.
-    # Never launch setup_stack.py on this host: Compose DNS is container-local.
-    kill "$PORTAL_PID" 2>/dev/null || true
-    wait "$PORTAL_PID" 2>/dev/null || true
-    PORTAL_PID=""
-    echo "[4/4] Starting services and the network-connected setup portal..."
     # The controller starts SubSense separately so an optional subtitle service
     # cannot prevent the network-connected portal from becoming available.
     enabled_services=$(docker compose config --services)
     mapfile -t startup_services < <(printf '%s\n' "$enabled_services" | sed -e '/^subsense$/d' -e '/^stack-bootstrap$/d' -e '/^$/d')
-    if docker compose up -d --remove-orphans --wait --wait-timeout 600 "${startup_services[@]}"; then
-        # Use the same controller action as the setup button. It applies the
-        # saved environment and runs bootstrap inside the service network.
-        if ! docker compose exec -T portal python3 -c 'import importlib.util; s=importlib.util.spec_from_file_location("portal", "/app/docker/all-in-one/portal_server.py"); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); p.launch_setup()'; then
-            echo "[!] Automatic setup could not start. Open the portal and choose Connect my stack."
+
+    # Build the patched services before starting them; do not silently use an
+    # upstream image in place of a service with a local build definition.
+    build_ok=true
+    if ! docker compose build; then
+        echo "[!] Compose image build failed; retrying once..."
+        sleep 5
+        if ! docker compose build; then
+            echo "[ERROR] Compose image build failed."
+            build_ok=false
+        fi
+    fi
+
+    if [ "$build_ok" = "true" ]; then
+        echo "[3/4] Starting controller and network-connected setup portal..."
+        if ! docker compose up -d --no-build --wait --wait-timeout 180 controller; then
+            echo "[!] Controller startup failed; inspecting logs and retrying once..."
+            docker compose logs --tail 30 controller 2>&1 || true
+            docker compose up -d --no-build --force-recreate --wait --wait-timeout 180 controller || true
+        fi
+
+        # Stop only the temporary host-side portal before binding the real portal.
+        # Never launch setup_stack.py on this host: Compose DNS is container-local.
+        stop_temp_portal
+
+        # Start the networked portal before pulling/booting the heavier media stack
+        # so its package setup and healthcheck do not contend with bulk image I/O.
+        if ! docker compose up -d --no-deps --no-build --wait --wait-timeout 180 portal; then
+            echo "[!] Portal startup failed; inspecting portal logs and retrying once..."
+            docker compose ps -a portal 2>&1 || true
+            docker compose logs --tail 40 portal 2>&1 || true
+            if ! docker compose up -d --no-deps --no-build --force-recreate --wait --wait-timeout 180 portal; then
+                echo "[ERROR] Network-connected portal failed to become healthy."
+                docker compose ps -a portal 2>&1 || true
+                docker compose logs --tail 40 portal 2>&1 || true
+            fi
+        fi
+
+        echo "[4/4] Pulling and starting remaining stack services..."
+        if ! docker compose pull --ignore-buildable "${startup_services[@]}"; then
+            echo "[!] Image pull encountered an error; retrying once..."
+            sleep 5
+            docker compose pull --ignore-buildable "${startup_services[@]}" || true
+        fi
+
+        if docker compose up -d --remove-orphans --no-build --wait --wait-timeout 600 "${startup_services[@]}"; then
+            # Use the same controller action as the setup button. It applies the
+            # saved environment and runs bootstrap inside the service network.
+            if ! docker compose exec -T portal python3 -c 'import importlib.util; s=importlib.util.spec_from_file_location("portal", "/app/docker/all-in-one/portal_server.py"); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); p.launch_setup()'; then
+                echo "[!] Automatic setup could not start. Open the portal and choose Connect my stack."
+            fi
+        else
+            echo "[ERROR] Service startup failed. Inspect inner Compose status and logs."
+            docker compose ps -a 2>&1 || true
+            docker compose logs --tail 30 2>&1 || true
+            # Keep a reachable status page if the real portal could not start.
+            ensure_fallback_portal
         fi
     else
-        echo "[ERROR] Service startup failed. Inspect inner Compose status and logs."
-        docker compose ps -a 2>&1 || true
-        docker compose logs --tail 30 2>&1 || true
-        # Keep a reachable status page if the real portal could not start.
-        if ! curl -fsS http://127.0.0.1:8088/healthz >/dev/null 2>&1; then
-            python3 -u /app/docker/all-in-one/portal_server.py > /var/log/portal_server.log 2>&1 &
-            PORTAL_PID=$!
-        fi
+        ensure_fallback_portal
     fi
 
     echo ""
@@ -191,10 +259,10 @@ if [ "$daemon_ready" = "true" ]; then
     cleanup() {
         echo ""
         echo "[!] Stopping all stack services cleanly..."
-        docker compose down
+        docker compose down -t 60
         [ -n "$PORTAL_PID" ] && kill $PORTAL_PID 2>/dev/null || true
         [ -n "$DOCKERD_PID" ] && kill $DOCKERD_PID 2>/dev/null || true
-        echo "[âœ“] All services halted."
+        echo "[✓] All services halted."
         exit 0
     }
     trap cleanup SIGTERM SIGINT

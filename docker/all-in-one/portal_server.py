@@ -3842,6 +3842,24 @@ button:hover {{ background: #0369a1; }}
         except Exception:
             self.json_response({"success": False, "error": "Internal server error occurred while checking Cloudflare status."}, 500)
 
+    @staticmethod
+    def _str_field(payload, key):
+        val = payload.get(key)
+        if val is None:
+            return ""
+        if not isinstance(val, str):
+            raise ValueError(f"{key} must be a string.")
+        return val.strip()
+
+    @staticmethod
+    def _bool_field(payload, key, default=False):
+        if key not in payload:
+            return default
+        val = payload[key]
+        if not isinstance(val, bool):
+            raise ValueError(f"{key} must be a boolean.")
+        return val
+
     def handle_api_cloudflare_push_dns(self):
         if not self.authorize():
             return
@@ -3858,16 +3876,15 @@ button:hover {{ background: #0369a1; }}
                 validate_service_url,
             )
             payload = self.read_json_body()
+            sync_base_url = self._bool_field(payload, "sync_base_url", False)
             env_vars = read_saved_env()
-            api_token = (payload.get("api_token") or env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+            api_token = (self._str_field(payload, "api_token") or env_vars.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
             if not api_token:
                 self.json_response({"success": False, "error": "Cloudflare API Token is required. Generate one in Cloudflare Dashboard -> My Profile -> API Tokens."}, 400)
                 return
 
-            env_vars = read_saved_env()
-
             # Resolve hostname
-            hostname = (payload.get("hostname") or "").strip()
+            hostname = self._str_field(payload, "hostname")
             if not hostname:
                 base_url = env_vars.get("BASE_URL") or os.environ.get("BASE_URL") or ""
                 if base_url:
@@ -3876,17 +3893,17 @@ button:hover {{ background: #0369a1; }}
                 self.json_response({"success": False, "error": "Enter a hostname or set your external Base URL first."}, 400)
                 return
 
-            raw_service_url = (payload.get("service_url") or "").strip()
+            raw_service_url = self._str_field(payload, "service_url")
             service_url = validate_service_url(raw_service_url) if raw_service_url else None
-            aiometadata_hostname = (payload.get("aiometadata_hostname") or "").strip() or None
+            aiometadata_hostname = self._str_field(payload, "aiometadata_hostname") or None
 
             # Resolve target and metadata
-            req_tunnel_token = (payload.get("tunnel_token") or "").strip()
+            req_tunnel_token = self._str_field(payload, "tunnel_token")
             saved_tunnel_token = (env_vars.get("CLOUDFLARE_TUNNEL_TOKEN") or os.environ.get("CLOUDFLARE_TUNNEL_TOKEN") or "").strip()
             tunnel_token = req_tunnel_token or saved_tunnel_token
 
             meta = parse_tunnel_token(tunnel_token) if tunnel_token else {"valid": False}
-            cname_target = (payload.get("cname_target") or "").strip()
+            cname_target = self._str_field(payload, "cname_target")
             if not cname_target and meta.get("valid"):
                 cname_target = meta.get("cname_target") or ""
 
@@ -3898,8 +3915,8 @@ button:hover {{ background: #0369a1; }}
                     if not meta.get("valid"):
                         meta = saved_meta
 
-            account_id = payload.get("account_id") or meta.get("account_id")
-            tunnel_id = payload.get("tunnel_id") or meta.get("tunnel_id")
+            account_id = self._str_field(payload, "account_id") or meta.get("account_id")
+            tunnel_id = self._str_field(payload, "tunnel_id") or meta.get("tunnel_id")
 
             # If cname_target is provided directly, try to parse tunnel_id/account_id from it if missing
             if not tunnel_id and cname_target:
@@ -3909,7 +3926,7 @@ button:hover {{ background: #0369a1; }}
                     if not account_id:
                         account_id = target_meta.get("account_id")
 
-            zone_id = (payload.get("zone_id") or "").strip() or env_vars.get("CLOUDFLARE_ZONE_ID") or os.environ.get("CLOUDFLARE_ZONE_ID") or None
+            zone_id = self._str_field(payload, "zone_id") or env_vars.get("CLOUDFLARE_ZONE_ID") or os.environ.get("CLOUDFLARE_ZONE_ID") or None
 
             if not cname_target:
                 self.json_response({"success": False, "error": "CNAME target could not be resolved. Provide a Cloudflare Tunnel Token or CNAME target."}, 400)
@@ -3995,6 +4012,46 @@ button:hover {{ background: #0369a1; }}
                     res["tunnel_started"] = False
                     res["message"] += " Note: Cloudflare DNS is active, but the local tunnel connector is not running. Paste your Cloudflare Tunnel Token (eyJh...) and click 'Start Local Tunnel' to route traffic and resolve 502 Bad Gateway."
 
+                pushed_host = (res.get("hostname") or hostname or "").strip().lower()
+                recommended_base_url = normalize_base_url(f"https://{pushed_host}")
+                raw_current_base = (curr_env.get("BASE_URL") or os.environ.get("BASE_URL") or "").strip()
+                if raw_current_base:
+                    try:
+                        current_base_url = normalize_base_url(raw_current_base)
+                    except ValueError:
+                        current_base_url = raw_current_base
+                else:
+                    current_base_url = ""
+                base_url_mismatch = current_base_url.rstrip("/").lower() != recommended_base_url.rstrip("/").lower()
+                res["current_base_url"] = current_base_url
+                res["recommended_base_url"] = recommended_base_url
+                res["base_url_mismatch"] = base_url_mismatch
+                res["base_url_synced"] = False
+
+                if sync_base_url and base_url_mismatch:
+                    if any(c in recommended_base_url for c in "\r\n\x00$'\""):
+                        raise ValueError("Recommended BASE_URL contains invalid scalar characters.")
+                    base_updates = {"BASE_URL": recommended_base_url}
+                    try:
+                        old_urls = public_service_urls(current_base_url) if current_base_url else {}
+                    except ValueError:
+                        old_urls = {}
+                    for svc_key, svc_url in public_service_urls(recommended_base_url).items():
+                        existing_val = (curr_env.get(svc_key) or "").strip()
+                        existing_host = urllib.parse.urlsplit(existing_val).hostname
+                        if not existing_val or existing_val == old_urls.get(svc_key) or existing_host in ("localhost", "127.0.0.1"):
+                            base_updates[svc_key] = svc_url
+                    if aiometadata_hostname:
+                        clean_aiom = normalize_base_url(f"https://{aiometadata_hostname.strip().lower()}")
+                        if not any(c in clean_aiom for c in "\r\n\x00$'\""):
+                            base_updates["AIOMETADATA_HOST"] = clean_aiom
+                    save_env_updates(base_updates)
+                    res["base_url_synced"] = True
+                    res["base_url_mismatch"] = False
+                    res["current_base_url"] = recommended_base_url
+                    res["BASE_URL"] = recommended_base_url
+                    res["message"] += f" Synced BASE_URL to {recommended_base_url}. Apply/restart the stack so AIOStreams picks up the updated public URL."
+
             self.json_response(res, 200 if res.get("success") else 400)
         except ValueError as e:
             self.json_response({"success": False, "error": str(e)}, 400)
@@ -4011,15 +4068,14 @@ button:hover {{ background: #0369a1; }}
 
             origin_url = None
             include_remote = True
+            include_streaming = True
             if is_post:
                 payload = self.read_json_body()
-                raw_origin = (payload.get("origin_url") or payload.get("service_url") or "").strip()
+                raw_origin = self._str_field(payload, "origin_url") or self._str_field(payload, "service_url")
                 if raw_origin:
                     origin_url = validate_service_url(raw_origin)
-                if "include_remote" in payload:
-                    if not isinstance(payload["include_remote"], bool):
-                        raise ValueError("include_remote must be a boolean.")
-                    include_remote = payload["include_remote"]
+                include_remote = self._bool_field(payload, "include_remote", True)
+                include_streaming = self._bool_field(payload, "include_streaming", True)
             elif query:
                 params = urllib.parse.parse_qs(query)
                 raw_origin = (params.get("origin_url") or params.get("service_url") or [""])[0].strip()
@@ -4027,6 +4083,8 @@ button:hover {{ background: #0369a1; }}
                     origin_url = validate_service_url(raw_origin)
                 if "include_remote" in params:
                     include_remote = params["include_remote"][0].strip().lower() not in ("false", "0", "no")
+                if "include_streaming" in params:
+                    include_streaming = params["include_streaming"][0].strip().lower() not in ("false", "0", "no")
 
             env_vars = read_saved_env()
             report = run_reachability_checks(
@@ -4034,6 +4092,7 @@ button:hover {{ background: #0369a1; }}
                 origin_url=origin_url,
                 portal_base_url=f"http://127.0.0.1:{PORT}",
                 include_remote=include_remote,
+                include_streaming=include_streaming,
             )
             self.json_response(report, 200)
         except ValueError as e:

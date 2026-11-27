@@ -21,6 +21,7 @@ COPY docker-compose.yml /app/docker-compose.yml
 COPY .env.example /app/.env.example
 COPY index.html /app/index.html
 COPY dashboard.html /app/dashboard.html
+COPY app.webmanifest /app/app.webmanifest
 COPY assets/ /app/assets/
 COPY setup.sh /app/setup.sh
 COPY init/ /app/init/

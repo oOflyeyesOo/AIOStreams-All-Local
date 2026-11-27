@@ -12,8 +12,11 @@ Probes:
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import http.client
 import ipaddress
+import json
 import os
+import re
 import socket
 import ssl
 import time
@@ -634,6 +637,295 @@ def _check_remote_urls(env_vars: dict, timeout: float) -> list[dict]:
     return checks
 
 
+def _parse_mem_limit_mb(raw) -> int | None:
+    if raw is None:
+        return None
+    text = str(raw).strip().lower()
+    if not text:
+        return None
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([kmg]?i?b?)?", text)
+    if not m:
+        return None
+    val = float(m.group(1))
+    unit = (m.group(2) or "").rstrip("b").rstrip("i")
+    if unit == "g":
+        return int(val * 1024)
+    if unit == "m":
+        return int(val)
+    if unit == "k":
+        return max(1, int(val // 1024))
+    if val >= 1024 * 1024:
+        return int(val // (1024 * 1024))
+    return int(val)
+
+
+def _probe_http_details(url: str, headers: dict = None, timeout: float = 2.5) -> tuple[bool, int | None, float, dict, bytes, str]:
+    """Probe an HTTP(S) URL without following redirects, returning headers and body snippet."""
+    t0 = time.monotonic()
+    req_headers = {"User-Agent": "AIO-Reachability/1.0", "Accept-Encoding": "identity"}
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, headers=req_headers)
+    try:
+        with _NO_REDIRECT_OPENER.open(req, timeout=timeout) as resp:
+            code = getattr(resp, "status", 200) or 200
+            body = resp.read(16384)
+            resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+            ms = round((time.monotonic() - t0) * 1000, 1)
+            return (code < 500), code, ms, resp_headers, body, f"HTTP {code}"
+    except urllib.error.HTTPError as err:
+        ms = round((time.monotonic() - t0) * 1000, 1)
+        body = b""
+        try:
+            body = err.read(4096)
+        except Exception:
+            pass
+        resp_headers = {k.lower(): v for k, v in err.headers.items()} if err.headers else {}
+        return (err.code < 500), err.code, ms, resp_headers, body, f"HTTP {err.code}"
+    except Exception as exc:
+        ms = round((time.monotonic() - t0) * 1000, 1)
+        reason = getattr(exc, "reason", None)
+        return False, None, ms, {}, b"", f"{type(exc).__name__}: {reason or exc}"
+
+
+def _probe_http_keepalive(target_origin: str, path: str = "/api/v1/health", timeout: float = 2.5) -> tuple[bool, float, str]:
+    """Send two sequential HTTP/1.1 requests over one socket to confirm keep-alive connection reuse."""
+    parsed = urllib.parse.urlsplit(target_origin)
+    host = parsed.hostname
+    if not host:
+        return False, 0.0, "Invalid origin URL for keep-alive probe"
+    is_https = parsed.scheme == "https"
+    port = parsed.port or (443 if is_https else 80)
+    t0 = time.monotonic()
+    conn = None
+    try:
+        conn = http.client.HTTPSConnection(host, port, timeout=timeout) if is_https else http.client.HTTPConnection(host, port, timeout=timeout)
+        headers = {"Connection": "keep-alive", "User-Agent": "AIO-Reachability/1.0"}
+        conn.request("GET", path, headers=headers)
+        r1 = conn.getresponse()
+        r1.read()
+        if r1.status >= 500:
+            ms = round((time.monotonic() - t0) * 1000, 1)
+            return False, ms, f"First request returned HTTP {r1.status}"
+        conn_tokens = [t.strip() for t in (r1.getheader("Connection") or "").lower().split(",") if t.strip()]
+        if r1.will_close or "close" in conn_tokens:
+            ms = round((time.monotonic() - t0) * 1000, 1)
+            return False, ms, "Origin closed HTTP/1.1 connection instead of keeping alive"
+        conn.request("GET", path, headers=headers)
+        r2 = conn.getresponse()
+        r2.read()
+        ms = round((time.monotonic() - t0) * 1000, 1)
+        if r2.status >= 500:
+            return False, ms, f"Reused keep-alive request returned HTTP {r2.status}"
+        return True, ms, f"HTTP/1.1 keep-alive reused cleanly ({r1.status}, {r2.status})"
+    except Exception as exc:
+        ms = round((time.monotonic() - t0) * 1000, 1)
+        return False, ms, f"{type(exc).__name__}: {exc}"
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def check_streaming_and_cloudflare_health(
+    env_vars: dict = None,
+    origin_url: str = None,
+    timeout: float = 2.5,
+) -> list[dict]:
+    """Verify memory headroom, proxy URL consistency, keep-alive reuse, Jellyfin Web headers, and Usenet stream route."""
+    env_map = dict(env_vars) if isinstance(env_vars, dict) else {}
+    topology = recommend_cloudflare_origin(env_vars=env_map)
+    recommended = topology["recommended_origin"]
+    raw_origin = str(origin_url).strip() if origin_url and str(origin_url).strip() else (topology.get("detected_origin") or recommended)
+    try:
+        target_origin = validate_service_url(str(raw_origin))
+    except ValueError as exc:
+        return [_make_check(
+            "stream:origin",
+            "Streaming Origin URL",
+            "streaming",
+            str(raw_origin),
+            False,
+            "fail",
+            True,
+            None,
+            str(exc),
+            f"Set a valid origin URL such as {recommended}.",
+        )]
+
+    checks = []
+    usenet_enabled = str(env_map.get("USENET_ENABLED") or os.environ.get("USENET_ENABLED") or "false").strip().lower() == "true"
+    raw_mem = env_map.get("AIOSTREAMS_MEM_LIMIT") or os.environ.get("AIOSTREAMS_MEM_LIMIT") or "1024m"
+    mem_mb = _parse_mem_limit_mb(raw_mem)
+    if usenet_enabled and mem_mb is not None and mem_mb <= 512:
+        checks.append(_make_check(
+            "stream:memory",
+            "AIOStreams Memory Limit",
+            "streaming",
+            str(raw_mem),
+            False,
+            "fail",
+            True,
+            None,
+            f"AIOSTREAMS_MEM_LIMIT={raw_mem} is too small for native Usenet NNTP/yEnc buffering (~305 MiB idle baseline)",
+            "Set AIOSTREAMS_MEM_LIMIT=1024m (or higher) and USENET_PERFORMANCE_PROFILE=conservative.",
+        ))
+    else:
+        checks.append(_make_check(
+            "stream:memory",
+            "AIOStreams Memory Limit",
+            "streaming",
+            str(raw_mem),
+            True,
+            "ok",
+            False,
+            None,
+            f"Configured memory limit {raw_mem} has sufficient headroom",
+        ))
+
+    base_url = (env_map.get("BASE_URL") or os.environ.get("BASE_URL") or "http://localhost:3001").strip().rstrip("/")
+    force_proxy_url = (env_map.get("FORCE_PROXY_URL") or os.environ.get("FORCE_PROXY_URL") or base_url).strip().rstrip("/")
+    cf_public_host = (env_map.get("CLOUDFLARE_PUBLIC_HOST") or os.environ.get("CLOUDFLARE_PUBLIC_HOST") or "").strip()
+    aio_port = topology.get("aiostreams_port", 3001)
+    force_parsed = urllib.parse.urlsplit(force_proxy_url) if "://" in force_proxy_url else None
+    if force_parsed and (force_parsed.hostname or "").lower() in ("localhost", "127.0.0.1", "aiostreams") and force_parsed.port == 3000 and aio_port != 3000:
+        checks.append(_make_check(
+            "stream:proxy_urls",
+            "Stream & Proxy Base URL",
+            "streaming",
+            force_proxy_url,
+            False,
+            "fail",
+            True,
+            None,
+            f"FORCE_PROXY_URL '{force_proxy_url}' targets port 3000 while AIOStreams is mapped on {aio_port}",
+            f"Update FORCE_PROXY_URL and BASE_URL to match port {aio_port} or your public HTTPS domain.",
+        ))
+    elif usenet_enabled and (cf_public_host or topology.get("detected_origin")) and not _is_public_url(base_url):
+        checks.append(_make_check(
+            "stream:proxy_urls",
+            "Stream & Proxy Base URL",
+            "streaming",
+            base_url,
+            True,
+            "warn",
+            False,
+            None,
+            f"BASE_URL is '{base_url}' while Cloudflare routing is configured; native Usenet stream URLs use BASE_URL",
+            "Set BASE_URL=https://<your-cloudflare-domain> in .env so Usenet and BuiltinProxy stream URLs route via HTTPS.",
+        ))
+    else:
+        checks.append(_make_check(
+            "stream:proxy_urls",
+            "Stream & Proxy Base URL",
+            "streaming",
+            base_url,
+            True,
+            "ok",
+            False,
+            None,
+            f"BASE_URL ({base_url}) and FORCE_PROXY_URL ({force_proxy_url}) are aligned",
+        ))
+
+    ka_ok, ka_ms, ka_detail = _probe_http_keepalive(target_origin, timeout=timeout)
+    checks.append(_make_check(
+        "stream:keepalive",
+        "Origin HTTP Keep-Alive Reuse",
+        "cloudflare",
+        target_origin,
+        ka_ok,
+        "ok" if ka_ok else "fail",
+        True,
+        ka_ms,
+        ka_detail,
+        None if ka_ok else "Ensure AIOStreams entrypoint tunes server.keepAliveTimeout above Cloudflare Tunnel keepAliveTimeout (120s > 60s).",
+    ))
+
+    base_parsed = urllib.parse.urlsplit(base_url) if "://" in base_url else None
+    fwd_headers = {}
+    expect_https_origin = False
+    if _is_public_url(base_url) and base_parsed and base_parsed.hostname:
+        fwd_headers = {
+            "Host": base_parsed.netloc,
+            "X-Forwarded-Proto": base_parsed.scheme or "https",
+        }
+        expect_https_origin = (base_parsed.scheme == "https")
+
+    jellyfin_enabled = str(env_map.get("JELLYFIN_ENABLED") or os.environ.get("JELLYFIN_ENABLED") or "true").strip().lower() != "false"
+    if not jellyfin_enabled:
+        checks.append(_make_check(
+            "cloudflare:jellyfin_web",
+            "Jellyfin Web & Forwarded Headers",
+            "cloudflare",
+            f"{target_origin.rstrip('/')}/jellyfin/web/",
+            True,
+            "skipped",
+            False,
+            None,
+            "Jellyfin Web Player is disabled (JELLYFIN_ENABLED=false)",
+        ))
+    else:
+        web_ok, web_code, web_ms, _, _, web_detail = _probe_http_details(
+            f"{target_origin.rstrip('/')}/jellyfin/web/", headers=fwd_headers, timeout=timeout
+        )
+        info_ok, _, info_ms, _, info_body, info_detail = _probe_http_details(
+            f"{target_origin.rstrip('/')}/jellyfin/System/Info/Public", headers=fwd_headers, timeout=timeout
+        )
+        jf_ok = bool(web_ok and web_code == 200 and info_ok)
+        jf_detail = f"/jellyfin/web/ {web_detail}, /System/Info/Public {info_detail}"
+        jf_rem = None
+        if jf_ok and expect_https_origin:
+            try:
+                info_json = json.loads(info_body.decode("utf-8", errors="replace"))
+                local_addr = str(info_json.get("LocalAddress") or "")
+                if not local_addr.startswith("https://"):
+                    jf_ok = False
+                    jf_detail = f"Expected HTTPS LocalAddress behind X-Forwarded-Proto=https, got '{local_addr}'"
+                    jf_rem = "Ensure TRUSTED_IPS includes your Cloudflare connector (loopback,linklocal,uniquelocal)."
+            except Exception as exc:
+                jf_ok = False
+                jf_detail = f"Invalid JSON from /jellyfin/System/Info/Public: {exc}"
+        elif not jf_ok:
+            jf_rem = "Check AIOStreams Jellyfin Web routing and forwarded-header trust settings."
+
+        checks.append(_make_check(
+            "cloudflare:jellyfin_web",
+            "Jellyfin Web & Forwarded Headers",
+            "cloudflare",
+            f"{target_origin.rstrip('/')}/jellyfin/web/",
+            jf_ok,
+            "ok" if jf_ok else "fail",
+            True,
+            round((web_ms + info_ms) / 2, 1),
+            jf_detail,
+            jf_rem,
+        ))
+
+    if usenet_enabled:
+        u_ok, u_code, u_ms, _, _, u_detail = _probe_http_details(
+            f"{target_origin.rstrip('/')}/api/v1/usenet/stream/reachability-probe",
+            headers=fwd_headers,
+            timeout=timeout,
+        )
+        route_ok = bool(u_ok and u_code is not None and u_code < 500 and u_code != 404)
+        checks.append(_make_check(
+            "stream:usenet_route",
+            "Native Usenet Stream Route",
+            "streaming",
+            f"{target_origin.rstrip('/')}/api/v1/usenet/stream/",
+            route_ok,
+            "ok" if route_ok else "fail",
+            True,
+            u_ms,
+            u_detail,
+            None if route_ok else "Verify AIOStreams /api/v1/usenet/stream endpoint and container health.",
+        ))
+
+    return checks
+
+
 def run_reachability_checks(
     env_vars: dict = None,
     origin_url: str = None,
@@ -643,6 +935,7 @@ def run_reachability_checks(
     include_portal: bool = True,
     include_cloudflare: bool = True,
     include_remote: bool = True,
+    include_streaming: bool = True,
     timeout: float = 2.5,
 ) -> dict:
     """Run comprehensive stack and Cloudflare origin reachability checks."""
@@ -692,6 +985,9 @@ def run_reachability_checks(
 
     if include_remote:
         checks.extend(_check_remote_urls(env_map, timeout))
+
+    if include_streaming:
+        checks.extend(check_streaming_and_cloudflare_health(env_map, origin_url=origin_url, timeout=timeout))
 
     passed = sum(1 for c in checks if c["status"] == "ok")
     failed = sum(1 for c in checks if c["status"] == "fail")

@@ -105,9 +105,51 @@ class ApplianceTests(unittest.TestCase):
         self.assertIn("'/^subsense$/d'", script)
         self.assertIn('docker compose exec -T portal', script)
         self.assertNotIn('docker rm -f $(docker ps -aq)', script)
+        # Controller and portal start before bulk image pulls/boot contention.
+        ctl_idx = script.index('docker compose up -d --no-build --wait --wait-timeout 180 controller')
+        portal_idx = script.index('docker compose up -d --no-deps --no-build --wait --wait-timeout 180 portal')
+        pull_idx = script.index('docker compose pull --ignore-buildable')
+        stack_idx = script.index('docker compose up -d --remove-orphans --no-build --wait --wait-timeout 600 "${startup_services[@]}"')
+        self.assertLess(ctl_idx, portal_idx)
+        self.assertLess(portal_idx, pull_idx)
+        self.assertLess(pull_idx, stack_idx)
+
+    def test_appliance_dockerfile_copies_required_portal_assets(self):
+        dockerfile = (ROOT / 'docker/all-in-one/Dockerfile').read_text()
+        for entry in (
+            'COPY docker-compose.yml /app/docker-compose.yml',
+            'COPY .env.example /app/.env.example',
+            'COPY index.html /app/index.html',
+            'COPY dashboard.html /app/dashboard.html',
+            'COPY app.webmanifest /app/app.webmanifest',
+            'COPY assets/ /app/assets/',
+            'COPY init/ /app/init/',
+            'COPY templates/ /app/templates/',
+            'COPY tools/ /app/tools/',
+            'COPY docker/ /app/docker/',
+        ):
+            self.assertIn(entry, dockerfile)
+
+    def test_check_appliance_prints_stderr_and_portal_diagnostics(self):
+        script = (ROOT / 'tests/check_appliance.py').read_text()
+        self.assertIn('proc.stderr', script)
+        self.assertIn("'portal', 'controller'", script)
 
     def test_data_mounts_resolve_appliance_links_in_all_setup_containers(self):
         import yaml
         config = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
         for service in ('portal', 'controller', 'stack-bootstrap'):
             self.assertTrue(any(v.startswith('./data:/data') for v in config['services'][service]['volumes']), service)
+
+    def test_appliance_entrypoint_dockerd_fallback_and_clean_shutdown(self):
+        script = (ROOT / 'docker/all-in-one/entrypoint.sh').read_text(encoding='utf-8')
+        # Fallback order: auto -> fuse-overlayfs -> vfs
+        auto_idx = script.index('start_dockerd ""')
+        fuse_idx = script.index('start_dockerd "fuse-overlayfs"')
+        vfs_idx = script.index('start_dockerd "vfs"')
+        self.assertLess(auto_idx, fuse_idx)
+        self.assertLess(fuse_idx, vfs_idx)
+        self.assertIn('command -v fuse-overlayfs', script)
+        # Graceful 60s timeout on compose down and no mojibake
+        self.assertIn('docker compose down -t 60', script)
+        self.assertNotIn('âœ“', script)

@@ -87,6 +87,18 @@ class TestComposePortConsistency(unittest.TestCase):
         for _, host, _, _ in INTEGRATIONS:
             self.assertIn(host, reachability.SERVICE_REACHABILITY_SPECS)
 
+    def test_compose_aiostreams_memory_and_keepalive_defaults(self):
+        for label, doc in (("docker-compose.yml", self.compose), ("compose.manager.yml", self.manager)):
+            aio = doc["services"]["aiostreams"]
+            self.assertIn("1024m", str(aio.get("mem_limit")), f"{label} aiostreams mem_limit must be >= 1024m")
+            env_map = dict(item.split("=", 1) for item in aio["environment"] if isinstance(item, str) and "=" in item)
+            self.assertIn("--max-old-space-size=512", env_map["NODE_OPTIONS"], label)
+            self.assertIn("120000", env_map["AIO_KEEPALIVE_TIMEOUT_MS"], label)
+            self.assertIn("125000", env_map["AIO_HEADERS_TIMEOUT_MS"], label)
+            self.assertIn(":-0", env_map["AIO_REQUEST_TIMEOUT_MS"], label)
+            self.assertIn("loopback,linklocal,uniquelocal", env_map["TRUSTED_IPS"], label)
+            self.assertIn("conservative", env_map["USENET_PERFORMANCE_PROFILE"], label)
+
 
 class TestReachabilityModule(unittest.TestCase):
 
@@ -119,9 +131,18 @@ class TestReachabilityModule(unittest.TestCase):
         def fake_probe_http(url, timeout=2.5, follow_redirects=False):
             return True, 200, 1.5, "HTTP 200", None
 
+        def fake_probe_details(url, headers=None, timeout=2.5):
+            if url.endswith("/jellyfin/System/Info/Public"):
+                proto = (headers or {}).get("X-Forwarded-Proto", "http")
+                host = (headers or {}).get("Host", "watch.example.com")
+                return True, 200, 1.2, {}, f'{{"LocalAddress":"{proto}://{host}/jellyfin"}}'.encode(), "HTTP 200"
+            return True, 200, 1.2, {}, b"<html></html>", "HTTP 200"
+
         with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
              patch("tools.reachability._in_container", return_value=True), \
-             patch("tools.reachability._probe_http", side_effect=fake_probe_http):
+             patch("tools.reachability._probe_http", side_effect=fake_probe_http), \
+             patch("tools.reachability._probe_http_keepalive", return_value=(True, 2.0, "HTTP/1.1 keep-alive reused cleanly (200, 200)")), \
+             patch("tools.reachability._probe_http_details", side_effect=fake_probe_details):
             report = reachability.run_reachability_checks(
                 env_vars={
                     "COMPOSE_PROFILES": "core",
@@ -149,6 +170,8 @@ class TestReachabilityModule(unittest.TestCase):
         self.assertEqual(ids["cloudflare:origin"]["target"], "http://127.0.0.1:3001")
         self.assertTrue(ids["remote:base_url"]["ok"])
         self.assertTrue(ids["remote:aiometadata"]["ok"])
+        self.assertTrue(ids["stream:keepalive"]["ok"])
+        self.assertTrue(ids["cloudflare:jellyfin_web"]["ok"])
 
     def test_detects_unreachable_aiostreams_3000_on_external_connector_and_wrong_host_port(self):
         mock_containers = {
@@ -169,6 +192,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
             self.assertFalse(report["ok"])
             cf_check = report["checks"][0]
@@ -184,6 +208,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
             self.assertFalse(report_port["ok"])
             self.assertIn("port 3000", report_port["checks"][0]["detail"])
@@ -205,6 +230,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertTrue(report["ok"])
         self.assertEqual(report["connector_mode"], "local_tunnel")
@@ -229,6 +255,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_cloudflare=False,
+                include_streaming=False,
             )
 
         ids = {c["id"]: c for c in report["checks"]}
@@ -264,6 +291,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertTrue(rep["ok"])
         self.assertEqual(rep["checks"][0]["status"], "ok")
@@ -288,6 +316,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertTrue(rep_warn["ok"])
         self.assertEqual(rep_warn["checks"][0]["status"], "warn")
@@ -311,6 +340,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertTrue(rep_alias["ok"])
         self.assertEqual(rep_alias["checks"][0]["status"], "warn")
@@ -325,6 +355,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertFalse(rep_down["ok"])
         self.assertEqual(rep_down["checks"][0]["status"], "fail")
@@ -340,6 +371,7 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertFalse(rep_502["ok"])
         self.assertEqual(rep_502["checks"][0]["status"], "fail")
@@ -354,9 +386,187 @@ class TestReachabilityModule(unittest.TestCase):
                 include_host_ports=False,
                 include_portal=False,
                 include_remote=False,
+                include_streaming=False,
             )
         self.assertFalse(rep_host["ok"])
         self.assertEqual(rep_host["checks"][0]["status"], "fail")
+
+    def test_streaming_and_cloudflare_health_checks_pass_and_detect_failures(self):
+        import json as _json
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "state": "none", "status": "Not created", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [{"id": "ext1", "name": "docktun-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "active_external_connectors": [{"id": "ext1", "name": "docktun-cf", "state": "running", "is_local": False, "is_active": True, "network_mode": "bridge"}],
+            "has_external": True,
+        }
+
+        def fake_details(url, headers=None, timeout=2.5):
+            if url.endswith("/jellyfin/web/"):
+                return True, 200, 1.5, {"content-type": "text/html"}, b"<html></html>", "HTTP 200"
+            if url.endswith("/jellyfin/System/Info/Public"):
+                proto = (headers or {}).get("X-Forwarded-Proto", "http")
+                host = (headers or {}).get("Host", "localhost:3001")
+                payload = _json.dumps({"LocalAddress": f"{proto}://{host}/jellyfin"}).encode()
+                return True, 200, 1.2, {"content-type": "application/json"}, payload, "HTTP 200"
+            if "/api/v1/usenet/stream/" in url:
+                return True, 302, 1.1, {"location": "/static/500.mp4"}, b"", "HTTP 302"
+            return True, 200, 1.0, {}, b"", "HTTP 200"
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._probe_http", return_value=(True, 200, 1.0, "HTTP 200", None)), \
+             patch("tools.reachability._probe_http_keepalive", return_value=(True, 2.0, "HTTP/1.1 keep-alive reused cleanly (200, 200)")), \
+             patch("tools.reachability._probe_http_details", side_effect=fake_details):
+            report = reachability.run_reachability_checks(
+                env_vars={
+                    "COMPOSE_PROFILES": "core",
+                    "USENET_ENABLED": "true",
+                    "AIOSTREAMS_MEM_LIMIT": "1024m",
+                    "BASE_URL": "https://media.example.dev",
+                    "FORCE_PROXY_URL": "https://media.example.dev",
+                },
+                include_internal=False,
+                include_host_ports=False,
+                include_portal=False,
+                include_remote=False,
+                include_streaming=True,
+            )
+
+        self.assertTrue(report["ok"])
+        ids = {c["id"]: c for c in report["checks"]}
+        self.assertEqual(ids["stream:memory"]["status"], "ok")
+        self.assertEqual(ids["stream:proxy_urls"]["status"], "ok")
+        self.assertEqual(ids["stream:keepalive"]["status"], "ok")
+        self.assertEqual(ids["cloudflare:jellyfin_web"]["status"], "ok")
+        self.assertEqual(ids["stream:usenet_route"]["status"], "ok")
+
+        # Fail cases: 512m mem limit with Usenet, keep-alive failure, non-HTTPS LocalAddress, 502 on usenet route
+        def fake_details_bad(url, headers=None, timeout=2.5):
+            if url.endswith("/jellyfin/web/"):
+                return True, 200, 1.5, {}, b"<html></html>", "HTTP 200"
+            if url.endswith("/jellyfin/System/Info/Public"):
+                return True, 200, 1.2, {}, b'{"LocalAddress":"http://localhost:3001/jellyfin"}', "HTTP 200"
+            if "/api/v1/usenet/stream/" in url:
+                return False, 502, 5.0, {}, b"", "HTTP 502"
+            return False, 502, 1.0, {}, b"", "HTTP 502"
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._probe_http_keepalive", return_value=(False, 2.0, "Origin closed HTTP/1.1 connection instead of keeping alive")), \
+             patch("tools.reachability._probe_http_details", side_effect=fake_details_bad):
+            bad_checks = reachability.check_streaming_and_cloudflare_health(
+                env_vars={
+                    "USENET_ENABLED": "true",
+                    "AIOSTREAMS_MEM_LIMIT": "512m",
+                    "BASE_URL": "https://media.example.dev",
+                },
+                origin_url="http://127.0.0.1:3001",
+            )
+        bad_ids = {c["id"]: c for c in bad_checks}
+        self.assertEqual(bad_ids["stream:memory"]["status"], "fail")
+        self.assertEqual(bad_ids["stream:keepalive"]["status"], "fail")
+        self.assertEqual(bad_ids["cloudflare:jellyfin_web"]["status"], "fail")
+        self.assertEqual(bad_ids["stream:usenet_route"]["status"], "fail")
+
+    def test_invalid_origin_url_returns_structured_fail_without_raising(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "state": "none", "status": "Not created", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [],
+            "active_external_connectors": [],
+            "has_external": False,
+        }
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers):
+            for bad_origin in ("ftp://bad", "http://169.254.169.254", "http://127.0.0.1:3001/bad-path"):
+                checks = reachability.check_streaming_and_cloudflare_health(origin_url=bad_origin)
+                self.assertEqual(len(checks), 1)
+                self.assertEqual(checks[0]["id"], "stream:origin")
+                self.assertEqual(checks[0]["status"], "fail")
+                self.assertFalse(checks[0]["ok"])
+
+                report = reachability.run_reachability_checks(
+                    env_vars={"COMPOSE_PROFILES": "core"},
+                    origin_url=bad_origin,
+                    include_internal=False,
+                    include_host_ports=False,
+                    include_portal=False,
+                    include_cloudflare=False,
+                    include_remote=False,
+                )
+                self.assertFalse(report["ok"])
+                self.assertEqual(report["checks"][0]["id"], "stream:origin")
+                self.assertEqual(report["checks"][0]["status"], "fail")
+
+            # Invalid CLOUDFLARE_ORIGIN_URL in env_vars also returns structured fail
+            env_checks = reachability.check_streaming_and_cloudflare_health(
+                env_vars={"CLOUDFLARE_ORIGIN_URL": "http://127.0.0.1:3001/path"}
+            )
+            self.assertEqual(env_checks[0]["id"], "stream:origin")
+            self.assertEqual(env_checks[0]["status"], "fail")
+
+    def test_real_http_keepalive_probe_reuses_socket_and_detects_close(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import threading
+
+        class KeepAliveHandler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+            def do_GET(self):
+                body = b'{"ok":true}'
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *args):
+                pass
+
+        class CloseHandler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+            def do_GET(self):
+                body = b'{"ok":true}'
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *args):
+                pass
+
+        for handler, expect_ok in ((KeepAliveHandler, True), (CloseHandler, False)):
+            srv = HTTPServer(("127.0.0.1", 0), handler)
+            t = threading.Thread(target=srv.serve_forever, daemon=True)
+            t.start()
+            try:
+                ok, ms, detail = reachability._probe_http_keepalive(f"http://127.0.0.1:{srv.server_port}", path="/api/v1/health", timeout=2.0)
+                self.assertEqual(ok, expect_ok, detail)
+                self.assertGreaterEqual(ms, 0.0)
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
+    def test_usenet_404_fails_and_jellyfin_disabled_skips(self):
+        mock_containers = {
+            "available": True,
+            "local_tunnel": {"name": "aio-tunnel", "state": "none", "status": "Not created", "is_local": True, "network_mode": "stremio-net"},
+            "external_connectors": [],
+            "active_external_connectors": [],
+            "has_external": False,
+        }
+
+        def fake_details(url, headers=None, timeout=2.5):
+            if "/api/v1/usenet/stream/" in url:
+                return True, 404, 1.0, {}, b"Not Found", "HTTP 404"
+            return True, 200, 1.0, {}, b"", "HTTP 200"
+
+        with patch("tools.reachability.check_cloudflare_containers", return_value=mock_containers), \
+             patch("tools.reachability._probe_http_keepalive", return_value=(True, 1.5, "OK")), \
+             patch("tools.reachability._probe_http_details", side_effect=fake_details):
+            checks = reachability.check_streaming_and_cloudflare_health(
+                env_vars={"USENET_ENABLED": "true", "JELLYFIN_ENABLED": "false"},
+                origin_url="http://127.0.0.1:3001",
+            )
+        ids = {c["id"]: c for c in checks}
+        self.assertEqual(ids["cloudflare:jellyfin_web"]["status"], "skipped")
+        self.assertEqual(ids["stream:usenet_route"]["status"], "fail")
 
 
 class TestCheckStackModes(unittest.TestCase):
