@@ -9,6 +9,14 @@ def run(args, timeout=60):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
+def print_diag(label, proc):
+    print(f'=== {label} (rc={proc.returncode}) ===')
+    if proc.stdout:
+        print(proc.stdout[-4000:])
+    if proc.stderr:
+        print(proc.stderr[-2000:])
+
+
 def main():
     image = sys.argv[1]
     name = 'aio-appliance-smoke'
@@ -76,9 +84,10 @@ print('PASS: AIOMetadata profile save and manifest without Fanart')
                 break
             time.sleep(10)
         # This is a disposable fixture, never an installation with user credentials.
-        print(run(['docker', 'logs', '--tail', '100', name]).stdout)
-        print(run(['docker', 'exec', name, 'docker', 'compose', 'ps', '-a']).stdout)
-        print(result.stderr[-2000:])
+        print_diag('appliance container logs', run(['docker', 'logs', '--tail', '120', name]))
+        print_diag('inner compose ps -a', run(['docker', 'exec', name, 'docker', 'compose', 'ps', '-a']))
+        print_diag('inner portal/controller logs', run(['docker', 'exec', name, 'docker', 'compose', 'logs', '--tail', '50', 'portal', 'controller']))
+        print_diag('last probe stderr', result)
         raise RuntimeError('Appliance network/controller provisioning did not become ready')
     finally:
         run(['docker', 'rm', '-f', '-v', name])
