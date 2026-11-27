@@ -1197,3 +1197,62 @@ test('Test Reachability renders checks, highlights unreachable targets, and esca
   assert.equal(env.nodes.get('cf-reachability-results').style.display, 'grid');
   assert.match(env.nodes.get('cf-reachability-results').innerHTML, /reachability-item reachability-fail/);
 });
+
+test('btn-push-cf-dns confirms external connector without Start Local Tunnel warning when external_connector_active is true', async () => {
+  let lastNotification = '';
+  const env = form({
+    USENET_ENABLED: 'false',
+    configuredKeys: ['PROVIDER_KEY'],
+    CLOUDFLARE_ZONE_ID: 'zone-ext',
+    CLOUDFLARE_API_TOKEN_SAVED: true,
+    CLOUDFLARE_TUNNEL_METADATA: {
+      valid: true,
+      tunnel_id: 'ext-tunnel-id',
+      cname_target: 'ext-tunnel-id.cfargotunnel.com'
+    }
+  });
+  env.context.notify = (msg) => { lastNotification = msg; };
+
+  const origApi = env.context.api;
+  env.context.api = async (path, options) => {
+    if (path === '/api/cloudflare/status') {
+      return {
+        has_external: true,
+        connector_mode: 'external_host',
+        recommended_origin: 'http://127.0.0.1:3001',
+        external_connectors: [{ name: 'host-cf', image: 'cloudflare/cloudflared', status: 'Up 2 hours' }],
+        token_configured: true
+      };
+    }
+    if (path === '/api/cloudflare/push-dns') {
+      const payload = options?.body ? JSON.parse(options.body) : null;
+      env.calls.push({ path, payload });
+      return {
+        success: true,
+        message: 'DNS and ingress updated',
+        hostname: payload.hostname,
+        cname_target: payload.cname_target,
+        zone_name: 'customdomain.org',
+        service_url: payload.service_url,
+        tunnel_started: false,
+        external_connector_active: true
+      };
+    }
+    return origApi(path, options);
+  };
+
+  const cfBlock = source.slice(source.indexOf('// Cloudflare Tunnel & Automated DNS Management'), source.lastIndexOf("document.querySelectorAll('.streaming-mode-section"));
+  vm.runInContext(cfBlock, env.context);
+  await vm.runInContext('loadSettings()', env.context);
+  await vm.runInContext('refreshCloudflareStatus()', env.context);
+
+  env.nodes.get('base-url').value = 'https://watch.customdomain.org';
+  await env.nodes.get('btn-push-cf-dns').handlers.click({ currentTarget: env.nodes.get('btn-push-cf-dns') });
+
+  const dnsHtml = env.nodes.get('cf-dns-result').innerHTML;
+  assert.doesNotMatch(dnsHtml, /502 Bad Gateway Prevention/i);
+  assert.doesNotMatch(dnsHtml, /Start Local Tunnel/i);
+  assert.match(dnsHtml, /external connector/i);
+  assert.match(dnsHtml, /without starting a duplicate <code>aio-tunnel<\/code>/i);
+  assert.match(lastNotification, /external connector/i);
+});

@@ -227,8 +227,8 @@ def validate_service_url(service_url: str) -> str:
     if not isinstance(service_url, str) or not service_url.strip():
         raise ValueError("Origin service URL cannot be empty.")
     raw = service_url.strip()
-    if any(c in raw for c in "\r\n\x00 \t"):
-        raise ValueError("Origin service URL must not contain whitespace or control characters.")
+    if any(c.isspace() or c in "$'\"`\\" or ord(c) < 32 or ord(c) == 127 for c in raw):
+        raise ValueError("Origin service URL must not contain whitespace, quotes, shell metacharacters, or control characters.")
     if "://" not in raw:
         raw = "http://" + raw
     parsed = urllib.parse.urlsplit(raw)

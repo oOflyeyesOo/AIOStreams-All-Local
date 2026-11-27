@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import ipaddress
 import os
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -98,6 +99,32 @@ def _is_dns_error(exc: Exception) -> bool:
             "eai_nodata",
             "eai_addrfamily",
             "gaierror",
+        )
+    )
+
+
+def _is_connect_or_dns_error(exc: Exception) -> bool:
+    """Return True for DNS lookup or socket connection failures (excluding HTTP 4xx/5xx or TLS errors)."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return False
+    if _is_dns_error(exc):
+        return True
+    reason = getattr(exc, "reason", None)
+    target = reason if reason is not None else exc
+    if isinstance(target, ConnectionError):
+        return True
+    if isinstance(target, OSError) and not isinstance(target, (urllib.error.URLError, ssl.SSLError)):
+        return True
+    msg = str(target).lower()
+    return any(
+        ind in msg
+        for ind in (
+            "connection refused",
+            "errno 111",
+            "errno 10061",
+            "cannot assign requested address",
+            "network is unreachable",
+            "no route to host",
         )
     )
 
@@ -485,23 +512,55 @@ def _check_cloudflare_origin(
         )
         return chk, topology
 
-    # Fallback when portal container checks host.docker.internal or 127.0.0.1:3001 from inside container
+    # Fallback when portal container checks host.docker.internal or loopback (127.0.0.1/localhost) from inside container
     if inside_container and host in ("host.docker.internal", "127.0.0.1", "localhost") and port == aio_port:
-        fb_ok, _, fb_ms, fb_detail, _ = _probe_http("http://aiostreams:3000/api/v1/status", timeout=timeout)
-        if fb_ok and exc is not None and _is_dns_error(exc):
-            chk = _make_check(
-                "cloudflare:origin",
-                "Cloudflare Tunnel Origin Target",
-                "cloudflare",
-                target_origin,
-                True,
-                "warn",
-                False,
-                fb_ms,
-                f"Host target {target_origin} configured; internal AIOStreams verified ({fb_detail})",
-                f"Ensure your external Cloudflare connector can resolve '{host}:{port}' (or use host LAN IP :{aio_port}).",
-            )
-            return chk, topology
+        if exc is not None and _is_connect_or_dns_error(exc):
+            if host in ("127.0.0.1", "localhost"):
+                gw_url = f"http://host.docker.internal:{aio_port}/api/v1/status"
+                gw_ok, _, gw_ms, gw_detail, gw_exc = _probe_http(gw_url, timeout=timeout)
+                if gw_ok:
+                    chk = _make_check(
+                        "cloudflare:origin",
+                        "Cloudflare Tunnel Origin Target",
+                        "cloudflare",
+                        target_origin,
+                        True,
+                        "ok",
+                        True,
+                        gw_ms,
+                        f"Host port :{aio_port} reachable via host.docker.internal ({gw_detail}); container loopback differs from host loopback",
+                    )
+                    return chk, topology
+                if gw_exc is not None and isinstance(gw_exc, urllib.error.HTTPError):
+                    chk = _make_check(
+                        "cloudflare:origin",
+                        "Cloudflare Tunnel Origin Target",
+                        "cloudflare",
+                        target_origin,
+                        False,
+                        "fail",
+                        True,
+                        gw_ms,
+                        gw_detail,
+                        f"AIOStreams on port {aio_port} returned {gw_detail}; check AIOStreams container health and logs.",
+                    )
+                    return chk, topology
+
+            fb_ok, _, fb_ms, fb_detail, _ = _probe_http("http://aiostreams:3000/api/v1/status", timeout=timeout)
+            if fb_ok:
+                chk = _make_check(
+                    "cloudflare:origin",
+                    "Cloudflare Tunnel Origin Target",
+                    "cloudflare",
+                    target_origin,
+                    True,
+                    "warn",
+                    False,
+                    fb_ms,
+                    f"Target {target_origin} was not directly reachable from inside aio-portal container; internal AIOStreams is up on stremio-net ({fb_detail})",
+                    f"Ensure your external Cloudflare connector can reach '{host}:{port}' (or use host LAN IP :{aio_port}).",
+                )
+                return chk, topology
 
     chk = _make_check(
         "cloudflare:origin",

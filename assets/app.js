@@ -2699,6 +2699,8 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
     if (res.success) {
       if (res.tunnel_started) {
         notify('✓ Cloudflare DNS CNAME pushed & local tunnel started. Remote connectivity is not verified.');
+      } else if (res.external_connector_active) {
+        notify('✓ Cloudflare DNS & origin rule pushed for your external connector.');
       } else {
         notify('✓ Cloudflare DNS CNAME pushed successfully! 🚀');
       }
@@ -2720,9 +2722,13 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
             ⚠️ Ingress update note: ${escapeHtml(res.ingress_error)}
           </div>`;
         }
-        if (!res.tunnel_started) {
+        if (!res.tunnel_started && !res.external_connector_active) {
           statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:12px;color:#fbbf24;">
             <strong>⚠️ 502 Bad Gateway Prevention:</strong> DNS is pointing to Cloudflare, but local connector startup was not confirmed. Check its status and logs, then use <strong>Start Local Tunnel ▶</strong> if needed. A running connector alone does not verify the origin service.
+          </div>`;
+        } else if (res.external_connector_active) {
+          statusHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:6px;font-size:12px;color:#34d399;">
+            ✓ DNS &amp; origin rule pushed for your active external connector without starting a duplicate <code>aio-tunnel</code>.
           </div>`;
         }
         resultBox.innerHTML = statusHtml;
