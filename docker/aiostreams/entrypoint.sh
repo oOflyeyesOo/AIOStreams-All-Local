@@ -59,6 +59,27 @@ else
   export BASE_URL="http://localhost:${PORT:-3000}"
 fi
 
+# 2b. Sanitize FORCE_PROXY_URL so scheme-less BASE_URL values do not break Zod URL validation
+case "$FORCE_PROXY_URL" in
+  \"*\") FORCE_PROXY_URL="${FORCE_PROXY_URL%\"}"; FORCE_PROXY_URL="${FORCE_PROXY_URL#\"}" ;;
+esac
+case "$FORCE_PROXY_URL" in
+  "'"*"'" ) FORCE_PROXY_URL="${FORCE_PROXY_URL%\'}"; FORCE_PROXY_URL="${FORCE_PROXY_URL#\'}" ;;
+esac
+case "$FORCE_PROXY_URL" in
+  ""|null|undefined)
+    unset FORCE_PROXY_URL
+    ;;
+  http://*|https://*)
+    FORCE_PROXY_URL="${FORCE_PROXY_URL%/}"
+    export FORCE_PROXY_URL="$FORCE_PROXY_URL"
+    ;;
+  *)
+    FORCE_PROXY_URL="https://${FORCE_PROXY_URL%/}"
+    export FORCE_PROXY_URL="$FORCE_PROXY_URL"
+    ;;
+esac
+
 # 3. Sanitize ADDON_PASSWORD
 case "$ADDON_PASSWORD" in
   \"*\") ADDON_PASSWORD="${ADDON_PASSWORD%\"}"; ADDON_PASSWORD="${ADDON_PASSWORD#\"}" ;;
@@ -259,6 +280,25 @@ if [ -x "$NODE_EXEC" ] || command -v node >/dev/null 2>&1; then
         }
         if (modified) {
           fs.writeFileSync(file, content, "utf8");
+        }
+      }
+      const serverFile = "/app/packages/server/dist/server.js";
+      if (fs.existsSync(serverFile)) {
+        let sc = fs.readFileSync(serverFile, "utf8");
+        if (!sc.includes("AIO_KEEPALIVE_PATCH") && sc.includes("attachJellyfinWebSocket(server);")) {
+          const kaPatch = [
+            "// AIO_KEEPALIVE_PATCH: prevent 502 keep-alive races behind Cloudflare Tunnel (90s default) and long-stream request timeouts",
+            "const _kaMs = Number(process.env.AIO_KEEPALIVE_TIMEOUT_MS || 120000);",
+            "const _hdrMs = Number(process.env.AIO_HEADERS_TIMEOUT_MS || 125000);",
+            "const _reqMs = Number(process.env.AIO_REQUEST_TIMEOUT_MS || 0);",
+            "if (Number.isFinite(_kaMs) && _kaMs > 0) server.keepAliveTimeout = _kaMs;",
+            "if (Number.isFinite(_hdrMs) && _hdrMs > 0) server.headersTimeout = Math.max(_hdrMs, (server.keepAliveTimeout || 0) + 5000);",
+            "if (Number.isFinite(_reqMs) && _reqMs >= 0) server.requestTimeout = _reqMs;",
+            "attachJellyfinWebSocket(server);"
+          ].join("\n        ");
+          sc = sc.replace("attachJellyfinWebSocket(server);", kaPatch);
+          fs.writeFileSync(serverFile, sc, "utf8");
+          console.log("[AIOStreams] Tuned HTTP keepAliveTimeout=120s, headersTimeout=125s, requestTimeout=0 for proxy/stream stability");
         }
       }
     } catch (err) {}

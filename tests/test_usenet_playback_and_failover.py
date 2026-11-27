@@ -171,6 +171,16 @@ class UsenetPlaybackAndFailoverTests(unittest.TestCase):
             sources = p.get("options", {}).get("sources", [])
             self.assertNotIn("usenet", sources)
 
+    def test_entrypoint_patches_keepalive_and_sanitizes_force_proxy_url(self):
+        from pathlib import Path
+        script_path = Path(__file__).resolve().parents[1] / "docker/aiostreams/entrypoint.sh"
+        script = script_path.read_text(encoding="utf-8")
+        self.assertIn("AIO_KEEPALIVE_PATCH", script)
+        self.assertIn("server.keepAliveTimeout", script)
+        self.assertIn("server.headersTimeout", script)
+        self.assertIn("server.requestTimeout", script)
+        self.assertIn("FORCE_PROXY_URL", script)
+
 
 if __name__ == "__main__":
     unittest.main()
