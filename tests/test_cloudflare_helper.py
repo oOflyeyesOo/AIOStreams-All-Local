@@ -394,6 +394,12 @@ class TestCloudflareHelper(unittest.TestCase):
             "http://127.0.0.1:3001/configure",
             "http://127.0.0.1:99999",
             "http://127.0.0.1:3001?a=1",
+            "http://169.254.169.254",
+            "http://169.254.169.254:80",
+            "http://[fe80::1]:3001",
+            "http://0.0.0.0:3001",
+            "http://[::]:3001",
+            "http://224.0.0.1:3001",
             "http://bad$var:3001",
             "http://bad'host:3001",
             'http://bad"host:3001',
@@ -405,6 +411,29 @@ class TestCloudflareHelper(unittest.TestCase):
         ):
             with self.assertRaises(ValueError, msg=f"Expected ValueError for {bad!r}"):
                 validate_service_url(bad)
+
+    @patch("urllib.request.urlopen")
+    def test_push_cloudflare_dns_rejects_ssrf_and_unsafe_service_urls_without_network(self, mock_urlopen):
+        for bad_url in ("http://169.254.169.254", "http://0.0.0.0:3001", "http://host.docker.internal:3001/path"):
+            res = push_cloudflare_dns(
+                "valid_token",
+                "watch.example.com",
+                "tun123.cfargotunnel.com",
+                service_url=bad_url,
+            )
+            self.assertFalse(res["success"])
+            mock_urlopen.assert_not_called()
+
+        res_aiom = push_cloudflare_dns(
+            "valid_token",
+            "watch.example.com",
+            "tun123.cfargotunnel.com",
+            service_url="http://127.0.0.1:3001",
+            aiometadata_hostname="aiometa.example.com",
+            aiometadata_service_url="http://169.254.169.254:4005",
+        )
+        self.assertFalse(res_aiom["success"])
+        mock_urlopen.assert_not_called()
 
     @patch("subprocess.run")
     def test_check_cloudflare_containers_topology_and_origin_recommendation(self, mock_run):

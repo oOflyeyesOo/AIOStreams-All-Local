@@ -140,3 +140,16 @@ class ApplianceTests(unittest.TestCase):
         config = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
         for service in ('portal', 'controller', 'stack-bootstrap'):
             self.assertTrue(any(v.startswith('./data:/data') for v in config['services'][service]['volumes']), service)
+
+    def test_appliance_entrypoint_dockerd_fallback_and_clean_shutdown(self):
+        script = (ROOT / 'docker/all-in-one/entrypoint.sh').read_text(encoding='utf-8')
+        # Fallback order: auto -> fuse-overlayfs -> vfs
+        auto_idx = script.index('start_dockerd ""')
+        fuse_idx = script.index('start_dockerd "fuse-overlayfs"')
+        vfs_idx = script.index('start_dockerd "vfs"')
+        self.assertLess(auto_idx, fuse_idx)
+        self.assertLess(fuse_idx, vfs_idx)
+        self.assertIn('command -v fuse-overlayfs', script)
+        # Graceful 60s timeout on compose down and no mojibake
+        self.assertIn('docker compose down -t 60', script)
+        self.assertNotIn('âœ“', script)

@@ -103,6 +103,7 @@ start_dockerd ""
 echo "      Waiting for container daemon readiness..."
 retries=0
 max_retries=90
+attempted_fuse_overlayfs=false
 attempted_vfs=false
 daemon_ready=false
 
@@ -118,7 +119,15 @@ while [ $retries -lt $max_retries ]; do
         echo "[!] Container daemon process exited. Last 15 log lines:"
         tail -n 15 /var/log/dockerd.log 2>/dev/null || true
 
-        # If primary driver failed, retry once with vfs driver
+        # Fallback order: auto -> fuse-overlayfs (avoids vfs ZFS copy-up) -> vfs
+        if [ "$attempted_fuse_overlayfs" != "true" ] && command -v fuse-overlayfs >/dev/null 2>&1; then
+            echo "[i] Retrying container engine with fallback fuse-overlayfs storage driver..."
+            attempted_fuse_overlayfs=true
+            start_dockerd "fuse-overlayfs"
+            retries=0
+            sleep 2
+            continue
+        fi
         if [ "$attempted_vfs" != "true" ]; then
             echo "[i] Retrying container engine with fallback vfs storage driver..."
             attempted_vfs=true
@@ -250,10 +259,10 @@ if [ "$daemon_ready" = "true" ]; then
     cleanup() {
         echo ""
         echo "[!] Stopping all stack services cleanly..."
-        docker compose down
+        docker compose down -t 60
         [ -n "$PORTAL_PID" ] && kill $PORTAL_PID 2>/dev/null || true
         [ -n "$DOCKERD_PID" ] && kill $DOCKERD_PID 2>/dev/null || true
-        echo "[âœ“] All services halted."
+        echo "[✓] All services halted."
         exit 0
     }
     trap cleanup SIGTERM SIGINT

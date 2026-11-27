@@ -216,6 +216,23 @@ if [ -n "$ALIASED_CONFIGURATIONS" ]; then
 fi
 
 # 7. Unset empty optional variables to satisfy Zod schema validation and prevent startup crashes
+case "$TRUSTED_IPS" in
+  ""|null|undefined) unset TRUSTED_IPS ;;
+esac
+
+case "$FORCE_PROXY_ENABLED" in
+  ""|null|undefined) unset FORCE_PROXY_ENABLED ;;
+esac
+case "$FORCE_PROXY_ID" in
+  ""|null|undefined) unset FORCE_PROXY_ID ;;
+esac
+case "$FORCE_PROXY_CREDENTIALS" in
+  ""|null|undefined) unset FORCE_PROXY_CREDENTIALS ;;
+esac
+case "$FORCE_PROXY_PROXIED_SERVICES" in
+  ""|null|undefined) unset FORCE_PROXY_PROXIED_SERVICES ;;
+esac
+
 case "$DEFAULT_PROXY_URL" in
   ""|null|undefined) unset DEFAULT_PROXY_URL ;;
 esac
@@ -285,8 +302,9 @@ if [ -x "$NODE_EXEC" ] || command -v node >/dev/null 2>&1; then
       const serverFile = "/app/packages/server/dist/server.js";
       if (fs.existsSync(serverFile)) {
         let sc = fs.readFileSync(serverFile, "utf8");
-        if (!sc.includes("AIO_KEEPALIVE_PATCH") && sc.includes("attachJellyfinWebSocket(server);")) {
-          const kaPatch = [
+        const kaAnchor = sc.match(/attachJellyfinWebSocket\s*\(\s*server\s*\)\s*;/) || sc.match(/attachPartyRelay\s*\(\s*server\s*\)\s*;/);
+        if (!sc.includes("AIO_KEEPALIVE_PATCH") && kaAnchor) {
+          const kaLines = [
             "// AIO_KEEPALIVE_PATCH: prevent 502 keep-alive races behind Cloudflare Tunnel (90s default) and long-stream request timeouts",
             "const _kaMs = Number(process.env.AIO_KEEPALIVE_TIMEOUT_MS || 120000);",
             "const _hdrMs = Number(process.env.AIO_HEADERS_TIMEOUT_MS || 125000);",
@@ -294,9 +312,9 @@ if [ -x "$NODE_EXEC" ] || command -v node >/dev/null 2>&1; then
             "if (Number.isFinite(_kaMs) && _kaMs > 0) server.keepAliveTimeout = _kaMs;",
             "if (Number.isFinite(_hdrMs) && _hdrMs > 0) server.headersTimeout = Math.max(_hdrMs, (server.keepAliveTimeout || 0) + 5000);",
             "if (Number.isFinite(_reqMs) && _reqMs >= 0) server.requestTimeout = _reqMs;",
-            "attachJellyfinWebSocket(server);"
+            kaAnchor[0]
           ].join("\n        ");
-          sc = sc.replace("attachJellyfinWebSocket(server);", kaPatch);
+          sc = sc.replace(kaAnchor[0], kaLines);
           fs.writeFileSync(serverFile, sc, "utf8");
           console.log("[AIOStreams] Tuned HTTP keepAliveTimeout=120s, headersTimeout=125s, requestTimeout=0 for proxy/stream stability");
         }
