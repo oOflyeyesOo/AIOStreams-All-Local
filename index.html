@@ -438,15 +438,15 @@
         </div>
 
         <div class="integrated-proxy-actions" style="margin-top:14px;margin-bottom:0;flex-wrap:wrap;">
-          <button type="button" id="btn-save-cf-token" class="light-button">Save Tunnel Token 💾</button>
-          <button type="button" id="btn-start-cf-tunnel" class="light-button">Start Local Tunnel ▶</button>
-          <button type="button" id="btn-stop-cf-tunnel" class="light-button">Stop Tunnel ■</button>
-          <button type="button" id="btn-restart-cf-tunnel" class="light-button">Restart Tunnel ↻</button>
-          <button type="button" id="btn-push-cf-dns" class="light-button" style="border-color:rgba(56,189,248,0.4);color:#38bdf8;">Push DNS to Cloudflare 🚀</button>
-          <button type="button" id="btn-test-cf-reachability" class="light-button">Test Reachability 🌐</button>
+          <button type="button" id="btn-save-cf-token" class="light-button" aria-label="Save Cloudflare tunnel token">Save Tunnel Token 💾</button>
+          <button type="button" id="btn-start-cf-tunnel" class="light-button" aria-label="Start local Cloudflare tunnel">Start Local Tunnel ▶</button>
+          <button type="button" id="btn-stop-cf-tunnel" class="light-button" aria-label="Stop local Cloudflare tunnel">Stop Tunnel ■</button>
+          <button type="button" id="btn-restart-cf-tunnel" class="light-button" aria-label="Restart local Cloudflare tunnel">Restart Tunnel ↻</button>
+          <button type="button" id="btn-push-cf-dns" class="light-button" style="border-color:rgba(56,189,248,0.4);color:#38bdf8;" aria-label="Push DNS and ingress rules to Cloudflare">Push DNS to Cloudflare 🚀</button>
+          <button type="button" id="btn-test-cf-reachability" class="light-button" aria-label="Test Cloudflare origin, streaming, and public URL reachability">Test Reachability 🌐</button>
         </div>
 
-        <div id="cf-dns-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--radius-xs);font-size:12px;background:rgba(255,255,255,0.03);border:1px solid var(--line);"></div>
+        <div id="cf-dns-result" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--radius-xs);font-size:12px;background:rgba(255,255,255,0.03);border:1px solid var(--line);" role="status" aria-live="polite"></div>
         <div id="cf-reachability-results" class="reachability-results-panel reachability-results" style="display:none;" aria-live="polite"></div>
       </div>
 
@@ -693,8 +693,8 @@
 <div class="integrations-heading">
   <div><div class="eyebrow">STACK READINESS &amp; STORAGE</div><h2>Readiness and maintenance.</h2></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <button id="refresh-maintenance" class="light-button">Refresh status ↻</button>
-    <button type="button" id="btn-restart-stack" class="light-button" style="border-color:rgba(251,191,36,0.4);color:#fbbf24;">Safe Stack Restart ↻</button>
+    <button type="button" id="refresh-maintenance" class="light-button" aria-label="Refresh maintenance and readiness status">Refresh status ↻</button>
+    <button type="button" id="btn-restart-stack" class="light-button" style="border-color:rgba(251,191,36,0.4);color:#fbbf24;" aria-label="Safe stack restart">Safe Stack Restart ↻</button>
   </div>
 </div>
 <p class="section-description">Configured keys and reachable services are separate from authorization and playback checks.</p>
@@ -859,10 +859,10 @@
       <span class="op-status-dot"></span>
     </div>
     <p class="op-card-desc">Clears transient scrapers and search caches while preserving credentials and DBs.</p>
-    <label class="optional-service" style="margin:0;font-size:13px;"><input type="checkbox" id="clean-cache-posters"> Include Posters+ Image Cache</label>
+    <label class="optional-service" style="margin:0;font-size:13px;"><input type="checkbox" id="clean-cache-posters" aria-label="Include Posters+ Image Cache"> Include Posters+ Image Cache</label>
     <div class="op-card-actions op-actions-split" style="flex-wrap:wrap;">
-      <button type="button" id="preview-cache" class="light-button">Preview Cache 🔍</button>
-      <button id="clean-cache" class="light-button">Clear temporary cache 🧹</button>
+      <button type="button" id="preview-cache" class="light-button" aria-label="Preview recoverable temporary cache">Preview Cache 🔍</button>
+      <button type="button" id="clean-cache" class="light-button" aria-label="Clear temporary cache">Clear temporary cache 🧹</button>
     </div>
     <div class="op-console">
       <div class="op-console-header"><span>cache · flush</span><span class="code-dot">● ● ●</span></div>
@@ -925,9 +925,9 @@
       </div>
       <span class="op-status-dot" id="reachability-status-dot"></span>
     </div>
-    <p class="op-card-desc">Verifies internal Docker services, published host ports (:3001, :4005, :8088), portal routes, Cloudflare origin target, and public domain reachability.</p>
+    <p class="op-card-desc">Verifies internal Docker services, published host ports (:3001, :4005, :8088), portal routes, Cloudflare origin &amp; keep-alive, streaming/proxy URLs, and public domain reachability.</p>
     <div class="op-card-actions">
-      <button type="button" id="btn-test-reachability" class="light-button">Test Reachability 🌐</button>
+      <button type="button" id="btn-test-reachability" class="light-button" aria-label="Test service, streaming, and tunnel reachability">Test Reachability 🌐</button>
     </div>
     <div id="reachability-summary" class="reachability-summary" aria-live="polite">Not tested yet.</div>
     <div id="reachability-results" class="reachability-results" aria-live="polite"></div>

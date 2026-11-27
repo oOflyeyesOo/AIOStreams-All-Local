@@ -278,3 +278,97 @@ test('safe stack restart requires confirmation and disables button in flight',as
  assert.equal(button.disabled,false);
  assert.match(env.nodes.get('readiness-output').textContent,/Stack restart initiated/);
 });
+
+test('backup, cache preview, and stack restart handlers release busy states on 502 errors and escape untrusted metadata', async () => {
+ const nodes = new Map();
+ const notices = [];
+ const makeNode = (id) => ({
+  id,
+  textContent: '',
+  innerHTML: '',
+  value: '',
+  disabled: false,
+  attrs: {},
+  handlers: {},
+  dataset: {},
+  setAttribute(k, v) { this.attrs[k] = v; },
+  removeAttribute(k) { delete this.attrs[k]; },
+  addEventListener(t, h) { this.handlers[t] = h; },
+  querySelectorAll() { return []; }
+ });
+ const document = {
+  getElementById(id) {
+   if (!nodes.has(id)) nodes.set(id, makeNode(id));
+   return nodes.get(id);
+  },
+  querySelectorAll() { return []; }
+ };
+ const context = vm.createContext({
+  document,
+  confirm: () => true,
+  notify: (msg, isErr) => notices.push({ msg, isErr }),
+  api: async () => { throw new Error('The server returned 502. Check setup details and retry.'); }
+ });
+ const escape = source.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/)[0];
+ const backupCode = source.slice(source.indexOf('function renderBackupArchives('), source.indexOf('async function refreshMaintenance('));
+ const opsFn = source.match(/async function runOperations\(\) \{[\s\S]*?\n\}/)[0];
+ vm.runInContext(escape + '\n' + backupCode + '\n' + opsFn, context);
+ await vm.runInContext('runOperations()', context);
+
+ // Invalid mtime never shows "Invalid Date" and aria-label escapes XSS payload
+ context.renderBackupArchives({
+  archives: [{ name: '<svg onload=alert(1)>.tar.gz', size_mb: 1.5, mtime: 'not-a-date', postgresIncluded: null }]
+ });
+ const listHtml = nodes.get('backup-archives-list').innerHTML;
+ assert.doesNotMatch(listHtml, /<svg|Invalid Date/);
+ assert.match(listHtml, /&lt;svg onload=alert\(1\)&gt;\.tar\.gz/);
+ assert.match(listHtml, /aria-label="Restore backup &lt;svg/);
+ assert.match(listHtml, /Unknown date/);
+
+ // Refresh backups releases disabled/aria-busy on 502
+ const refreshBtn = document.getElementById('btn-refresh-backups');
+ refreshBtn.textContent = 'Refresh archives ↻';
+ await refreshBtn.handlers.click({ currentTarget: refreshBtn });
+ assert.equal(refreshBtn.disabled, false);
+ assert.equal(refreshBtn.attrs['aria-busy'], undefined);
+ assert.equal(refreshBtn.textContent, 'Refresh archives ↻');
+ assert.match(nodes.get('maintenance-output').textContent, /502/);
+
+ // Prune backups releases disabled/aria-busy/textContent on 502
+ const pruneBtn = makeNode('btn-maintenance-prune-backups');
+ pruneBtn.textContent = 'Prune old backups ⤓';
+ await context.pruneBackups('5', pruneBtn);
+ assert.equal(pruneBtn.disabled, false);
+ assert.equal(pruneBtn.attrs['aria-busy'], undefined);
+ assert.equal(pruneBtn.textContent, 'Prune old backups ⤓');
+ assert.match(nodes.get('maintenance-output').textContent, /Prune failed:.*502/);
+
+ // Restore backup releases disabled/aria-busy/textContent on 502
+ const restoreBtn = makeNode('restore-btn');
+ restoreBtn.textContent = 'Restore ↺';
+ const ok = await context.restoreBackupArchive('aio-backup.tar.gz', restoreBtn);
+ assert.equal(ok, false);
+ assert.equal(restoreBtn.disabled, false);
+ assert.equal(restoreBtn.attrs['aria-busy'], undefined);
+ assert.equal(restoreBtn.textContent, 'Restore ↺');
+ assert.match(nodes.get('maintenance-output').textContent, /Restore failed:.*502/);
+
+ // Preview cache releases disabled/aria-busy/textContent on 502
+ const previewBtn = document.getElementById('preview-cache');
+ previewBtn.textContent = 'Preview Cache 🔍';
+ await previewBtn.handlers.click({ currentTarget: previewBtn });
+ assert.equal(previewBtn.disabled, false);
+ assert.equal(previewBtn.attrs['aria-busy'], undefined);
+ assert.equal(previewBtn.textContent, 'Preview Cache 🔍');
+ assert.match(nodes.get('cache-output').textContent, /502/);
+
+ // Stack restart releases disabled/aria-busy/textContent on 502
+ const restartBtn = document.getElementById('btn-restart-stack');
+ restartBtn.textContent = 'Safe Stack Restart ↻';
+ await restartBtn.handlers.click({ currentTarget: restartBtn });
+ assert.equal(restartBtn.disabled, false);
+ assert.equal(restartBtn.attrs['aria-busy'], undefined);
+ assert.equal(restartBtn.textContent, 'Safe Stack Restart ↻');
+ assert.match(nodes.get('readiness-output').textContent, /Stack restart failed:.*502/);
+ assert.ok(notices.some(n => n.isErr && /502/.test(n.msg)));
+});
