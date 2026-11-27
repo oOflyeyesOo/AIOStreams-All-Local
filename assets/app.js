@@ -2805,7 +2805,7 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
           </div>`;
         }
         resultBox.innerHTML = statusHtml;
-        const syncBaseBtn = resultBox.querySelector?.('#btn-sync-cf-base-url') || document.getElementById('btn-sync-cf-base-url');
+        const syncBaseBtn = resultBox.querySelector?.('#btn-sync-cf-base-url');
         if (syncBaseBtn && typeof syncBaseBtn.addEventListener === 'function') {
           syncBaseBtn.addEventListener('click', async (syncEvt) => {
             const targetBtn = syncEvt?.currentTarget || syncBaseBtn;
@@ -2813,8 +2813,8 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
             const targetBaseUrl = targetBtn.dataset?.recommendedBaseUrl
               || targetBtn.getAttribute?.('data-recommended-base-url')
               || res.recommended_base_url;
-            const mismatchBox = resultBox.querySelector?.('#cf-base-url-mismatch-box') || document.getElementById('cf-base-url-mismatch-box');
-            const mismatchStatus = resultBox.querySelector?.('#cf-base-url-mismatch-status') || document.getElementById('cf-base-url-mismatch-status');
+            const mismatchBox = resultBox.querySelector?.('#cf-base-url-mismatch-box');
+            const mismatchStatus = resultBox.querySelector?.('#cf-base-url-mismatch-status');
             if (!targetBaseUrl) return;
             targetBtn.disabled = true;
             targetBtn.setAttribute?.('aria-busy', 'true');
