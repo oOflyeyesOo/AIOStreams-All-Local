@@ -37,6 +37,18 @@ class PortalTests(unittest.TestCase):
         with patch("socket.create_connection", side_effect=OSError("fixture connection failed")):
             self.assertFalse(portal.test_nntp_login("news.example.org", 119, "fixture", "fixture", False)[0])
 
+    def test_player_user_endpoints_require_admin_and_same_origin(self):
+        from tools import player_users
+        listing = {"success": True, "revision": "fixture", "users": [], "enabled": True, "pinSignInEnabled": True}
+        with patch.object(player_users, "list_users", return_value=listing) as read, patch.object(player_users, "mutate_user", return_value=listing) as write:
+            self.assertEqual(self.request('/api/player-users')[0], 401)
+            self.assertEqual(self.request('/api/player-users', 'POST', {'action': 'create'})[0], 401)
+            read.assert_not_called(); write.assert_not_called()
+            status, body, _ = self.request('/api/player-users', auth=True)
+            self.assertEqual(status, 200); self.assertEqual(json.loads(body)['users'], [])
+            self.assertEqual(self.request('/api/player-users', 'POST', {'action': 'create'}, auth=True, headers={'Origin': 'https://attacker.example'})[0], 403)
+            write.assert_not_called()
+
     def test_appliance_startup_portal_cannot_save_or_launch_host_bootstrap(self):
         with patch.dict(os.environ, {"AIO_STARTUP_ONLY": "true"}), patch.object(portal.subprocess, "Popen") as start:
             self.assertEqual(portal.setup_snapshot()["status"], "running")
@@ -456,6 +468,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(data.get("aiometadataManifest"), "https://aiometa.example.com/stremio/test-uuid-123/manifest.json")
         self.assertEqual(data["aiometadataConfigure"], "https://aiometa.example.com/stremio/test-uuid-123/configure")
         self.assertEqual(data["aiostreamsDashboard"], "https://aio.example.com/admin")
+        self.assertIsNone(data["jellyfinUser"])
         self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin")
         self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/web")
         self.assertEqual(data["jellyfinQuickConnect"], "https://aio.example.com/jellyfin/quickconnect")
@@ -479,6 +492,9 @@ class PortalTests(unittest.TestCase):
         status, body, headers = self.request("/api/manifest-info", auth=True)
         self.assertEqual(status, 200)
         data = json.loads(body)
+        self.assertEqual(data["jellyfinUser"], "test-user-uuid")
+        self.assertNotIn("addonPassword", data)
+        self.assertNotIn("jellyfinPassword", data)
         self.assertEqual(data["jellyfinServer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123")
         self.assertEqual(data["jellyfinWebPlayer"], "https://aio.example.com/jellyfin/test-user-uuid/enc-pass-123/web/")
         self.assertIn("frame-src 'self' http: https: data: blob:;", headers.get("Content-Security-Policy", ""))

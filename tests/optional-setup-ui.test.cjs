@@ -1181,20 +1181,20 @@ test('Test Reachability renders checks, highlights unreachable targets, and esca
   const summaryHtml = env.nodes.get('reachability-summary').innerHTML;
   const resultsHtml = env.nodes.get('reachability-results').innerHTML;
   assert.match(summaryHtml, /1 unreachable target/i);
-  assert.match(summaryHtml, /1\/3 passed/);
+  assert.match(summaryHtml, /1 passed/);
   assert.match(resultsHtml, /reachability-item reachability-ok/);
   assert.match(resultsHtml, /reachability-item reachability-fail/);
   assert.match(resultsHtml, /reachability-item reachability-warn/);
   assert.match(resultsHtml, /✗ Unreachable/);
   assert.match(resultsHtml, /4\.5 ms/);
-  assert.match(resultsHtml, /Remediation:/);
+  assert.match(resultsHtml, /Next step:/);
   assert.ok(!resultsHtml.includes('<img'), 'Untrusted HTML must be escaped');
   assert.ok(resultsHtml.includes('&lt;img'), 'Escaped tag text should be preserved');
 
   // Remote Access quick Reachability button also works
   const cfBtn = env.nodes.get('btn-test-cf-reachability');
   await cfBtn.handlers.click({ currentTarget: cfBtn });
-  assert.equal(env.nodes.get('cf-reachability-results').style.display, 'grid');
+  assert.equal(env.nodes.get('cf-reachability-results').style.display, 'block');
   assert.match(env.nodes.get('cf-reachability-results').innerHTML, /reachability-item reachability-fail/);
 });
 
@@ -1356,7 +1356,7 @@ test('renderReachabilityResults groups streaming checks alongside other categori
   const summaryHtml = env.nodes.get('reachability-summary').innerHTML;
   const resultsHtml = env.nodes.get('reachability-results').innerHTML;
   assert.match(resultsHtml, /reachability-group-streaming/);
-  assert.match(resultsHtml, /Streaming & Proxy/);
+  assert.match(resultsHtml, /Streaming &amp; Proxy/);
   assert.match(resultsHtml, /Cloudflare Origin/);
   assert.match(resultsHtml, /Host Port/);
   assert.match(resultsHtml, /Portal Route/);

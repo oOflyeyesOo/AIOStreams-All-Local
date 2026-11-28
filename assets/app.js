@@ -881,7 +881,7 @@ function openServiceViewer(title, url, directUrl) {
     playerHelper.style.display = isWebPlayer ? 'flex' : 'none';
     if (isWebPlayer) {
       const userEl = document.getElementById('player-helper-user');
-      if (userEl) userEl.textContent = cachedManifestInfo?.jellyfinUser || 'admin';
+      if (userEl) userEl.textContent = playerLoginIdentity() || 'Finish setup first';
     }
   }
 
@@ -1683,30 +1683,27 @@ if (copyWebdavBtn) {
   });
 }
 
-document.getElementById('copy-jellyfin-username')?.addEventListener('click', e => {
-  const username = cachedManifestInfo?.jellyfinUser || cachedManifestInfo?.uuid || 'admin';
-  copyToClipboard(username, `Player username (${username}) copied.`, e.currentTarget);
-});
+function playerLoginIdentity() {
+  // UUID works on both generic and profile-specific player pages. Older portal
+  // responses incorrectly advertised the portal admin username as a profile.
+  return cachedManifestInfo?.uuid ||
+    (cachedManifestInfo?.jellyfinUser !== 'admin' ? cachedManifestInfo?.jellyfinUser : '') || '';
+}
 
-document.getElementById('copy-jellyfin-password')?.addEventListener('click', e => {
-  const passInput = document.getElementById('stack-admin-password');
-  const pass = (passInput && passInput.value) || 'admin';
-  copyToClipboard(pass, 'Stack admin password copied. Use for Web Player login.', e.currentTarget);
-});
-
-function copyPlayerCred(which) {
-  const user = cachedManifestInfo?.jellyfinUser || cachedManifestInfo?.uuid || 'admin';
-  const passInput = document.getElementById('stack-admin-password');
-  const pass = (passInput && passInput.value) || 'admin';
-  if (which === 'user') {
-    copyToClipboard(user, `Copied player username: ${user}`);
-  } else if (which === 'pass') {
-    copyToClipboard(pass, 'Copied player password.');
-  } else {
-    copyToClipboard(`Username: ${user}\nPassword: ${pass}`, `Copied player credentials (User: ${user})`);
+function copyPlayerCred(which, trigger) {
+  if (which !== 'user') {
+    notify('Use the password last applied to this profile. The new-password field is not a saved login password.', true);
+    return false;
   }
+  const user = playerLoginIdentity();
+  if (!user) {
+    notify('Finish setup before copying a player profile ID.', true);
+    return false;
+  }
+  return copyToClipboard(user, 'Player profile ID copied. Paste into UUID or alias.', trigger);
 }
 window.copyPlayerCred = copyPlayerCred;
+document.getElementById('copy-jellyfin-username')?.addEventListener('click', e => copyPlayerCred('user', e.currentTarget));
 
 document.getElementById('test-saved-usenet-btn')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
@@ -2869,106 +2866,67 @@ document.getElementById('btn-push-cf-dns')?.addEventListener('click', async (e) 
 
 function renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl) {
   const checks = Array.isArray(res?.checks) ? res.checks : [];
-  const summary = res?.summary || {};
-  const passed = Number.isFinite(Number(summary.passed)) ? Number(summary.passed) : checks.filter(c => c.status === 'ok' || (!c.status && c.ok === true)).length;
-  const failed = Number.isFinite(Number(summary.failed)) ? Number(summary.failed) : checks.filter(c => c.status === 'fail' || (!c.status && c.ok === false)).length;
-  const warnings = Number.isFinite(Number(summary.warnings)) ? Number(summary.warnings) : checks.filter(c => c.status === 'warn').length;
-  const skipped = Number.isFinite(Number(summary.skipped)) ? Number(summary.skipped) : checks.filter(c => c.status === 'skipped').length;
-  const total = Number.isFinite(Number(summary.total)) ? Number(summary.total) : checks.length;
-
-  const categoryLabels = {
-    streaming: 'Streaming & Proxy',
-    cloudflare: 'Cloudflare Origin',
-    remote: 'Public URL',
-    host_port: 'Host Port',
-    portal: 'Portal Route',
-    internal: 'Internal'
+  const statusOf = check => {
+    const status = String(check?.status || (check?.ok === true ? 'ok' : (check?.ok === false ? 'fail' : 'warn'))).toLowerCase();
+    return ['ok', 'fail', 'warn', 'skipped'].includes(status) ? status : (check?.ok === false ? 'fail' : 'warn');
   };
-  const categoryOrder = ['streaming', 'cloudflare', 'remote', 'host_port', 'portal', 'internal'];
-  const statusLabels = {
-    ok: '✓ Reachable',
-    fail: '✗ Unreachable',
-    warn: '⚠ Warning',
-    skipped: '– Skipped'
-  };
-
-  if (summaryEl) {
-    const overallOk = res?.ok !== false && failed === 0;
-    const headline = overallOk
-      ? `<span style="color:#34d399;font-weight:700;">✓ All required targets reachable</span>`
-      : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`;
-    const metaParts = [`${passed}/${total} passed`];
-    if (warnings > 0) metaParts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
-    if (skipped > 0) metaParts.push(`${skipped} skipped`);
-    if (res?.recommended_origin) metaParts.push(`Recommended origin: <code>${escapeHtml(res.recommended_origin)}</code>`);
-    if (res?.connector_mode) metaParts.push(`Connector: <code>${escapeHtml(res.connector_mode)}</code>`);
-    summaryEl.innerHTML = `${headline} · ${metaParts.join(' · ')}`;
-  }
-
-  if (statusDotEl && statusDotEl.classList) {
+  const count = status => checks.filter(check => statusOf(check) === status).length;
+  const failed = count('fail'), warnings = count('warn'), passed = count('ok'), skipped = count('skipped');
+  const headline = !checks.length ? 'No checks returned'
+    : failed ? `${failed} unreachable target${failed === 1 ? '' : 's'}`
+    : res?.ok === false ? 'Connection checks need attention'
+    : warnings ? 'Connections need review'
+    : passed ? 'Checked connections are healthy' : 'Connections have not been verified';
+  const state = failed || res?.ok === false ? 'fail' : (!checks.length || !passed || warnings ? 'warn' : 'ok');
+  const counts = [`${passed} passed`, ...(warnings ? [`${warnings} to review`] : []), ...(skipped ? [`${skipped} not tested`] : [])];
+  const connectionDetails = [
+    res?.recommended_origin ? `Recommended origin: <code>${escapeHtml(String(res.recommended_origin))}</code>` : '',
+    res?.connector_mode ? `Connector: <code>${escapeHtml(String(res.connector_mode))}</code>` : ''
+  ].filter(Boolean);
+  const summaryHtml = `<strong class="reachability-headline-${state}">${escapeHtml(headline)}</strong><span class="reachability-summary-counts">${counts.join(' · ')}</span>${connectionDetails.length ? `<details class="reachability-connection-details"><summary>Connection details</summary>${connectionDetails.join('<br>')}</details>` : ''}`;
+  if (summaryEl) summaryEl.innerHTML = summaryHtml;
+  if (statusDotEl?.classList) {
     statusDotEl.classList.remove('ok', 'error', 'warn');
-    statusDotEl.classList.add(failed > 0 ? 'error' : (warnings > 0 ? 'warn' : 'ok'));
+    statusDotEl.classList.add(state === 'fail' ? 'error' : state);
   }
-
-  if (resultsEl) {
-    if (resultsEl.style) resultsEl.style.display = 'grid';
-    if (checks.length === 0) {
-      resultsEl.innerHTML = '<div class="reachability-item">No reachability checks returned.</div>';
-      return;
-    }
-
-    const grouped = new Map();
-    for (const cat of categoryOrder) grouped.set(cat, []);
-    for (const check of checks) {
-      const catKey = String(check?.category || 'other').toLowerCase() || 'other';
-      if (!grouped.has(catKey)) grouped.set(catKey, []);
-      grouped.get(catKey).push(check);
-    }
-
-    const renderCheckCard = (check, categoryKey, categoryText) => {
-      const rawStatus = String(check?.status || (check?.ok === true ? 'ok' : (check?.ok === false ? 'fail' : 'warn'))).toLowerCase();
-      const statusKey = ['ok', 'fail', 'warn', 'skipped'].includes(rawStatus) ? rawStatus : (check?.ok === false ? 'fail' : 'warn');
-      const badgeLabel = statusLabels[statusKey];
-      const latencyText = (typeof check?.latency_ms === 'number' && Number.isFinite(check.latency_ms))
-        ? `${check.latency_ms.toFixed(1)} ms`
-        : (check?.latency_ms != null && check.latency_ms !== '' ? `${escapeHtml(String(check.latency_ms))} ms` : '');
-      const targetHtml = check?.target ? `<code>${escapeHtml(String(check.target))}</code>` : '';
-      const detailHtml = check?.detail ? `<div class="reachability-detail">${escapeHtml(String(check.detail))}</div>` : '';
-      const remediationHtml = check?.remediation
-        ? `<div class="reachability-remediation"><strong>Remediation:</strong> ${escapeHtml(String(check.remediation))}</div>`
-        : '';
-
-      return `<div class="reachability-item reachability-${statusKey}" data-reachability-status="${statusKey}" data-reachability-category="${escapeHtml(categoryKey)}">
-        <div class="reachability-item-head">
-          <span class="reachability-name">${escapeHtml(String(check?.name || check?.id || 'Check'))}</span>
-          <span class="reachability-badge reachability-badge-${statusKey}">${badgeLabel}</span>
-        </div>
-        <div class="reachability-meta">
-          <span class="reachability-cat-pill">${categoryText}</span>${targetHtml}${latencyText ? `<span>${latencyText}</span>` : ''}
-        </div>
-        ${detailHtml}
-        ${remediationHtml}
-      </div>`;
-    };
-
-    const htmlParts = [];
-    for (const [categoryKey, items] of grouped.entries()) {
-      if (!items.length) continue;
-      const categoryText = categoryLabels[categoryKey] || escapeHtml(categoryKey);
-      const groupOk = items.filter(c => (c?.status || (c?.ok === true ? 'ok' : 'fail')) === 'ok').length;
-      const groupFail = items.filter(c => (c?.status || (c?.ok === false ? 'fail' : 'ok')) === 'fail').length;
-      const groupWarn = items.filter(c => c?.status === 'warn').length;
-      const groupSummary = groupFail > 0
-        ? `${groupFail} issue${groupFail === 1 ? '' : 's'}`
-        : (groupWarn > 0 ? `${groupWarn} warning${groupWarn === 1 ? '' : 's'}` : `${groupOk}/${items.length} ok`);
-      const headerExtraClass = categoryKey === 'streaming' ? ' reachability-group-streaming' : '';
-      htmlParts.push(`<div class="reachability-group-header${headerExtraClass}" data-reachability-group="${escapeHtml(categoryKey)}"><span>${categoryText}</span><span class="reachability-group-count">${escapeHtml(groupSummary)}</span></div>`);
-      for (const check of items) {
-        htmlParts.push(renderCheckCard(check, categoryKey, categoryText));
-      }
-    }
-    resultsEl.innerHTML = htmlParts.join('');
+  if (!resultsEl) return summaryHtml;
+  if (resultsEl.style) resultsEl.style.display = 'block';
+  if (!checks.length) {
+    resultsEl.innerHTML = '<p class="reachability-empty">No reachability checks returned. Run the check again.</p>';
+    return summaryHtml;
   }
+  const categoryLabels = {streaming: 'Streaming & Proxy', cloudflare: 'Cloudflare Origin', remote: 'Public URL', host_port: 'Host Port', portal: 'Portal Route', internal: 'Internal'};
+  const categoryOrder = ['streaming', 'cloudflare', 'remote', 'host_port', 'portal', 'internal'];
+  const labels = {ok: '✓ Reachable', fail: '✗ Unreachable', warn: '⚠ Review', skipped: '– Not tested'};
+  const renderRow = check => {
+    const status = statusOf(check);
+    const category = String(check?.category || 'other').toLowerCase();
+    const action = ['fail', 'warn'].includes(status) && check?.remediation
+      ? `<div class="reachability-remediation"><strong>Next step:</strong> ${escapeHtml(String(check.remediation))}</div>` : '';
+    const detail = check?.detail ? `<p class="reachability-detail">${escapeHtml(String(check.detail))}</p>` : '';
+    const target = check?.target ? `<code>${escapeHtml(String(check.target))}</code>` : '';
+    const latency = typeof check?.latency_ms === 'number' && Number.isFinite(check.latency_ms) ? `<span>${check.latency_ms.toFixed(1)} ms</span>` : '';
+    return `<div class="reachability-item reachability-${status}" data-reachability-status="${status}" data-reachability-category="${escapeHtml(category)}">
+      <div class="reachability-item-head"><span class="reachability-name">${escapeHtml(String(check?.name || check?.id || 'Check'))}</span><span class="reachability-badge reachability-badge-${status}">${labels[status]}</span></div>
+      ${action}<details class="reachability-check-details"><summary>Details</summary>${detail}<div class="reachability-meta">${target}${latency}</div></details>
+    </div>`;
+  };
+  const renderGroups = items => {
+    const grouped = new Map(categoryOrder.map(category => [category, []]));
+    for (const check of items) {
+      const category = String(check?.category || 'other').toLowerCase();
+      if (!grouped.has(category)) grouped.set(category, []);
+      grouped.get(category).push(check);
+    }
+    return [...grouped].filter(([, group]) => group.length).map(([category, group]) => `<div class="reachability-group-header${category === 'streaming' ? ' reachability-group-streaming' : ''}" data-reachability-group="${escapeHtml(category)}">${escapeHtml(categoryLabels[category] || category)}</div>${group.map(renderRow).join('')}`).join('');
+  };
+  const attention = checks.filter(check => ['fail', 'warn'].includes(statusOf(check))).sort((a, b) => (statusOf(a) === 'fail' ? 0 : 1) - (statusOf(b) === 'fail' ? 0 : 1));
+  const html = [];
+  if (attention.length) html.push(`<section class="reachability-attention" aria-label="Checks needing attention"><h4>Needs attention (${attention.length})</h4>${renderGroups(attention)}</section>`);
+  if (passed) html.push(`<details class="reachability-section" data-reachability-section="passed"><summary>Passed checks <span>${passed}</span></summary>${renderGroups(checks.filter(check => statusOf(check) === 'ok'))}</details>`);
+  if (skipped) html.push(`<details class="reachability-section" data-reachability-section="skipped"><summary>Not tested <span>${skipped}</span></summary><p class="reachability-detail">These checks cannot be verified from this container. They are not reported as failures.</p>${renderGroups(checks.filter(check => statusOf(check) === 'skipped'))}</details>`);
+  resultsEl.innerHTML = html.join('');
+  return summaryHtml;
 }
 
 async function runReachabilityCheck(options = {}) {
@@ -3002,15 +2960,9 @@ async function runReachabilityCheck(options = {}) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl);
+    const summaryHtml = renderReachabilityResults(res, resultsEl, summaryEl, statusDotEl);
     if (!summaryEl && resultsEl) {
-      const checks = Array.isArray(res?.checks) ? res.checks : [];
-      const failed = Number(res?.summary?.failed ?? checks.filter(c => c.status === 'fail' || (!c.status && c.ok === false)).length);
-      const warnings = Number(res?.summary?.warnings ?? checks.filter(c => c.status === 'warn').length);
-      const warnSuffix = warnings > 0 ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
-      const modeSuffix = res?.connector_mode ? ` · Connector: <code>${escapeHtml(String(res.connector_mode))}</code>` : '';
-      const summaryBanner = `<div class="reachability-summary" style="grid-column:1 / -1;margin-top:0;">${failed === 0 && res?.ok !== false ? '<span style="color:#34d399;font-weight:700;">✓ All checked targets reachable</span>' : `<span style="color:#f87171;font-weight:700;">✗ ${failed} unreachable target${failed === 1 ? '' : 's'}</span>`}${warnSuffix}${res?.recommended_origin ? ` · Recommended origin: <code>${escapeHtml(String(res.recommended_origin))}</code>` : ''}${modeSuffix}</div>`;
-      resultsEl.innerHTML = summaryBanner + resultsEl.innerHTML;
+      resultsEl.innerHTML = `<div class="reachability-summary">${summaryHtml}</div>` + resultsEl.innerHTML;
     }
     return res;
   } catch (err) {

@@ -16,6 +16,7 @@ services:
       AIO_FRESH_INSTALL_TEST: 'true'
       AIO_FRESH_INSTALL_TEST_PROJECT: aio-fresh-install
       JELLYFIN_ENABLED: 'true'
+      JELLYFIN_PIN_SIGN_IN: 'true'
       PYTHONDONTWRITEBYTECODE: '1'
     volumes:
       - portal-fixture:/app
@@ -48,6 +49,8 @@ services:
       REDIS_URI: redis://redis:6379/6
       REDIS_URL: redis://redis:6379/6
       JELLYFIN_ENABLED: 'true'
+      JELLYFIN_PIN_SIGN_IN: 'true'
+      JELLYFIN_LOGIN_RATE_LIMIT_MAX_REQUESTS: '50'
       TEMPLATE_URLS: '[]'
       WHITELISTED_REGEX_PATTERNS_URLS: '[]'
       WHITELISTED_SEL_URLS: '[]'

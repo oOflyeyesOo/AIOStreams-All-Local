@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1e293b">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="/assets/app.css?v=1.6.3"><script src="/assets/app.js?v=1.6.3" defer></script>
+<link rel="stylesheet" href="/assets/app.css?v=1.6.3"><script src="/assets/app.js?v=1.6.3" defer></script><script src="/assets/player-users.js?v=1" defer></script>
 </head>
 <body>
 <main>
@@ -16,6 +16,7 @@
   <nav class="topbar-nav" aria-label="Main Navigation">
     <a href="#manifest" class="topbar-nav-link">Addons</a>
     <a href="#setup" class="topbar-nav-link">Setup</a>
+    <a href="#player-users" class="topbar-nav-link" id="open-player-users">Users</a>
     <a href="#integrations" class="topbar-nav-link">Services</a>
     <a href="#telemetry" class="topbar-nav-link">Health</a>
     <a href="#operations" class="topbar-nav-link">Diagnostics</a>
@@ -157,15 +158,14 @@
         </div>
 
         <div class="hub-card-actions hub-credentials-row">
-          <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy username ⧉</button>
-          <button type="button" id="copy-jellyfin-password" class="subtle-link mini-action-btn">Copy password ⧉</button>
+          <button type="button" id="copy-jellyfin-username" class="subtle-link mini-action-btn">Copy player ID ⧉</button>
           <a id="install-aiostreams-web" class="subtle-link mini-action-btn" href="#" target="_blank" rel="noopener noreferrer" title="Official hosted AIOStreams Web App player" hidden>Hosted Web App ↗</a>
         </div>
         <div id="quickconnect-toolbar" class="quickconnect-bar" hidden>
           <span class="quickconnect-label">Device Pairing:</span>
           <span class="quickconnect-sub">Pair your smart TV or client app with your stack admin credentials.</span>
         </div>
-        <p id="player-sign-in-help" class="field-help" hidden>Pick your profile in the player and enter your stack admin password. If the player asks for a username, use the one copied above.</p>
+        <p id="player-sign-in-help" class="field-help" hidden>Paste your player ID into “UUID or alias”. Use the password last applied with Connect my stack. Your portal username (admin) is not your player ID. For an older profile with a different password, set a new stack password and apply setup again.</p>
       </div>
     </div>
 
@@ -1073,6 +1073,19 @@
 <section class="operations-section panel" id="configuration-tools"><div class="eyebrow">CONFIGURATION PORTABILITY</div><h2>Move or protect your setup.</h2><p class="section-description">Export the optimized AIOStreams profile, or export and import your complete stack configuration.</p><button id="export-profile" class="light-button">Download optimized profile JSON</button><button id="export-aiometa-profile" class="light-button">Download AIOMetadata profile JSON</button><button id="export-config" class="light-button">Export Config JSON</button><label class="light-button" for="import-config">Import Config JSON<input id="import-config" type="file" accept="application/json" hidden></label><span id="config-output" role="status"></span></section>
 </details>
 </details>
+<details id="player-users" class="player-users-panel">
+  <summary>Users <span class="field-help">Share your player with separate profiles</span></summary>
+  <p class="field-help">Everyone uses your providers and catalogs, with their own watch history. Invite links open only that person's profile; they do not grant portal or configuration access.</p>
+  <form id="player-users-form" class="player-users-form">
+    <label for="player-user-name">Name</label>
+    <input id="player-user-name" maxlength="32" required autocomplete="off" placeholder="e.g. Alex">
+    <button type="submit" class="light-button">Add person</button>
+    <button type="button" id="player-users-refresh" class="text-button">Refresh</button>
+  </form>
+  <div id="player-users-status" role="status" aria-live="polite"></div>
+  <div id="player-users-list"></div>
+  <p class="field-help">Links remain valid until replaced or access is removed. PIN resets and access removal can take up to 30 seconds to sign devices out. Replacing a link does not sign out devices already connected. Never send your owner manifest or admin password as an invitation.</p>
+</details>
 <footer role="contentinfo"><span class="brand-small">AIO / LOCAL</span></footer>
 <dialog id="service-log-dialog" class="service-log-dialog" aria-labelledby="service-log-title" aria-modal="true">
   <div class="log-dialog-header">
@@ -1106,9 +1119,8 @@
   <p class="service-frame-help">If this page stays blank or refuses to load, choose Pop Out or Direct Port.</p>
   <div id="service-frame-player-helper" class="service-frame-player-banner" style="display:none;">
     <span class="player-helper-title">🎬 AIOStreams Web Player Login:</span>
-    <span class="player-helper-cred">Username: <strong id="player-helper-user">admin</strong> <button type="button" class="player-copy-btn" onclick="copyPlayerCred('user')">Copy</button></span>
-    <span class="player-helper-cred">Password: <strong id="player-helper-pass">admin</strong> <button type="button" class="player-copy-btn" onclick="copyPlayerCred('pass')">Copy</button></span>
-    <button type="button" class="player-copy-btn player-copy-all-btn" onclick="copyPlayerCred('both')">📋 Copy All</button>
+    <span class="player-helper-cred">Player ID: <strong id="player-helper-user">Finish setup first</strong> <button type="button" class="player-copy-btn" onclick="copyPlayerCred('user')">Copy</button></span>
+    <span class="player-helper-cred">Use your applied profile password. The portal username “admin” is not a player ID.</span>
   </div>
   <div class="service-frame-body">
     <div id="player-stats-hud" class="player-stats-hud" style="display:none;">

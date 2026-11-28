@@ -2274,6 +2274,19 @@ def unlock_aiostreams_profile(uuid, encrypted_password):
     raise RuntimeError("AIOStreams could not unlock the saved profile")
 
 
+def preserve_player_users(config, headers):
+    """Setup changes providers, not the owner's player profiles or invite links."""
+    response = make_request(f"{AIOSTREAMS_URL}/api/v1/user?raw=true", headers=headers)
+    saved = (response.get("data") or {}).get("userData") if isinstance(response, dict) else None
+    if not isinstance(saved, dict) or response.get("success") is not True:
+        raise RuntimeError("Could not read existing player profiles; refusing to overwrite configuration")
+    if "jellyfin" in saved:
+        config["jellyfin"] = saved["jellyfin"]
+    if "profiles" in saved:
+        config["profiles"] = saved["profiles"]
+    return config
+
+
 def setup_aiostreams_default_user(aiometadata_manifest=None):
     print("[AIOStreams Setup] Configuring default out-of-the-box configuration with Tamtaro & Debrid...", flush=True)
 
@@ -2350,6 +2363,7 @@ def setup_aiostreams_default_user(aiometadata_manifest=None):
             config = build_default_config(aiometadata_manifest=aiometadata_manifest)
             profile_password, encrypted_password = unlock_aiostreams_profile(uuid, encrypted_password)
             u_headers = aiostreams_profile_headers(uuid, profile_password)
+            config = preserve_player_users(config, u_headers)
             u_res = make_request(f"{AIOSTREAMS_URL}/api/v1/user", method="PUT", data={"config": config}, headers=u_headers)
             if isinstance(u_res, dict) and u_res.get("success"):
                 print("[AIOStreams Setup] ✓ User configuration successfully updated with 20s timeouts!", flush=True)

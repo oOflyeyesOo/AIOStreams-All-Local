@@ -8,4 +8,6 @@ FROM mcr.microsoft.com/playwright:v1.64.1-noble AS browser
 WORKDIR /runner
 RUN npm install --ignore-scripts --no-audit --no-fund playwright@1.64.1
 COPY tests/browser-playback.acceptance.cjs /runner/check.cjs
+COPY tests/player-users.browser.cjs /runner/player-users.cjs
+COPY index.html assets/app.css assets/player-users.js /runner/ui/
 CMD ["node", "/runner/check.cjs"]

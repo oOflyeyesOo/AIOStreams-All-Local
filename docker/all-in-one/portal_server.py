@@ -1374,7 +1374,7 @@ PORTAL_API_GET_PATHS = {
     "/api/lumiere/search", "/api/lumiere-search",
     "/api/flaresolverr", "/api/benchmark", "/api/clean-cache",
     "/api/aniskip", "/api/health-stream", "/api/player-preferences",
-    "/api/config-bundle-raw", "/api/cloudflare/status", "/api/reachability",
+    "/api/config-bundle-raw", "/api/cloudflare/status", "/api/reachability", "/api/player-users",
 }
 
 PORTAL_API_POST_PATHS = {
@@ -1384,7 +1384,7 @@ PORTAL_API_POST_PATHS = {
     "/api/settings", "/api/env", "/api/save", "/api/restart",
     "/api/clean-cache", "/api/watchdog", "/api/backups/prune", "/api/backups/restore",
     "/api/lumiere/rebuild", "/api/aniskip", "/api/player-preferences",
-    "/api/cloudflare/push-dns", "/api/cloudflare/tunnel", "/api/reachability",
+    "/api/cloudflare/push-dns", "/api/cloudflare/tunnel", "/api/reachability", "/api/player-users",
 }
 
 _TELEMETRY_CACHE = {"data": None, "timestamp": 0.0, "lock": threading.Lock()}
@@ -2479,6 +2479,9 @@ button:hover {{ background: #0369a1; }}
         elif path == "/api/player-preferences":
             self.handle_api_player_preferences_get()
             return
+        elif path == "/api/player-users":
+            self.handle_api_player_users()
+            return
         elif path == "/api/config-bundle-raw":
             self.handle_api_config_bundle_raw()
             return
@@ -2547,6 +2550,9 @@ button:hover {{ background: #0369a1; }}
             except Exception:
                 pass
             self.send_error(403, "Cross-origin configuration changes are not allowed")
+            return
+        if path == "/api/player-users":
+            self.handle_api_player_users(mutate=True)
             return
         if path == "/api/webhook-test":
             try:
@@ -3012,6 +3018,25 @@ button:hover {{ background: #0369a1; }}
         except Exception:
             self.json_response({"error": "Internal server error occurred while retrieving status."}, 500)
 
+    def handle_api_player_users(self, mutate=False):
+        from tools.player_users import list_users, mutate_user, PlayerUsersError
+        try:
+            env = read_saved_env()
+            uuid, _ = self._get_jellyfin_credentials()
+            password = env.get("ADDON_PASSWORD") or os.environ.get("ADDON_PASSWORD")
+            base = dashboard_origin(env.get("BASE_URL") or os.environ.get("BASE_URL"),
+                                    self.headers.get("Host", "localhost"),
+                                    env.get("PORT_AIOSTREAMS") or os.environ.get("PORT_AIOSTREAMS"), 3001)
+            result = (mutate_user(uuid, password, base, self.read_json_body()) if mutate
+                      else list_users(uuid, password, base))
+            self.json_response(result)
+        except PlayerUsersError as error:
+            self.json_response({"success": False, "error": str(error)}, error.status)
+        except ValueError:
+            self.json_response({"success": False, "error": "Invalid user request."}, 400)
+        except Exception:
+            self.json_response({"success": False, "error": "Could not manage player users. Refresh before retrying."}, 500)
+
     def handle_api_manifest_info(self):
         try:
             install_info = {}
@@ -3090,7 +3115,9 @@ button:hover {{ background: #0369a1; }}
                 "jellyfinServerProxy": jellyfin_server_proxy,
                 "jellyfinQuickConnect": f"{base_url}/jellyfin/quickconnect",
                 "officialWebPlayer": "https://web.aiostreams.org",
-                "jellyfinUser": "admin",
+                # Native player authentication uses a profile UUID/alias, not
+                # the separate administrator account. UUID avoids stale aliases.
+                "jellyfinUser": uuid,
                 "remuxDbEnabled": env_vars.get("ENABLE_REMUXDB", "true").lower() not in ("false", "0", "no"),
                 "mediaInfoProbeEnabled": True,
                 "jellyfinEnabled": jellyfin_enabled_val,

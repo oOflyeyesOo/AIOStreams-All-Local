@@ -170,6 +170,16 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(reset.kwargs["data"], {"newPassword": "after-password"})
         self.assertEqual(request.call_args.kwargs["data"]["config"]["catalogs"], saved_catalogs)
 
+    def test_setup_preserves_player_profiles_and_fails_closed_on_read_error(self):
+        jf = {"personas": [{"id": "guest", "hidden": True, "address": "abcdefghijk", "lock": "hashed", "history": "own"}], "ownerName": "Owner"}
+        with patch.object(bootstrap, "make_request", return_value={"success": True, "data": {"userData": {"jellyfin": jf, "profiles": [{"id": "guest", "hidden": True}]}}}):
+            result = bootstrap.preserve_player_users({"presets": ["new"]}, {})
+        self.assertEqual(result["jellyfin"], jf)
+        self.assertEqual(result["profiles"], [{"id": "guest", "hidden": True}])
+        self.assertEqual(result["presets"], ["new"])
+        with patch.object(bootstrap, "make_request", return_value={"error": 503}), self.assertRaises(RuntimeError):
+            bootstrap.preserve_player_users({}, {})
+
     def test_legacy_aiostreams_profile_rotation_returns_updated_link(self):
         replies = [{"error": 401}, {"error": 401}, {"success": True},
                    {"success": True, "data": {"encryptedPassword": "new-link-token"}}]

@@ -372,3 +372,43 @@ test('backup, cache preview, and stack restart handlers release busy states on 5
  assert.match(nodes.get('readiness-output').textContent, /Stack restart failed:.*502/);
  assert.ok(notices.some(n => n.isErr && /502/.test(n.msg)));
 });
+
+test('player login copies the provisioned identity and never a guessed password', async()=>{
+ const copied=[], notices=[];
+ const context=vm.createContext({cachedManifestInfo:{uuid:'fixture-profile-id',jellyfinUser:'admin'}, window:{},
+   document:{getElementById:()=>null}, copyToClipboard:(...args)=>{copied.push(args);return true;}, notify:(...args)=>notices.push(args)});
+ vm.runInContext(source.slice(source.indexOf('function playerLoginIdentity('),source.indexOf("document.getElementById('test-saved-usenet-btn')")),context);
+ assert.equal(vm.runInContext("copyPlayerCred('user')",context),true);
+ assert.equal(copied[0][0],'fixture-profile-id');
+ vm.runInContext("copyPlayerCred('pass'); copyPlayerCred('both')",context);
+ assert.equal(copied.length,1);
+ assert.equal(notices.length,2);
+ context.cachedManifestInfo={jellyfinUser:'admin'};
+ assert.equal(vm.runInContext("copyPlayerCred('user')",context),false);
+ assert.equal(copied.length,1);
+});
+
+test('player helper no longer advertises default credentials or password copying',()=>{
+ const html=fs.readFileSync('index.html','utf8');
+ assert.doesNotMatch(html,/id="player-helper-(?:user|pass)">admin/);
+ assert.doesNotMatch(html,/id="copy-jellyfin-password"|copyPlayerCred\('(?:pass|both)'\)/);
+ assert.match(html,/Copy player ID/);
+ assert.match(html,/UUID or alias/);
+});
+
+test('diagnostics show problems first and collapse passed and untested checks',()=>{
+ const context=vm.createContext({escapeHtml:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')});
+ vm.runInContext(source.slice(source.indexOf('function renderReachabilityResults('),source.indexOf('async function runReachabilityCheck(')),context);
+ context.results={style:{},innerHTML:''};context.summary={innerHTML:''};
+ vm.runInContext(`renderReachabilityResults({ok:false,checks:[
+ {name:'Healthy',status:'ok',category:'internal'},
+ {name:'Failure',status:'fail',category:'remote',remediation:'Retry after setup'},
+ {name:'Unverified',status:'skipped',category:'host_port',remediation:'Do not show a warning box'}
+ ]},results,summary,null)`,context);
+ assert.ok(context.results.innerHTML.indexOf('Needs attention')<context.results.innerHTML.indexOf('Passed checks'));
+ assert.match(context.results.innerHTML,/<details class="reachability-section" data-reachability-section="passed">/);
+ assert.match(context.results.innerHTML,/<details class="reachability-section" data-reachability-section="skipped">/);
+ assert.doesNotMatch(context.results.innerHTML,/Do not show a warning box/);
+ assert.match(context.summary.innerHTML,/1 not tested/);
+ assert.doesNotMatch(context.summary.innerHTML,/All checked targets reachable/);
+});

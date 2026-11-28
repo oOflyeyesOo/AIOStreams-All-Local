@@ -163,6 +163,7 @@ services:
       - DEFAULT_AIO_UUID=${DEFAULT_AIO_UUID:-}
       - DEFAULT_AIO_ENCRYPTED_PASSWORD=${DEFAULT_AIO_ENCRYPTED_PASSWORD:-}
       - JELLYFIN_ENABLED=${JELLYFIN_ENABLED:-true}
+      - JELLYFIN_PIN_SIGN_IN=${JELLYFIN_PIN_SIGN_IN:-true}
 
       # --- Internal Local Scraper Endpoints ---
       - METEOR_URL=["https://meteorfortheweebs.midnightignite.me"]

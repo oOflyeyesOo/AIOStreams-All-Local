@@ -4155,177 +4155,45 @@ a.disabled, button.disabled {
   color: #bae6fd;
 }
 
-.reachability-results-panel {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-xs);
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid var(--line);
+.reachability-results-panel { margin-top: 12px; }
+.reachability-summary { margin-top: 12px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+.reachability-summary strong { font-size: 16px; }
+.reachability-headline-ok { color: #34d399; }
+.reachability-headline-fail { color: #f87171; }
+.reachability-headline-warn { color: #fbbf24; }
+.reachability-summary-counts { display: block; }
+.reachability-results { display: block; margin-top: 14px; }
+.reachability-attention h4 { margin: 14px 0 8px; font-size: 15px; }
+.reachability-section { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; }
+.reachability-section > summary { padding: 13px 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+.reachability-section > summary span { margin-left: 8px; color: var(--text-muted); font-weight: 400; }
+.reachability-section[open] { padding-bottom: 10px; }
+.reachability-item { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+.reachability-item:last-child { border-bottom: 0; }
+.reachability-attention .reachability-item { margin: 8px 0; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid #fbbf24; border-radius: 6px; }
+.reachability-attention .reachability-fail { border-left-color: #f87171; }
+.reachability-item-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.reachability-name { font-weight: 600; color: var(--text-main); overflow-wrap: anywhere; }
+.reachability-badge { flex-shrink: 0; font-size: 12px; white-space: nowrap; }
+.reachability-badge-ok { color: #34d399; }
+.reachability-badge-fail { color: #f87171; }
+.reachability-badge-warn { color: #fbbf24; }
+.reachability-badge-skipped { color: var(--text-muted); }
+.reachability-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.reachability-meta code, .reachability-connection-details code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.reachability-detail { margin: 6px 0; color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+.reachability-remediation { margin-top: 7px; color: var(--text-main); font-size: 14px; overflow-wrap: anywhere; }
+.reachability-check-details, .reachability-connection-details { margin-top: 6px; color: var(--text-muted); font-size: 13px; }
+.reachability-check-details > summary, .reachability-connection-details > summary { cursor: pointer; width: fit-content; padding: 4px 0; }
+.reachability-group-header { margin-top: 12px; padding: 5px 0; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.reachability-group-header:first-child { margin-top: 0; }
+.reachability-group-streaming { color: var(--accent-cyan); }
+.reachability-empty { color: var(--text-muted); font-size: 14px; }
+.reachability-results summary:focus-visible, .reachability-connection-details > summary:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
+@media (max-width: 480px) {
+  .reachability-item-head { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
 
-.reachability-summary {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  line-height: 1.45;
-}
-
-.reachability-summary strong {
-  color: var(--text-main);
-}
-
-.reachability-results {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 8px;
-}
-
-.reachability-item {
-  padding: 9px 11px;
-  border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.reachability-item.reachability-ok {
-  border-color: rgba(52, 211, 153, 0.32);
-  background: rgba(16, 185, 129, 0.07);
-}
-
-.reachability-item.reachability-fail {
-  border-color: rgba(248, 113, 113, 0.5);
-  background: rgba(239, 68, 68, 0.11);
-}
-
-.reachability-item.reachability-warn {
-  border-color: rgba(251, 191, 36, 0.4);
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.reachability-item.reachability-skipped {
-  border-color: rgba(148, 163, 184, 0.25);
-  opacity: 0.8;
-}
-
-.reachability-item-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.reachability-name {
-  font-weight: 700;
-  color: var(--text-main);
-}
-
-.reachability-badge {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-.reachability-badge-ok {
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.14);
-}
-
-.reachability-badge-fail {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.16);
-}
-
-.reachability-badge-warn {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.16);
-}
-
-.reachability-badge-skipped {
-  color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.14);
-}
-
-.reachability-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.reachability-meta code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--accent-cyan);
-  word-break: break-all;
-}
-
-.reachability-detail {
-  color: var(--text-muted);
-  font-size: 11.5px;
-  word-break: break-word;
-}
-
-.reachability-remediation {
-  margin-top: 6px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  color: #fde68a;
-  font-size: 11px;
-}
-
-.reachability-group-header {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: rgba(148, 163, 184, 0.08);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-main);
-}
-
-.reachability-group-header:first-child {
-  margin-top: 0;
-}
-
-.reachability-group-header.reachability-group-streaming {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: rgba(56, 189, 248, 0.09);
-  color: #bae6fd;
-}
-
-.reachability-group-count {
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-muted);
-}
-
-.reachability-cat-pill {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.14);
-  color: var(--text-main);
-  font-weight: 600;
-}
 
 .cf-base-url-sync-ok {
   margin-top: 8px;
@@ -4339,3 +4207,17 @@ a.disabled, button.disabled {
 
 
 
+
+/* Profile IDs must remain readable on narrow player dialogs. */
+.player-helper-cred { flex-wrap: wrap; min-width: 0; }
+.player-helper-cred strong { overflow-wrap: anywhere; min-width: 0; }
+
+.player-users-panel { margin: 24px 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; scroll-margin-top: 90px; }
+.player-users-panel > summary { cursor: pointer; font-size: 18px; font-weight: 600; }
+.player-users-panel > summary span { display: inline-block; margin-left: 12px; font-weight: 400; }
+.player-users-form, .player-user-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.player-users-form input { max-width: 300px; flex: 1; min-width: 120px; }
+.player-user-row { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+#player-users-status { margin: 12px 0; overflow-wrap: anywhere; }
+#player-users-status button { margin-left: 10px; }
+@media (max-width: 480px) { .player-users-panel { padding: 14px; } .player-users-panel > summary span { margin-left: 0; display: block; } }

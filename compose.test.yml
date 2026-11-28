@@ -4,7 +4,7 @@ services:
     working_dir: /app
     volumes:
       - ./:/app:ro
-    command: node --test tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs
+    command: node --test tests/maintenance-ui.test.cjs tests/optional-setup-ui.test.cjs tests/player-users-ui.test.cjs
 
   tests:
     image: python:3.11-alpine

@@ -35,6 +35,19 @@ Import **`compose.manager.yml`** as a new stack. Set environment variables in th
 
 ---
 
+## Invite someone to your player
+
+Open **Users** in the portal navigation, enter a name, and select **Add person**. Copy their invite link and the PIN shown once, then share both with that person. They use your providers and catalogs but have their own watch history and cannot see your other player profiles or manage the portal.
+
+- **Reset PIN** generates a new PIN; existing sessions can take up to 30 seconds to expire.
+- **Replace link** invalidates the previous address without signing out devices already connected.
+- **Remove access** removes the player profile; session revocation can take up to 30 seconds. Upstream may retain watch history.
+- Links are reusable and remain valid until replaced or removed. They are not one-time expiring invitations.
+
+The updated Compose configuration enables native PIN sign-in (`JELLYFIN_PIN_SIGN_IN=true`). Recreate AIOStreams after updating. If invitations are unavailable, the portal reports the missing capability instead of sharing your owner credentials. For remote guests, set a reachable public AIOStreams base URL first. Never share your owner manifest, configuration password, or portal login as an invite.
+
+Users are stored in the existing AIOStreams configuration and survive setup updates and container recreation with persistent data retained. Avoid editing the same configuration in the native dashboard while saving users: the portal detects stale revisions, but the native API does not provide an atomic cross-client edit lock.
+
 ## 📸 Screenshots
 
 ### Setup & Manifest Generator (`:8088`)
